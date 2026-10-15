@@ -10,26 +10,13 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from hub_core.lap_analysis import clean_lap
 from hub_core.race_strategy import fmt_ms
 from ui.theme import C, LAP_COLORS
 from ui.widgets import Card, SessionPicker, label, make_plot
 
 MAX_LAPS = 4
 GRID_POINTS = 2000
-
-
-def clean_lap(ch: dict, track_len: float) -> dict:
-    """Toglie i campioni di inizio giro ancora a fine pista e rende la distanza monotona."""
-    d, t = ch["dist"], ch["t"]
-    keep = ~((d > 0.5 * track_len) & (t < 5.0))
-    out = {k: v[keep] for k, v in ch.items()}
-    out["dist"] = np.maximum.accumulate(out["dist"])
-    d0, t0 = out["dist"][0], out["t"][0]
-    if d0 > 0:   # punto sintetico sulla linea del via, altrimenti il Delta-T parte con un gradino
-        out = {k: np.concatenate([v[:1], v]) for k, v in out.items()}
-        out["dist"][0] = 0.0
-        out["t"][0] = max(0.0, t0 - d0 / max(out["speed"][1] / 3.6, 1.0))
-    return out
 
 
 class AnalysisPage(QWidget):

@@ -4,3 +4,5 @@ PyOpenGL>=3.1.7
 numpy>=1.26
 duckdb>=1.1
 anthropic>=1.14
+kokoro-onnx>=0.6.1     # voce dell'ingegnere (modello: quello di Tsukumo o kokoro-v1.0.onnx scaricato)
+faster-whisper>=1.2   # trascrizione del push-to-talk (modelli nella cache di Hugging Face)

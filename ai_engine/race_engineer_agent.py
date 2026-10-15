@@ -30,7 +30,12 @@ ripartizione), indica valore attuale stimato, valore proposto e l'effetto atteso
 sinistra/destra.
 - Per la strategia indica lunghezza stint, giro di sosta e carburante da imbarcare.
 - Se i dati non bastano per una conclusione, dillo e indica cosa raccogliere nel prossimo run.
-- Chiudi con una lista breve di azioni in ordine di priorità."""
+- Chiudi con una lista breve di azioni in ordine di priorità.
+
+Le domande possono iniziare con modalità e lingua, es. "[RADIO] [English]": rispondi sempre in \nquella lingua. Modalità:
+[RADIO] il pilota sta guidando e ti sente in cuffia: al massimo due frasi brevi, parlate, senza elenchi, \
+simboli o markdown, numeri arrotondati. In questo caso ignora la regola della lista finale.
+[ANALISI] il pilota è fermo e legge: risposta completa come sopra."""
 
 WHEELS = ("AS", "AD", "PS", "PD")   # anteriore sx/dx, posteriore sx/dx
 

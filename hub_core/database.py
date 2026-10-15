@@ -60,6 +60,13 @@ class TelemetryDB:
     def close(self):
         self.con.close()
 
+    def thread_view(self) -> "TelemetryDB":
+        """Stessa API su un cursore dedicato, da usare in thread diversi da quello della UI."""
+        view = TelemetryDB.__new__(TelemetryDB)
+        view.path = self.path
+        view.con = self.con.cursor()
+        return view
+
     def new_session(self, info: dict) -> int:
         row = self.con.execute(
             "INSERT INTO sessions (started, source, car, track, track_length, max_fuel) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",

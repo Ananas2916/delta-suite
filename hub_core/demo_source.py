@@ -63,6 +63,8 @@ class DemoSource:
     """Simulatore di una GT su pista sintetica (stessa interfaccia di TelemetryReceiver)."""
 
     name = "Demo (simulatore)"
+    waiting_message = "Avvio del simulatore..."
+    finished = False
 
     def __init__(self, speed_factor: float = 1.0, seed: int | None = None):
         self.speed_factor = speed_factor

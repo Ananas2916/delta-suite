@@ -43,7 +43,9 @@ class LapRecorder:
 
     def _start_lap(self, s: TelemetrySample):
         self._buf = {c: [] for c in CHANNELS}
-        self._valid = bool(s.lap_position < 0.03 and not s.is_in_pit)
+        # giro completo solo se l'abbiamo visto partire: lo dice il cronometro di AC, non la spline
+        # (su alcune piste lo zero della spline non coincide con la linea del traguardo)
+        self._valid = bool(s.lap_time_ms < 2000 and not s.is_in_pit)
         self._sectors: list[int] = []
         self._sector = s.sector_index
         self._fuel_start = s.fuel
@@ -64,11 +66,27 @@ class LapRecorder:
             self._append(s)
             return None
 
+        t_prev = self._buf["t"][-1] if self._buf["t"] else None
+        if (s.completed_laps == self._laps_done and t_prev is not None
+                and s.lap_time_ms / 1000.0 < t_prev - 1.0):
+            if s.lap_time_ms < 500:
+                # AC azzera il cronometro ~5 ms prima di incrementare completedLaps:
+                # il campione appartiene già al giro nuovo, che parte al prossimo campione.
+                return None
+            # cronometro ripartito senza giro completato (ritorno ai box, reset): giro buttato
+            self._start_lap(s)
+            self._valid = False
+
         finished = None
         if s.completed_laps > self._laps_done:
-            if s.last_sector_ms > 0 and len(self._sectors) == self.sector_count - 1:
-                self._sectors.append(s.last_sector_ms)
-            finished = self._finish(s)
+            lap_ms = s.last_lap_ms if s.last_lap_ms > 0 else int((t_prev or 0.0) * 1000)
+            if len(self._sectors) == self.sector_count - 1:
+                derived = lap_ms - sum(self._sectors)
+                # lastSectorTime può arrivare in ritardo di un aggiornamento: se non torna, vale la differenza
+                last = s.last_sector_ms if abs(s.last_sector_ms - derived) <= 5 else derived
+                if last > 0:
+                    self._sectors.append(last)
+            finished = self._finish(s, lap_ms)
             self._laps_done = s.completed_laps
             self._start_lap(s)
         elif s.sector_index != self._sector:
@@ -81,8 +99,13 @@ class LapRecorder:
 
     def _append(self, s: TelemetrySample):
         b = self._buf
+        dist = s.lap_position * self.track_length
+        if b["dist"] and s.lap_time_ms > 10000 and dist < b["dist"][-1] - 0.5 * self.track_length:
+            # la spline torna a 0 qualche ms prima che AC chiuda il giro: è ancora fine giro
+            # (a inizio giro succede il contrario, e lo sistema clean_lap in analisi)
+            dist += self.track_length
         b["t"].append(s.lap_time_ms / 1000.0)
-        b["dist"].append(s.lap_position * self.track_length)
+        b["dist"].append(dist)
         b["speed"].append(s.speed_kmh)
         b["gas"].append(s.gas)
         b["brake"].append(s.brake)
@@ -101,10 +124,9 @@ class LapRecorder:
         self._max_speed = max(self._max_speed, s.speed_kmh)
         self._last = s
 
-    def _finish(self, s: TelemetrySample) -> LapData | None:
+    def _finish(self, s: TelemetrySample, lap_ms: int) -> LapData | None:
         if len(self._buf["t"]) < 10:
             return None
-        lap_ms = s.last_lap_ms if s.last_lap_ms > 0 else int(self._buf["t"][-1] * 1000)
         channels = {c: np.asarray(v, dtype=np.float64) for c, v in self._buf.items()}
         temps = np.asarray(self._temps)
         press = np.asarray(self._press)

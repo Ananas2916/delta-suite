@@ -10,18 +10,22 @@ from ui.theme import C
 from ui.widgets import Card, label
 
 MODULES = [
-    (1, "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa: pedali, sterzo, "
-     "gomme, freni, G-G, giri e settori.", "MoTeC i2 · ATLAS · WinDARAB"),
+    (1, "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa, registrazione delle "
+     "sessioni e replay.", "MoTeC i2 · ATLAS · WinDARAB"),
     (2, "Analisi giri", "Giri sovrapposti su distanza, Delta-T, traiettoria, cursore sincronizzato, "
      "archivio DuckDB ed esportazione Parquet.", "MoTeC i2 · Pi Toolbox"),
-    (3, "Dinamica veicolo", "Pneumatico Pacejka, ellisse d'attrito, trasferimenti di carico con aero, "
-     "cinematica del quadrilatero e centro di rollio.", "ChassisSim · OptimumG · Adams"),
+    (3, "Box & Assetto", "Bias freni, ABS, TC e freno motore in diretta, setup dai box, proposte "
+     "dell'ingegnere e classifica con distacchi.", "Muretto box"),
     (4, "Strategia & Timing", "Consumo medio, finestra pit, previsione degrado gomme, sosta ottimale, "
      "settori e giro ideale.", "HH Timing · SBG RaceWatch"),
-    (5, "CAD / CFD bridge", "Viewer STL/OBJ con area frontale e mappe aerodinamiche CL/CD vs ride height "
+    (5, "Dinamica veicolo", "Pneumatico Pacejka, ellisse d'attrito, trasferimenti di carico con aero, "
+     "cinematica del quadrilatero e centro di rollio.", "ChassisSim · OptimumG · Adams"),
+    (6, "CAD / CFD bridge", "Viewer STL/OBJ con area frontale e mappe aerodinamiche CL/CD vs ride height "
      "da OpenFOAM/Ansys.", "Viewer CAD · post-processing CFD"),
-    (6, "AI Race Engineer", "Claude analizza lo stint e propone pressioni, setup e strategia.",
-     "Ingegnere di pista"),
+    (7, "AI Race Engineer", "Claude Code (o altro agente) legge i dati di Delta Suite, analizza curva per "
+     "curva e propone setup e strategia.", "Ingegnere di pista"),
+    (8, "Radio & voce", "Radio in cuffia con voce Kokoro, push-to-talk dal volante, regole automatiche "
+     "su giro, carburante, gomme e bandiere.", "Radio di squadra"),
 ]
 
 

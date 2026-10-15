@@ -25,8 +25,8 @@ def fuel_per_lap(laps: list[LapData]) -> float | None:
     if used.size == 0:
         return None
     med = np.median(used)
-    used = used[np.abs(used - med) <= 0.25 * med]
-    return float(used.mean())
+    close = used[np.abs(used - med) <= 0.25 * med]
+    return float(close.mean()) if close.size else float(med)
 
 
 @dataclass
@@ -97,14 +97,26 @@ class DegradationForecast:
     cliff_lap: int | None       # primo giro previsto con perdita > soglia vs migliore
 
 
+def is_pit_stop_lap(lap: LapData, previous: LapData | None) -> bool:
+    """Giro con sosta: rifornimento, oppure gomme nuove (l'usura in AC scende sempre, 100 = nuova)."""
+    if lap.valid:
+        return False
+    refuel = lap.fuel_end > lap.fuel_start + 0.5
+    new_tyres = previous is not None and bool(lap.tyre_wear_end) and bool(previous.tyre_wear_end) and \
+        max(e - p for e, p in zip(lap.tyre_wear_end, previous.tyre_wear_end)) > 0.5
+    return refuel or new_tyres
+
+
 def current_stint(laps: list[LapData]) -> list[LapData]:
-    """Giri dall'ultima sosta (giro non valido in pit) in poi."""
+    """Giri dall'ultima sosta (rifornimento o cambio gomme) in poi."""
     stint: list[LapData] = []
+    previous = None
     for lap in laps:
-        if not lap.valid and lap.fuel_end > lap.fuel_start + 0.5:   # rifornimento => nuovo stint
+        if is_pit_stop_lap(lap, previous):
             stint = []
-            continue
-        stint.append(lap)
+        else:
+            stint.append(lap)
+        previous = lap
     return stint
 
 

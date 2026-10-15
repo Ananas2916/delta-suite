@@ -278,6 +278,21 @@ class _MappedPage:
         ctypes.memmove(ctypes.addressof(out), self._view, self._read_size)
         return out
 
+    def read_consistent(self, tries: int = 4) -> ctypes.Structure:
+        """Come read(), ma scarta le copie fatte mentre AC stava scrivendo la pagina.
+
+        Il primo campo è packetId: se vale lo stesso prima e dopo la copia (e nella copia),
+        nessuna scrittura si è sovrapposta.
+        """
+        packet = ctypes.c_int.from_address(self._view)
+        out = self._struct_type()
+        for _ in range(tries):
+            before = packet.value
+            ctypes.memmove(ctypes.addressof(out), self._view, self._read_size)
+            if packet.value == before and out.packetId == before:
+                break
+        return out
+
     def close(self) -> None:
         if self._view:
             _kernel32.UnmapViewOfFile(self._view)
@@ -309,17 +324,11 @@ class ACSharedMemory:
             raise
 
     def physics(self) -> SPageFilePhysics:
-        # AC scrive la pagina mentre la copiamo: se packetId cambia durante la copia
-        # lo snapshot può essere misto, quindi riproviamo.
-        for _ in range(4):
-            first = self._physics.read()
-            second = self._physics.read()
-            if first.packetId == second.packetId:
-                return second
-        return second
+        # AC (333 Hz) può scrivere la pagina mentre la copiamo: snapshot verificato su packetId.
+        return self._physics.read_consistent()
 
     def graphics(self) -> SPageFileGraphic:
-        return self._graphics.read()
+        return self._graphics.read_consistent()
 
     def static(self) -> SPageFileStatic:
         return self._static.read()

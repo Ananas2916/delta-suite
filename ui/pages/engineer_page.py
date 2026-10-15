@@ -1,71 +1,42 @@
-"""Modulo 5: AI Race Engineer (Claude)."""
+"""Modulo 5: AI Race Engineer (chat di analisi; stessa conversazione della radio)."""
 
 from __future__ import annotations
 
-import os
-
-from PyQt6.QtCore import QSettings, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QGroupBox, QHBoxLayout, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QSplitter, QTextBrowser,
-    QVBoxLayout, QWidget,
+    QHBoxLayout, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QSplitter, QTextBrowser, QVBoxLayout, QWidget,
 )
-from PyQt6.QtCore import Qt
 
-from ai_engine.race_engineer_agent import MODEL, RaceEngineer, build_stint_summary
+from ai_engine.agent_cli import BACKENDS
+from ai_engine.race_engineer_agent import build_stint_summary
 from ui.widgets import SessionPicker, label
 
 QUICK_QUESTIONS = {
+    "Dove perdo tempo": "Confronta il mio ultimo giro valido con il migliore, curva per curva, e dimmi dove e "
+                        "perché perdo tempo.",
     "Pressioni gomme": "Analizza temperature e pressioni gomme. Le pressioni a caldo sono nella finestra giusta? "
                        "Che pressioni a freddo imposto per il prossimo run, ruota per ruota?",
     "Strategia gara": "Dammi la strategia per il resto della gara: lunghezza stint, giro di sosta, "
                       "carburante da imbarcare e se conviene cambiare gomme.",
-    "Bilanciamento": "Dai dati di temperature gomme, freni e tempi nei settori, la macchina è sottosterzante o "
-                     "sovrasterzante? Quali modifiche di setup proponi?",
-    "Costanza pilota": "Valuta la costanza dei miei giri e dove perdo tempo rispetto al giro ideale.",
+    "Bilanciamento": "Dai dati di gomme, freni e curve, la macchina è sottosterzante o sovrasterzante? "
+                     "Proponi le modifiche di setup con proponi_modifica.",
 }
-
-
-class EngineerWorker(QThread):
-    text = pyqtSignal(str)
-    done = pyqtSignal(str)
-    failed = pyqtSignal(str)
-
-    def __init__(self, engineer: RaceEngineer, question: str, summary: str | None):
-        super().__init__()
-        self.engineer, self.question, self.summary = engineer, question, summary
-
-    def run(self):
-        try:
-            final = self.engineer.ask(self.question, self.summary, on_text=self.text.emit)
-            self.done.emit(final)
-        except Exception as exc:
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
 class EngineerPage(QWidget):
     def __init__(self, hub):
         super().__init__()
         self.hub = hub
-        self.settings = QSettings("DeltaSuite", "DeltaSuite")
-        self.engineer: RaceEngineer | None = None
-        self.worker: EngineerWorker | None = None
         self._transcript = ""
-        self._summary_sent = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
-        root.addWidget(label("AI Race Engineer", "h1"))
-
-        key_box = QGroupBox(f"Connessione Claude · modello {MODEL}")
-        kl = QHBoxLayout(key_box)
-        self.key = QLineEdit(self.settings.value("api_key", "", str))
-        self.key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key.setPlaceholderText("Chiave API Anthropic (vuoto = usa ANTHROPIC_API_KEY)")
-        save = QPushButton("Salva chiave")
-        save.clicked.connect(self._save_key)
-        kl.addWidget(self.key, 1)
-        kl.addWidget(save)
-        root.addWidget(key_box)
+        head = QHBoxLayout()
+        head.addWidget(label("AI Race Engineer", "h1"))
+        head.addStretch()
+        self.backend_lbl = label("", "dim")
+        head.addWidget(self.backend_lbl)
+        root.addLayout(head)
 
         split = QSplitter(Qt.Orientation.Horizontal)
         left = QWidget()
@@ -83,7 +54,9 @@ class EngineerPage(QWidget):
         regen = QPushButton("Rigenera riepilogo stint")
         regen.clicked.connect(self._regen)
         ll.addWidget(regen)
-        ll.addWidget(label("Riepilogo inviato all'ingegnere (modificabile):", "dim"))
+        self.summary_note = label("", "dim")
+        self.summary_note.setWordWrap(True)
+        ll.addWidget(self.summary_note)
         self.summary = QPlainTextEdit()
         self.summary.setStyleSheet("font-family: Consolas; font-size: 9pt;")
         ll.addWidget(self.summary, 1)
@@ -117,7 +90,7 @@ class EngineerPage(QWidget):
         self.status = label("", "dim")
         rl.addWidget(self.status)
         split.addWidget(right)
-        split.setSizes([480, 820])
+        split.setSizes([460, 840])
         root.addWidget(split, 1)
 
         self.render_timer = QTimer(self)
@@ -125,63 +98,63 @@ class EngineerPage(QWidget):
         self.picker.currentIndexChanged.connect(self._regen)
         self.laps_left.valueChanged.connect(self._regen)
         hub.lap_completed.connect(lambda _: self._regen() if self.picker.currentData() is None else None)
+        hub.engineer_started.connect(self._on_started)
+        hub.engineer_text.connect(self._on_text)
+        hub.engineer_done.connect(self._on_done)
+        hub.engineer_failed.connect(self._on_failed)
         self._regen()
         self._render()
 
-    # ------------------------------------------------------------------
-    def _save_key(self):
-        self.settings.setValue("api_key", self.key.text().strip())
-        self.engineer = None
-        self.status.setText("Chiave salvata.")
+    def showEvent(self, e):
+        backend = self.hub.setting("engineer/backend", "claude")
+        self.backend_lbl.setText(f"Agente: {BACKENDS.get(backend, backend)} · si cambia in Radio & voce")
+        self.summary_note.setText(
+            "Con l'API il riepilogo qui sotto viene allegato alla prima domanda." if backend == "api" else
+            "L'agente legge i dati da solo con gli strumenti di Delta Suite (MCP): il riepilogo è solo per te.")
+        super().showEvent(e)
 
     def _regen(self):
         info, laps, _ = self.picker.selected()
         live = self.picker.currentData() is None and self.hub.last_sample is not None
         fuel = self.hub.last_sample.fuel if live else (laps[-1].fuel_end if laps else None)
         self.summary.setPlainText(build_stint_summary(info or {}, laps, fuel, self.laps_left.value() or None))
-        self._summary_sent = False
 
     def _new_chat(self):
-        if self.engineer:
-            self.engineer.reset()
+        self.hub.new_conversation()
         self._transcript = ""
-        self._summary_sent = False
         self._render()
 
     def _send(self, question: str):
         question = question.strip()
-        if not question or (self.worker and self.worker.isRunning()):
+        if not question:
             return
-        key = self.key.text().strip() or None
-        if key is None and not os.environ.get("ANTHROPIC_API_KEY"):
-            self.status.setText("Inserisci una chiave API Anthropic oppure imposta ANTHROPIC_API_KEY.")
+        sid = self.picker.currentData()
+        if sid is not None:
+            question += f" (sessione in archivio: session_id={sid})"
+        if self.laps_left.value():
+            question += f" Giri di gara rimanenti: {self.laps_left.value()}."
+        if not self.hub.ask_engineer(question, "ANALISI"):
+            self.status.setText("L'ingegnere sta già rispondendo.")
             return
-        if self.engineer is None:
-            self.engineer = RaceEngineer(key)
-        summary = None if self._summary_sent else self.summary.toPlainText()
-        self._summary_sent = True
         self.question.clear()
-        self._transcript += f"\n\n---\n\n**Tu:** {question}\n\n**Ingegnere:** "
-        self.worker = EngineerWorker(self.engineer, question, summary)
-        self.worker.text.connect(self._on_text)
-        self.worker.done.connect(self._on_done)
-        self.worker.failed.connect(self._on_failed)
+
+    def _on_started(self, question: str, mode: str):
+        tag = "📻 " if mode == "RADIO" else ""
+        self._transcript += f"\n\n---\n\n**{tag}Tu:** {question}\n\n**Ingegnere:** "
         self.send_btn.setEnabled(False)
         self.status.setText("L'ingegnere sta analizzando i dati…")
-        self.worker.start()
-        self.render_timer.start(120)
+        self.render_timer.start(150)
 
     def _on_text(self, chunk: str):
         self._transcript += chunk
 
     def _on_done(self, final: str):
-        if final.startswith("La richiesta è stata rifiutata"):
-            self._transcript += final
+        if final and not self._transcript.rstrip().endswith(final.strip()[-40:]):
+            self._transcript += final      # backend senza streaming
         self._finish("Risposta completata.")
 
     def _on_failed(self, err: str):
         self._transcript += f"\n\n*Errore: {err}*"
-        self._summary_sent = False
         self._finish("Errore nella richiesta.")
 
     def _finish(self, msg: str):
@@ -191,8 +164,9 @@ class EngineerPage(QWidget):
         self._render()
 
     def _render(self):
-        intro = ("*Il riepilogo dello stint a sinistra viene allegato alla prima domanda della conversazione. "
-                 "Le domande successive proseguono la stessa conversazione.*")
+        intro = ("*Chiedi un'analisi: l'ingegnere legge telemetria, giri, setup e classifica da Delta Suite e può "
+                 "proporre modifiche, che confermi tu (pagina Box & Assetto o tasto al volante). Le domande fatte "
+                 "via radio compaiono qui con 📻.*")
         self.chat.setMarkdown(intro + self._transcript)
         sb = self.chat.verticalScrollBar()
         sb.setValue(sb.maximum())

@@ -8,12 +8,14 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QComboBox, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from hub_core.ac_shared_memory import ACStatus, gear_label
 from hub_core.race_strategy import best_sectors, fmt_ms
-from ui.hub_state import SOURCE_AC, SOURCE_DEMO
+from hub_core.session_recording import recordings_dir
+from ui.hub_state import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
 from ui.theme import C
 from ui.widgets import Bar, Card, TyreGrid, ValueTile, label, make_plot, readonly_table, table_item
 
@@ -39,6 +41,11 @@ class TelemetryPage(QWidget):
         self.source = QComboBox()
         self.source.addItem("Assetto Corsa (shared memory)", SOURCE_AC)
         self.source.addItem("Demo (simulatore)", SOURCE_DEMO)
+        self.source.addItem("Replay di una sessione registrata…", SOURCE_REPLAY)
+        self.record = QCheckBox("Registra sessione")
+        self.record.setToolTip("Salva i dati grezzi di AC in un file .dsr, da rivedere poi come replay")
+        self.record.setChecked(hub.setting("record_sessions", True, bool))
+        self.record.toggled.connect(lambda v: hub.settings.setValue("record_sessions", v))
         self.hz = QSpinBox()
         self.hz.setRange(10, 200)
         self.hz.setValue(60)
@@ -49,7 +56,7 @@ class TelemetryPage(QWidget):
         self.start_btn = QPushButton("Avvia acquisizione")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self._toggle)
-        for w in (label("Sorgente", "dim"), self.source, self.hz, label("Velocità demo", "dim"),
+        for w in (label("Sorgente", "dim"), self.source, self.record, self.hz, label("Velocità demo/replay", "dim"),
                   self.demo_speed, self.start_btn):
             bar.addWidget(w)
         root.addLayout(bar)
@@ -144,8 +151,16 @@ class TelemetryPage(QWidget):
     def _toggle(self):
         if self.hub.running:
             self.hub.stop()
-        else:
-            self.hub.start(self.source.currentData(), self.hz.value(), self.demo_speed.currentData())
+            return
+        src = self.source.currentData()
+        path = None
+        if src == SOURCE_REPLAY:
+            path, _ = QFileDialog.getOpenFileName(self, "Apri registrazione", str(recordings_dir()),
+                                                  "Registrazioni Delta Suite (*.dsr)")
+            if not path:
+                return
+        self.hub.start(src, self.hz.value(), self.demo_speed.currentData(), path,
+                       record=src == SOURCE_AC and self.record.isChecked())
 
     def start_demo(self):
         self.source.setCurrentIndex(self.source.findData(SOURCE_DEMO))
@@ -154,7 +169,7 @@ class TelemetryPage(QWidget):
 
     def _on_running(self, running: bool):
         self.start_btn.setText("Ferma acquisizione" if running else "Avvia acquisizione")
-        for w in (self.source, self.hz, self.demo_speed):
+        for w in (self.source, self.hz, self.demo_speed, self.record):
             w.setEnabled(not running)
 
     def _on_status(self, text: str, ok: bool):
