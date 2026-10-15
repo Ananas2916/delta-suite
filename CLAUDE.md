@@ -1,4 +1,6 @@
-# Mio Hub Motorsport — contesto di progetto
+# Delta Suite — contesto di progetto
+
+(nome precedente: Mio Hub Motorsport; la cartella resta `mio_hub_motorsport`)
 
 ## Obiettivo
 Suite software proprietaria "All-in-One Engineering & Strategy Suite" che raggruppa in un unico
@@ -26,13 +28,13 @@ Codice proprietario dell'utente, nessuna dipendenza da licenze commerciali.
 
 ## Struttura
 ```
-ac_app/MioHubTelemetry.py      # app in-game (opzionale, vedi decisioni)
+ac_app/DeltaSuiteTelemetry.py      # app in-game (opzionale, vedi decisioni)
 hub_core/telemetry_receiver.py # acquisizione dati
 hub_core/vehicle_dynamics.py   # Pacejka & cinematica
 hub_core/race_strategy.py      # carburante, pit, timing
 hub_core/database.py           # DuckDB / SQLite
 ai_engine/race_engineer_agent.py
-ui/main_dashboard.py           # PyQt6 o Web/React (da decidere)
+ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
 ```
 
 ## Decisioni tecniche prese
@@ -48,11 +50,11 @@ ui/main_dashboard.py           # PyQt6 o Web/React (da decidere)
 ## Build e ambiente
 - venv di sviluppo fuori da OneDrive: `C:\Users\filip\.venvs\miohub` (Python 3.11).
 - UI: **PyQt6 + pyqtgraph** (decisione presa). Entry point `run_hub.py`.
-- Exe: `.\build_exe.ps1` → `dist\MioHubMotorsport.exe` (PyInstaller onefile, spec `MioHubMotorsport.spec`,
-  workpath in `%LOCALAPPDATA%\MioHub\build`). scipy/pandas/pyarrow esclusi apposta: non servono.
-- Autotest UI/exe: variabile `MIOHUB_SELFTEST=<cartella>` → demo, screenshot di ogni pagina, uscita.
-- Archivio: `%LOCALAPPDATA%\MioHub\telemetry.duckdb`.
-- Repo GitHub privato: `Ananas2916/mio_hub_motorsport`.
+- Exe: `.\build_exe.ps1` → `dist\DeltaSuite.exe` (PyInstaller onefile, spec `DeltaSuite.spec`,
+  workpath in `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow esclusi apposta: non servono.
+- Autotest UI/exe: variabile `DELTA_SELFTEST=<cartella>` → demo, screenshot di ogni pagina, uscita.
+- Archivio: `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
+- Repo GitHub privato: `Ananas2916/delta-suite`.
 
 ## Prossimo passo
 1. Test reale in pista con AC: confrontare valori dell'hub con quelli in gioco (marcia, settori,

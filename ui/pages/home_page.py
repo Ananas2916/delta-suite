@@ -35,7 +35,7 @@ class HomePage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 24)
         root.setSpacing(14)
-        root.addWidget(label("Mio Hub Motorsport", "h1"))
+        root.addWidget(label("Delta Suite", "h1"))
         sub = label("All-in-One Engineering & Strategy Suite per Assetto Corsa", "dim")
         sub.setStyleSheet("font-size: 12pt;")
         root.addWidget(sub)

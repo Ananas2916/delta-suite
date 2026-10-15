@@ -1,4 +1,4 @@
-# Compila dist\MioHubMotorsport.exe (file unico, senza console).
+# Compila dist\DeltaSuite.exe (file unico, senza console).
 # Uso:  .\build_exe.ps1                      -> usa il venv in $env:USERPROFILE\.venvs\miohub
 #       .\build_exe.ps1 -Python C:\percorso\python.exe
 param(
@@ -16,6 +16,6 @@ if (-not (Test-Path $Python)) {
 
 & $Python tools\make_icon.py
 # cartella di lavoro fuori da OneDrive: sono migliaia di file temporanei
-& $Python -m PyInstaller MioHubMotorsport.spec --noconfirm --clean `
-    --workpath "$env:LOCALAPPDATA\MioHub\build" --distpath dist
-Write-Host "Fatto: $PSScriptRoot\dist\MioHubMotorsport.exe"
+& $Python -m PyInstaller DeltaSuite.spec --noconfirm --clean `
+    --workpath "$env:LOCALAPPDATA\DeltaSuite\build" --distpath dist
+Write-Host "Fatto: $PSScriptRoot\dist\DeltaSuite.exe"

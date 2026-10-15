@@ -46,7 +46,7 @@ class EngineerPage(QWidget):
     def __init__(self, hub):
         super().__init__()
         self.hub = hub
-        self.settings = QSettings("MioHub", "MotorsportSuite")
+        self.settings = QSettings("DeltaSuite", "DeltaSuite")
         self.engineer: RaceEngineer | None = None
         self.worker: EngineerWorker | None = None
         self._transcript = ""

@@ -13,7 +13,7 @@ from hub_core.lap_recorder import CHANNELS, LapData
 
 
 def default_db_path() -> Path:
-    base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MioHub"
+    base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DeltaSuite"
     base.mkdir(parents=True, exist_ok=True)
     return base / "telemetry.duckdb"
 

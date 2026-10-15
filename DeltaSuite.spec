@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build: .\build_exe.ps1  (oppure: pyinstaller MioHubMotorsport.spec)
+# Build: .\build_exe.ps1  (oppure: pyinstaller DeltaSuite.spec)
 
 a = Analysis(
     ["run_hub.py"],
@@ -28,10 +28,10 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="MioHubMotorsport",
+    name="DeltaSuite",
     debug=False,
     strip=False,
     upx=False,
     console=False,
-    icon="assets/miohub.ico",
+    icon="assets/deltasuite.ico",
 )

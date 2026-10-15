@@ -72,7 +72,7 @@ def apply(app) -> None:
 
 
 def app_icon_pixmap(size: int = 256) -> QPixmap:
-    """Logo disegnato a runtime: quadrato rosso con bandiera a scacchi e 'MH'."""
+    """Logo disegnato a runtime: quadrato rosso con bandiera a scacchi e 'Δ'."""
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
@@ -86,10 +86,10 @@ def app_icon_pixmap(size: int = 256) -> QPixmap:
             p.setBrush(QColor("white" if (r + c) % 2 == 0 else "#111111"))
             p.drawRect(QRectF(c * cell, size - (2 - r) * cell * 0.9 - size * 0.06, cell, cell * 0.9))
     p.setPen(QColor("white"))
-    f = QFont("Segoe UI", int(size * 0.30))
+    f = QFont("Segoe UI", int(size * 0.44))
     f.setWeight(QFont.Weight.Black)
     p.setFont(f)
-    p.drawText(QRectF(0, 0, size, size * 0.72), Qt.AlignmentFlag.AlignCenter, "MH")
+    p.drawText(QRectF(0, 0, size, size * 0.72), Qt.AlignmentFlag.AlignCenter, "Δ")
     p.end()
     return pm
 

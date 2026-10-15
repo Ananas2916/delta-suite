@@ -1,4 +1,4 @@
-﻿# Mio Hub Motorsport
+﻿# Delta Suite
 
 Suite proprietaria di ingegneria e strategia per **Assetto Corsa** (originale, 2014).
 Un'unica applicazione desktop che riunisce gli strumenti dei software professionali di
@@ -15,7 +15,7 @@ F1/WEC/GTWC, alimentata dalla telemetria letta in tempo reale dalla shared memor
 
 ## Uso rapido
 
-- **Eseguibile:** `dist\MioHubMotorsport.exe` (si genera con `.\build_exe.ps1`).
+- **Eseguibile:** `dist\DeltaSuite.exe` (si genera con `.\build_exe.ps1`).
 - **Da sorgente:** `pip install -r requirements.txt`, poi `python run_hub.py`.
 - **Con AC:** avvia una sessione da Content Manager, poi nell'hub *Telemetria live → Avvia acquisizione*
   con sorgente "Assetto Corsa". I dati sono validi solo in pista, non nei menu.
@@ -24,7 +24,7 @@ F1/WEC/GTWC, alimentata dalla telemetria letta in tempo reale dalla shared memor
 - **AI Race Engineer:** serve una chiave API Anthropic (campo nella pagina oppure variabile
   `ANTHROPIC_API_KEY`).
 
-L'archivio dei giri è in `%LOCALAPPDATA%\MioHub\telemetry.duckdb`.
+L'archivio dei giri è in `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
 
 ## Struttura
 
@@ -48,5 +48,5 @@ ui/                            PyQt6 + pyqtgraph: finestra principale e una pagi
   richiederanno l'app in-game (`ac_app/`, Python 3.3) o un plugin server.
 - Il layout della shared memory è quello di AC 1.x: non compatibile con ACC né con AC EVO.
 
-Autotest dell'eseguibile: `set MIOHUB_SELFTEST=C:\cartella` prima di avviarlo; l'app avvia il demo,
+Autotest dell'eseguibile: `set DELTA_SELFTEST=C:\cartella` prima di avviarlo; l'app avvia il demo,
 salva uno screenshot di ogni pagina e si chiude.

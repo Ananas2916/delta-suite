@@ -21,7 +21,7 @@ from ui.pages.home_page import HomePage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 
-APP_NAME = "Mio Hub Motorsport"
+APP_NAME = "Delta Suite"
 VERSION = "0.1.0"
 
 
@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         side.setFixedWidth(220)
         sl = QVBoxLayout(side)
         sl.setContentsMargins(0, 0, 0, 0)
-        brand = QLabel("  MIO HUB")
+        brand = QLabel("  DELTA SUITE")
         brand.setStyleSheet(f"background: {theme.C['panel']}; color: {theme.C['accent']}; font-size: 15pt;"
                             "font-weight: 800; padding: 16px 8px 4px 8px; letter-spacing: 2px;")
         sl.addWidget(brand)
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
 
 
 def _self_test(win: MainWindow, out_dir: str):
-    """MIOHUB_SELFTEST=<cartella>: demo veloce, giro di tutte le pagine con screenshot, poi uscita."""
+    """DELTA_SELFTEST=<cartella>: demo veloce, giro di tutte le pagine con screenshot, poi uscita."""
     from pathlib import Path
 
     from hub_core.cad_bridge import demo_car_mesh
@@ -122,13 +122,13 @@ def _self_test(win: MainWindow, out_dir: str):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setOrganizationName("MioHub")
+    app.setOrganizationName("DeltaSuite")
     app.setWindowIcon(theme.app_icon())
     theme.apply(app)
     win = MainWindow()
     win.show()
-    if os.environ.get("MIOHUB_SELFTEST"):
-        _self_test(win, os.environ["MIOHUB_SELFTEST"])
+    if os.environ.get("DELTA_SELFTEST"):
+        _self_test(win, os.environ["DELTA_SELFTEST"])
     sys.exit(app.exec())
 
 
