@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.duckdb
+*.duckdb.wal
+*.parquet
+assets/*.ico
+.claude/settings.local.json
