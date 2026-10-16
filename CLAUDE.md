@@ -13,24 +13,30 @@ Codice proprietario dell'utente, nessuna dipendenza da licenze commerciali.
 - Avvia AC tramite **Content Manager** (quasi certamente con Custom Shaders Patch)
 - Lingua di lavoro: italiano
 
-## Moduli previsti
-1. **Telemetria & Live Data** (sostituisce MoTeC i2 / ATLAS / WinDARAB): acquisizione 60–100 Hz
-   (velocità, input pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, KERS),
-   storage su DuckDB/Parquet, grafici sovrapposti tra giri (Delta-T, traiettoria, pedali, RPM).
-2. **Dinamica veicolo & pneumatici** (sostituisce ChassisSim / OptimumG / Adams): modello Pacejka
-   (Magic Formula) con NumPy/SciPy, cinematica sospensioni (centri di rollio, camber/toe dinamici, ride height).
-3. **Strategia & Timing** (sostituisce HH Timing / SBG RaceWatch): settori, gap/interval, consumo
-   carburante medio, pit-window, predittore degrado gomme (scikit-learn/PyTorch) sui 10–20 giri successivi.
-4. **CAD/FEA/CFD bridge**: niente solutori propri; viewer di geometrie `.stl`/`.obj` e import di
-   coefficienti aero (CL, CD, mappe vs ride height) esportati da OpenFOAM/Ansys.
-5. **AI Race Engineer**: agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
-   Antigravity o comando personalizzato come alternative, API Anthropic come ultima opzione) che legge
-   i dati di Delta Suite via MCP e propone modifiche da confermare.
-6. **Radio & voce**: radio a regole locali (giro/delta, carburante, gomme, bandiere) letta da Kokoro,
-   push-to-talk dal volante → trascrizione Whisper locale → agente in modalità RADIO → risposta parlata,
-   nella lingua della voce scelta.
-7. **Box & Assetto**: bias/ABS/TC/freno motore in diretta, setup, pit stop e classifica con gap
-   tramite l'app Lua CSP `ac_app/DeltaSuiteBridge`.
+## Moduli
+Sei moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SECTIONS` in
+`ui/pages/home_page.py`). Il CAD/CFD bridge è stato tolto (16/10/2026): non c'entrava con la suite.
+
+**In pista**
+1. **Telemetria live** (sostituisce MoTeC i2 / ATLAS / WinDARAB): acquisizione 60–100 Hz (velocità,
+   pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, KERS), registrazione e replay.
+2. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
+   scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
+   Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
+   propone modifiche da confermare. Radio a regole locali (giro/delta, carburante, gomme, bandiere) letta
+   da Kokoro; push-to-talk dal volante → Whisper locale → agente in modalità RADIO → risposta parlata
+   nella lingua della voce. Pagina a schede: Conversazione (chat + radio in cuffia), Riepilogo stint,
+   Impostazioni (agente, MCP, voce, microfono, regole radio).
+3. **Box & Assetto**: bias/ABS/TC/freno motore in diretta, setup, proposte dell'ingegnere, pit stop e
+   classifica con gap tramite l'app Lua CSP `ac_app/DeltaSuiteBridge`.
+
+**Analisi e strategia**
+4. **Analisi giri**: giri sovrapposti (Delta-T, traiettoria, pedali, RPM), confronto curva per curva,
+   archivio DuckDB ed export Parquet.
+5. **Strategia & Timing** (sostituisce HH Timing / SBG RaceWatch): settori, consumo medio, pit-window,
+   degrado gomme sui 10–20 giri successivi.
+6. **Dinamica veicolo** (sostituisce ChassisSim / OptimumG / Adams): Pacejka (Magic Formula),
+   cinematica sospensioni (centri di rollio, camber/toe dinamici, ride height).
 
 ## Struttura
 ```
@@ -48,9 +54,11 @@ ai_engine/race_engineer_agent.py  # backend API (riepilogo stint)
 ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in modalità non interattiva
 ai_engine/mcp_server.py        # server MCP HTTP locale con token (7 strumenti)
 ai_engine/radio.py, voice.py   # regole radio, Kokoro/Tsukumo, coda a priorità
+ai_engine/stt.py               # trascrizione push-to-talk (Whisper locale / Tsukumo)
 ui/hub_state.py, hub_data.py   # stato hub, proposte, fornitore dati per l'MCP
 tests/                         # pytest, incluso un giro vero registrato al Red Bull Ring
 ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
+                               # (pagine per chiave: "telemetry", "engineer", "box", ...)
 ```
 
 ## Decisioni tecniche prese
@@ -88,7 +96,6 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
 - Autotest UI/exe: variabile `DELTA_SELFTEST=<cartella>` → demo, screenshot di ogni pagina, verifica
   voce/app CSP/MCP in `selftest.txt`, uscita.
 - Registrazioni: `%LOCALAPPDATA%\DeltaSuite\recordings\*.dsr`.
-ecordings\*.dsr`.
 - Archivio: `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
 - Repo GitHub privato: `Ananas2916/delta-suite`.
 
@@ -101,6 +108,7 @@ ecordings\*.dsr`.
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)
 - [x] Hub completo con 6 moduli + simulatore demo, exe compilato e autotestato
+- [x] Riordino (16/10/2026): via il CAD/CFD, ingegnere AI e radio in un'unica pagina, barra laterale in sezioni
 - [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)

@@ -5,16 +5,21 @@ Un'unica applicazione desktop che riunisce gli strumenti dei software profession
 F1/WEC/GTWC, alimentata dalla telemetria letta in tempo reale dalla shared memory di AC,
 con un ingegnere di pista AI che ti parla in cuffia.
 
+**In pista**
+
 | Modulo | Cosa fa | Al posto di |
 |---|---|---|
 | Telemetria live | Cruscotto 60–200 Hz: velocità, RPM, pedali, sterzo, gomme, freni, G-G, giri e settori; registrazione delle sessioni e replay | MoTeC i2, ATLAS, WinDARAB |
-| Analisi giri | Fino a 4 giri sovrapposti su distanza, Delta-T, traiettoria, archivio DuckDB, export Parquet | MoTeC i2, Pi Toolbox |
+| Ingegnere di pista | Un solo agente (Claude Code, Codex, Antigravity o API) per chat di analisi e radio in cuffia: legge i dati di Delta Suite, analizza curva per curva, risponde al push-to-talk dal volante e propone setup e strategia; in più la radio automatica con voce Kokoro (giro, carburante, gomme, bandiere) | ingegnere e radio di squadra |
 | Box & Assetto | Bias freni, ABS, TC e freno motore in diretta; setup completo; proposte dell'ingegnere da confermare; classifica con gap e interval | muretto box |
+
+**Analisi e strategia**
+
+| Modulo | Cosa fa | Al posto di |
+|---|---|---|
+| Analisi giri | Fino a 4 giri sovrapposti su distanza, Delta-T, traiettoria, archivio DuckDB, export Parquet | MoTeC i2, Pi Toolbox |
 | Strategia & Timing | Consumo medio, piano carburante e finestra pit, degrado gomme, sosta ottimale, giro ideale | HH Timing, SBG RaceWatch |
 | Dinamica veicolo | Pacejka, ellisse d'attrito, trasferimenti di carico, cinematica del quadrilatero | ChassisSim, OptimumG, Adams |
-| CAD / CFD bridge | Viewer STL/OBJ, mappe aero CL/CD vs ride height da OpenFOAM/Ansys | viewer CAD, post-processing CFD |
-| AI Race Engineer | Claude Code (o Codex, Antigravity, API) legge i dati di Delta Suite, analizza curva per curva e propone setup e strategia | ingegnere di pista |
-| Radio & voce | Radio in cuffia con voce Kokoro, regole immediate (giro, carburante, gomme, bandiere), push-to-talk dal volante | radio di squadra |
 
 ## Modalità
 
@@ -36,17 +41,18 @@ Si scelgono in alto nella barra laterale:
 - **App CSP** (serve Custom Shaders Patch): *Box & Assetto → Installa app CSP in AC*. In gioco, dalla
   barra delle app apri **Delta Suite Bridge** e assegna i tasti: radio (tieni premuto), conferma
   proposta, scarta proposta.
-- **Ingegnere AI:** *Radio & voce → Agente*. Con Claude Code basta averlo installato e aver fatto il
-  login: usa il tuo abbonamento, senza chiave API. L'agente vede solo i dati di Delta Suite (server MCP
-  locale), non può eseguire comandi né toccare file.
+- **Ingegnere AI:** *Ingegnere di pista → Impostazioni → Agente AI*. Con Claude Code basta averlo
+  installato e aver fatto il login: usa il tuo abbonamento, senza chiave API. L'agente vede solo i dati
+  di Delta Suite (server MCP locale), non può eseguire comandi né toccare file. Chat scritta e
+  push-to-talk sono la stessa conversazione.
 - **Voce e lingua:** Kokoro integrato usa i modelli già scaricati da Tsukumo (34 voci). La voce scelta
   decide la lingua parlata (italiano, inglese US/UK, spagnolo, francese, portoghese): frasi della radio,
   risposte dell'ingegnere via radio e trascrizione la seguono. In alternativa fa parlare Tsukumo.
 - **Trascrizione (push-to-talk):** Whisper locale (`faster-whisper`, modello `base` di default, ~1 s su
   CPU); i modelli stanno nella cache di Hugging Face e si scaricano al primo uso se mancano. In
   alternativa il motore Ascolto di Tsukumo.
-- **Agenti esterni:** *Radio & voce → Copia configurazione MCP* e incollala in Claude Code, Codex o
-  Antigravity per interrogare la telemetria da una sessione interattiva.
+- **Agenti esterni:** *Ingegnere di pista → Impostazioni → Copia configurazione MCP* e incollala in
+  Claude Code, Codex o Antigravity per interrogare la telemetria da una sessione interattiva.
 - **Senza AC:** sorgente "Demo (simulatore)".
 
 L'archivio dei giri è in `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
@@ -67,7 +73,6 @@ hub_core/race_strategy.py         carburante, finestra pit, degrado gomme, timin
 hub_core/database.py              DuckDB: sessioni, giri, campioni; export Parquet
 hub_core/setup_files.py           file di setup di AC
 hub_core/vehicle_dynamics.py      Pacejka, trasferimenti di carico, cinematica
-hub_core/cad_bridge.py            mesh STL/OBJ, mappe aerodinamiche
 hub_core/demo_source.py           simulatore con la stessa interfaccia del receiver
 ai_engine/agent_cli.py            Claude Code / Codex / Antigravity come ingegnere
 ai_engine/mcp_server.py           server MCP locale (7 strumenti) con token

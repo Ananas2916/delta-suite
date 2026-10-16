@@ -22,19 +22,11 @@ a = Analysis(
     pathex=[],
     binaries=binaries,
     datas=datas,
-    hiddenimports=hidden + [
-        "PyQt6.QtMultimedia",
-        "OpenGL.platform.win32",
-        "OpenGL.arrays.numpymodule",
-        "OpenGL.arrays.ctypesarrays",
-        "OpenGL.arrays.lists",
-        "OpenGL.arrays.numbers",
-        "OpenGL.arrays.strings",
-    ],
+    hiddenimports=hidden + ["PyQt6.QtMultimedia"],
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter", "scipy", "pandas", "pyarrow", "matplotlib", "PyQt5", "PySide2", "PySide6",
-              "IPython", "pytest"],
+              "IPython", "pytest", "OpenGL", "pyqtgraph.opengl"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

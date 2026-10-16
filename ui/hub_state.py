@@ -497,8 +497,7 @@ class HubState(QObject):
     def _on_engineer_done(self, answer: str, mode: str):
         self.engineer_done.emit(answer)
         if mode == "RADIO" and answer:
-            self.radio_log.emit("ingegnere", answer)
-            self.say(answer, PRIO_HIGH, 60)
+            self.say(answer, PRIO_HIGH, 60)      # finisce nel registro radio quando viene letta
 
     def _on_engineer_failed(self, err: str):
         self.engineer_failed.emit(err)

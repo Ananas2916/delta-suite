@@ -1,4 +1,22 @@
-## Delta Suite 0.2.0 — l'ingegnere di pista
+## Delta Suite 0.3.0 — più ordine
+
+**Interfaccia riordinata.** Sei moduli in due gruppi, uguali in barra laterale e in Home:
+- **In pista:** Telemetria live · Ingegnere di pista · Box & Assetto
+- **Analisi e strategia:** Analisi giri · Strategia & Timing · Dinamica veicolo
+
+**Ingegnere di pista in una pagina sola** (prima erano "AI Race Engineer" e "Radio & voce"):
+- *Conversazione*: chat con l'ingegnere e, accanto, la radio in cuffia con il tasto push-to-talk; le
+  domande fatte via radio compaiono nella chat, perché è la stessa conversazione;
+- *Riepilogo stint*: i dati dello stint in tabella;
+- *Impostazioni*: agente AI, collegamento MCP, voce e lingua, microfono e trascrizione, regole della radio
+  automatica, tutto nello stesso posto.
+
+**Tolto il CAD / CFD bridge**: non c'entrava con il resto della suite. L'exe è anche più leggero (niente
+OpenGL).
+
+---
+
+Comprende anche le novità della 0.2.0, che non era stata pubblicata:
 
 **Ingegnere in cuffia.** Come l'ingegnere dei giochi di F1, ma con un'AI dove lo script non arriva:
 - radio immediata, senza AI e senza consumare token: tempo sul giro e delta, carburante, gomme fuori

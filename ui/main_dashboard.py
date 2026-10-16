@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import sys
 
-from PyQt6.QtCore import QSize, QTimer
+from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QStackedWidget,
     QVBoxLayout, QWidget,
@@ -16,19 +17,17 @@ from ui import theme
 from ui.hub_state import MODES, HubState
 from ui.pages.analysis_page import AnalysisPage
 from ui.pages.box_page import BoxPage
-from ui.pages.cad_page import CadPage
 from ui.pages.dynamics_page import DynamicsPage
 from ui.pages.engineer_page import EngineerPage
-from ui.pages.home_page import HomePage
-from ui.pages.radio_page import RadioPage
+from ui.pages.home_page import SECTIONS, HomePage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 
 APP_NAME = "Delta Suite"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # pagina aperta da ogni modalità
-MODE_PAGES = {"pilota": 1, "ingegnere": 3, "analisi": 2}
+MODE_PAGES = {"pilota": "telemetry", "ingegnere": "box", "analisi": "analysis"}
 
 
 class MainWindow(QMainWindow):
@@ -74,29 +73,38 @@ class MainWindow(QMainWindow):
 
         self.home = HomePage(self.hub)
         self.telemetry = TelemetryPage(self.hub)
-        pages = [
-            ("Home", self.home),
-            ("Telemetria live", self.telemetry),
-            ("Analisi giri", AnalysisPage(self.hub)),
-            ("Box & Assetto", BoxPage(self.hub)),
-            ("Strategia & Timing", StrategyPage(self.hub)),
-            ("Dinamica veicolo", DynamicsPage(self.hub)),
-            ("CAD / CFD bridge", CadPage(self.hub)),
-            ("AI Race Engineer", EngineerPage(self.hub)),
-            ("Radio & voce", RadioPage(self.hub)),
-        ]
-        for name, page in pages:
-            it = QListWidgetItem(name)
-            it.setSizeHint(QSize(200, 44))
-            self.nav.addItem(it)
+        self.engineer = EngineerPage(self.hub)
+        self.pages = {
+            "home": self.home,
+            "telemetry": self.telemetry,
+            "engineer": self.engineer,
+            "box": BoxPage(self.hub),
+            "analysis": AnalysisPage(self.hub),
+            "strategy": StrategyPage(self.hub),
+            "dynamics": DynamicsPage(self.hub),
+        }
+        self._add_nav("home", "Home")
+        for section, modules in SECTIONS:
+            head = QListWidgetItem(section.upper())
+            head.setFlags(Qt.ItemFlag.NoItemFlags)
+            head.setSizeHint(QSize(200, 34))
+            f = head.font()
+            f.setPointSize(8)
+            f.setBold(True)
+            head.setFont(f)
+            head.setForeground(QColor(theme.C["dim"]))
+            self.nav.addItem(head)
+            for key, name, _desc, _replaces in modules:
+                self._add_nav(key, name)
+        for page in self.pages.values():
             self.stack.addWidget(page)
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.nav.setCurrentRow(0)
+        self.nav.currentItemChanged.connect(self._on_nav)
+        self.open_page("home")
 
         self.mode.setCurrentIndex(max(0, self.mode.findData(self.hub.mode)))
         self.mode.currentIndexChanged.connect(self._on_mode)
 
-        self.home.open_module.connect(self.nav.setCurrentRow)
+        self.home.open_module.connect(self.open_page)
         self.home.start_demo.connect(self._start_demo)
 
         self.status_label = QLabel("Pronto")
@@ -105,17 +113,33 @@ class MainWindow(QMainWindow):
         self.hub.lap_completed.connect(
             lambda lap: self.statusBar().showMessage(f"Giro {lap.lap_no} salvato in archivio", 4000))
 
+    def _add_nav(self, key: str, name: str):
+        it = QListWidgetItem(name)
+        it.setData(Qt.ItemDataRole.UserRole, key)
+        it.setSizeHint(QSize(200, 44))
+        self.nav.addItem(it)
+
+    def _on_nav(self, item, _previous):
+        if item is not None:
+            self.stack.setCurrentWidget(self.pages[item.data(Qt.ItemDataRole.UserRole)])
+
+    def open_page(self, key: str):
+        for row in range(self.nav.count()):
+            if self.nav.item(row).data(Qt.ItemDataRole.UserRole) == key:
+                self.nav.setCurrentRow(row)
+                return
+
     def _on_mode(self):
         mode = self.mode.currentData()
         self.hub.set_mode(mode)
-        self.nav.setCurrentRow(MODE_PAGES[mode])
+        self.open_page(MODE_PAGES[mode])
         tips = {"pilota": "Modalità Pilota: radio e voce dell'ingegnere attive",
                 "ingegnere": "Modalità Ingegnere: regolazioni in diretta e setup dalla pagina Box & Assetto",
                 "analisi": "Modalità Analisi: confronto giri e archivio, radio spenta"}
         self.statusBar().showMessage(tips[mode], 5000)
 
     def _start_demo(self):
-        self.nav.setCurrentRow(1)
+        self.open_page("telemetry")
         self.telemetry.start_demo()
 
     def closeEvent(self, event):
@@ -154,24 +178,24 @@ def _self_test(win: MainWindow, out_dir: str):
     """DELTA_SELFTEST=<cartella>: demo veloce, giro di tutte le pagine con screenshot, poi uscita."""
     from pathlib import Path
 
-    from hub_core.cad_bridge import demo_car_mesh
-    from ui.pages import cad_page
-
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     win.telemetry.demo_speed.setCurrentIndex(win.telemetry.demo_speed.count() - 1)
     win._start_demo()
 
+    shots = [(f"{i}_{key}", lambda key=key: win.open_page(key)) for i, key in enumerate(win.pages)]
+    for i, tab in enumerate(("riepilogo", "impostazioni"), 1):
+        shots.append((f"engineer_{tab}", lambda i=i: (win.open_page("engineer"), win.engineer.tabs.setCurrentIndex(i))))
+
     def tour(i=0):
-        if i < win.stack.count():
-            win.nav.setCurrentRow(i)
-            if isinstance(win.stack.widget(i), cad_page.CadPage):
-                win.stack.widget(i).findChild(cad_page.MeshTab)._show(demo_car_mesh(), "vettura demo")
-            QTimer.singleShot(1200, lambda: (win.grab().save(str(out / f"page_{i}.png")), tour(i + 1)))
+        if i < len(shots):
+            name, show = shots[i]
+            show()
+            QTimer.singleShot(1200, lambda: (win.grab().save(str(out / f"page_{name}.png")), tour(i + 1)))
         else:
             (out / "selftest.txt").write_text(
-                f"ok\ngiri={len(win.hub.laps)}\nopengl={'ok' if cad_page.gl else cad_page._GL_ERROR}\n"
-                f"{_voice_check()}\napp_csp={csp_bridge.bundled_app_dir().is_dir()}\nmcp={_mcp_check(win)}\n",
+                f"ok\ngiri={len(win.hub.laps)}\n{_voice_check()}\n"
+                f"app_csp={csp_bridge.bundled_app_dir().is_dir()}\nmcp={_mcp_check(win)}\n",
                 encoding="utf-8")
             win.close()
 

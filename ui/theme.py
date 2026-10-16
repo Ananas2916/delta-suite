@@ -38,6 +38,7 @@ QListWidget#sidebar {{ background: {C['panel']}; border: none; border-right: 1px
 QListWidget#sidebar::item {{ padding: 11px 14px; border-left: 3px solid transparent; }}
 QListWidget#sidebar::item:selected {{ background: {C['panel2']}; border-left: 3px solid {C['accent']}; color: white; }}
 QListWidget#sidebar::item:hover {{ background: {C['panel2']}; }}
+QListWidget#sidebar::item:disabled {{ background: transparent; color: {C['dim']}; padding: 14px 14px 2px 17px; }}
 QPushButton {{ background: {C['panel2']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 6px 14px; }}
 QPushButton:hover {{ border-color: {C['accent']}; }}
 QPushButton:disabled {{ color: {C['dim']}; }}

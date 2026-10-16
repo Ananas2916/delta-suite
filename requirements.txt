@@ -1,6 +1,5 @@
 PyQt6>=6.7
 pyqtgraph>=0.13.7
-PyOpenGL>=3.1.7
 numpy>=1.26
 duckdb>=1.1
 anthropic>=1.14

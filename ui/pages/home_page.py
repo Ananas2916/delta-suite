@@ -9,28 +9,30 @@ from hub_core.race_strategy import fmt_ms
 from ui.theme import C
 from ui.widgets import Card, label
 
-MODULES = [
-    (1, "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa, registrazione delle "
-     "sessioni e replay.", "MoTeC i2 · ATLAS · WinDARAB"),
-    (2, "Analisi giri", "Giri sovrapposti su distanza, Delta-T, traiettoria, cursore sincronizzato, "
-     "archivio DuckDB ed esportazione Parquet.", "MoTeC i2 · Pi Toolbox"),
-    (3, "Box & Assetto", "Bias freni, ABS, TC e freno motore in diretta, setup dai box, proposte "
-     "dell'ingegnere e classifica con distacchi.", "Muretto box"),
-    (4, "Strategia & Timing", "Consumo medio, finestra pit, previsione degrado gomme, sosta ottimale, "
-     "settori e giro ideale.", "HH Timing · SBG RaceWatch"),
-    (5, "Dinamica veicolo", "Pneumatico Pacejka, ellisse d'attrito, trasferimenti di carico con aero, "
-     "cinematica del quadrilatero e centro di rollio.", "ChassisSim · OptimumG · Adams"),
-    (6, "CAD / CFD bridge", "Viewer STL/OBJ con area frontale e mappe aerodinamiche CL/CD vs ride height "
-     "da OpenFOAM/Ansys.", "Viewer CAD · post-processing CFD"),
-    (7, "AI Race Engineer", "Claude Code (o altro agente) legge i dati di Delta Suite, analizza curva per "
-     "curva e propone setup e strategia.", "Ingegnere di pista"),
-    (8, "Radio & voce", "Radio in cuffia con voce Kokoro, push-to-talk dal volante, regole automatiche "
-     "su giro, carburante, gomme e bandiere.", "Radio di squadra"),
+# moduli raggruppati come nella barra laterale: (chiave pagina, nome, descrizione, al posto di)
+SECTIONS = [
+    ("In pista", [
+        ("telemetry", "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa, "
+         "registrazione delle sessioni e replay.", "MoTeC i2 · ATLAS · WinDARAB"),
+        ("engineer", "Ingegnere di pista", "Chat di analisi e radio in cuffia con lo stesso agente (Claude Code o "
+         "altro): push-to-talk dal volante, radio automatica su giro, carburante, gomme e bandiere, proposte di "
+         "setup da confermare.", "Ingegnere e radio di squadra"),
+        ("box", "Box & Assetto", "Bias freni, ABS, TC e freno motore in diretta, setup dai box, proposte "
+         "dell'ingegnere e classifica con distacchi.", "Muretto box"),
+    ]),
+    ("Analisi e strategia", [
+        ("analysis", "Analisi giri", "Giri sovrapposti su distanza, Delta-T, traiettoria, cursore sincronizzato, "
+         "archivio DuckDB ed esportazione Parquet.", "MoTeC i2 · Pi Toolbox"),
+        ("strategy", "Strategia & Timing", "Consumo medio, finestra pit, previsione degrado gomme, sosta ottimale, "
+         "settori e giro ideale.", "HH Timing · SBG RaceWatch"),
+        ("dynamics", "Dinamica veicolo", "Pneumatico Pacejka, ellisse d'attrito, trasferimenti di carico con aero, "
+         "cinematica del quadrilatero e centro di rollio.", "ChassisSim · OptimumG · Adams"),
+    ]),
 ]
 
 
 class HomePage(QWidget):
-    open_module = pyqtSignal(int)
+    open_module = pyqtSignal(str)
     start_demo = pyqtSignal()
 
     def __init__(self, hub):
@@ -53,29 +55,34 @@ class HomePage(QWidget):
         demo.clicked.connect(self.start_demo)
         live = QPushButton("Vai alla telemetria")
         live.setObjectName("primary")
-        live.clicked.connect(lambda: self.open_module.emit(1))
+        live.clicked.connect(lambda: self.open_module.emit("telemetry"))
         sl.addWidget(demo)
         sl.addWidget(live)
         root.addWidget(status)
 
         grid = QGridLayout()
         grid.setSpacing(14)
-        for i, (idx, name, desc, replaces) in enumerate(MODULES):
-            card = Card()
-            cl = QVBoxLayout(card)
-            cl.setContentsMargins(16, 14, 16, 14)
-            t = label(name, "h2")
-            d = label(desc)
-            d.setWordWrap(True)
-            r = label(f"Al posto di: {replaces}", "dim")
-            btn = QPushButton("Apri")
-            btn.clicked.connect(lambda _=False, idx=idx: self.open_module.emit(idx))
-            cl.addWidget(t)
-            cl.addWidget(d)
-            cl.addStretch(1)
-            cl.addWidget(r)
-            cl.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
-            grid.addWidget(card, i // 3, i % 3)
+        for row, (section, modules) in enumerate(SECTIONS):
+            head = label(section.upper(), "dim")
+            head.setStyleSheet("font-size: 9pt; font-weight: 700; letter-spacing: 1px; padding-top: 6px;")
+            grid.addWidget(head, row * 2, 0, 1, 3)
+            for col, (key, name, desc, replaces) in enumerate(modules):
+                card = Card()
+                cl = QVBoxLayout(card)
+                cl.setContentsMargins(16, 14, 16, 14)
+                t = label(name, "h2")
+                d = label(desc)
+                d.setWordWrap(True)
+                r = label(f"Al posto di: {replaces}", "dim")
+                btn = QPushButton("Apri")
+                btn.clicked.connect(lambda _=False, key=key: self.open_module.emit(key))
+                cl.addWidget(t)
+                cl.addWidget(d)
+                cl.addStretch(1)
+                cl.addWidget(r)
+                cl.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
+                grid.addWidget(card, row * 2 + 1, col)
+                grid.setRowStretch(row * 2 + 1, 1)
         root.addLayout(grid, 1)
 
         db_note = f"Archivio telemetria: {hub.db.path}"
