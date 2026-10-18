@@ -130,7 +130,9 @@ tests/                         # pytest, incluso un giro vero registrato al Red 
 - UI: **PyQt6 + pyqtgraph** (decisione presa). Entry point `run_hub.py`.
 - **L'utente non vuole l'exe sul PC**: lo compila GitHub Actions (`.github/workflows/build.yml`) a ogni
   push su main; un tag `v*` crea una release in **bozza** che l'utente pubblica quando vuole (note in
-  `RELEASE_NOTES.md`). Compilare in locale solo per debug, poi cancellare `dist\`.
+  `RELEASE_NOTES.md`). Dalle sessioni cloud i tag non passano (il proxy git accetta solo il branch di lavoro):
+  si lancia il workflow a mano sul branch con l'input `release` = `v0.5.1`, che crea la bozza puntata a quel
+  commit (il tag nasce alla pubblicazione). Compilare in locale solo per debug, poi cancellare `dist\`.
 - Exe: `.\build_exe.ps1` → `dist\DeltaSuite.exe` (PyInstaller onefile, spec `DeltaSuite.spec`,
   workpath in `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow esclusi apposta: non servono.
 - Build da bash se PowerShell si ferma sugli INFO di PyInstaller su stderr:

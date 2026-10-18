@@ -1,5 +1,5 @@
-# Test + exe su Windows a ogni push. Con un tag v* crea una BOZZA di release con l'exe:
-# la pubblicazione resta manuale (GitHub → Releases → Edit → Publish).
+# Test + exe su Windows a ogni push. Con un tag v*, o lanciato a mano con "release" = v0.5.1, crea una BOZZA di
+# release con l'exe: la pubblicazione resta manuale (GitHub → Releases → Edit → Publish).
 name: Build
 
 on:
@@ -8,6 +8,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Bozza di release da creare con l'exe di questa build (es. v0.5.1); vuoto = solo build"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -63,11 +68,19 @@ jobs:
           path: ${{ runner.temp }}/selftest
           retention-days: 14
 
+      # con un tag v* o con "release" nel lancio manuale (il tag lo crea GitHub quando la bozza si pubblica);
+      # se la release c'è già (bozza creata a mano, o pubblicata e quindi taggata) si aggiorna solo l'exe
       - name: Bozza di release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release, 'v')
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release }}
         shell: pwsh
-        run: >
-          gh release create "${{ github.ref_name }}" dist/DeltaSuite.exe --draft
-          --title "Delta Suite ${{ github.ref_name }}" --notes-file RELEASE_NOTES.md
+        run: |
+          gh release view "$env:TAG" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:TAG" dist/DeltaSuite.exe --clobber
+          } else {
+            gh release create "$env:TAG" dist/DeltaSuite.exe --draft --target "${{ github.sha }}" `
+              --title "Delta Suite $env:TAG" --notes-file RELEASE_NOTES.md
+          }
