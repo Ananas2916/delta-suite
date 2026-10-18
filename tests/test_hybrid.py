@@ -58,7 +58,9 @@ def test_radio_battery_once_until_recharged():
     assert said(kers_charge=0.5) == []                       # ricaricata: niente da dire
     assert said(kers_charge=0.19) == ["Batteria al 19 per cento."]
     assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=3) == ["Energia elettrica del giro finita."]
-    assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=3) == []
+    assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=4) == []        # stesso stint: già detto
+    assert said(kers_charge=0.6, is_in_pit=True) == []
+    assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=9) == ["Energia elettrica del giro finita."]
     assert RadioRules(RadioConfig(flags=False, hybrid=False)).on_sample(make_sample(kers_charge=0.03), HYBRID) == []
     assert r.on_sample(make_sample(kers_charge=0.03), {}) == []   # auto non ibrida
 

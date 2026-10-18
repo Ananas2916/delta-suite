@@ -1,4 +1,5 @@
-"""Un riquadro onboard: scelta di auto e telecamera, ▲ per portarlo nel principale, video con grafica."""
+"""Un riquadro onboard: scelta di auto e telecamera, ▲ per portarlo nel principale, video con grafica (pagine
+Onboard e Generale)."""
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
-from ui.pages.onboard.hud import OnboardView
+from ui.widgets.onboard_hud import OnboardView
 from ui.theme import C
 from ui.widgets import label
 

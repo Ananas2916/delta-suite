@@ -9,26 +9,19 @@ from PyQt6.QtWidgets import (
     QComboBox, QGridLayout, QHBoxLayout, QPushButton, QSlider, QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from hub_core.ac.csp_bridge import find_ac_root
 from hub_core.ac.onboard_feed import (
-    DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, OnboardFeed, ViewRequest, camera_menu,
+    DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, ViewRequest, camera_menu,
 )
-from hub_core.ac.track_map import find_track_map
-from hub_core.analysis import car_status as cs
-from hub_core.analysis.race_strategy import fmt_ms, fuel_per_lap
-from hub_core.analysis.timing import fmt_gap
-from hub_core.model import ACStatus, gear_label
-from ui.pages.onboard.hud import frame_image
-from ui.pages.onboard.panel import VIEW_COLORS, ViewPanel
+from hub_core.model import ACStatus
+from ui import race_view as rv
+from ui.race_view import STALE_S
 from ui.theme import C
 from ui.widgets import Card, label
-from ui.widgets.car_status import LEVEL_COLORS, CarStatusView
+from ui.widgets.car_status import CarStatusView
 from ui.widgets.gps import GPSView
-from ui.widgets.hybrid import battery_color
+from ui.widgets.onboard_hud import frame_image
 from ui.widgets.timing_table import TimingTable
-from ui.workers import SOURCE_AC
-
-STALE_S = 2.0          # senza fotogrammi nuovi da tanto: il video non è più in diretta
+from ui.widgets.view_panel import ViewPanel
 
 
 class OnboardPage(QWidget):
@@ -38,7 +31,6 @@ class OnboardPage(QWidget):
     def __init__(self, hub):
         super().__init__()
         self.hub = hub
-        self.feed = OnboardFeed()
         self._beat_t = 0.0
         self._ui_t = 0.0
         self._f6: list[str] = [n for n in hub.setting("onboard/f6_names", "", str).split("|") if n]
@@ -215,12 +207,7 @@ class OnboardPage(QWidget):
     def _on_session(self, info: dict):
         self._fill_cars([])
         self.gps.clear_trail()
-        tmap = None
-        try:
-            tmap = find_track_map(find_ac_root(), info.get("track_id", ""), info.get("track_config", ""))
-        except OSError:
-            pass
-        self.gps.set_map(tmap)
+        self.gps.set_map(rv.track_map_for(info))
 
     def _sync_cameras(self):
         """Aggiorna gli elenchi quando l'app trova (o cambia) le telecamere F6 dell'auto."""
@@ -234,15 +221,14 @@ class OnboardPage(QWidget):
             panel.fill_cameras(menu, panel.camera_index())
 
     @property
-    def _ac_live(self) -> bool:
-        w = self.hub.worker
-        return self.hub.running and w is not None and w.source == SOURCE_AC
+    def feed(self):
+        return self.hub.onboard_feed
 
     def _push_request(self) -> bool:
-        if not self._ac_live:
+        if not self.hub.ac_live or not self.isVisible():    # il collegamento è condiviso con la pagina Generale
             return False
         n = self._n_views
-        on = self.video_btn.isChecked() and self.isVisible()
+        on = self.video_btn.isChecked()
         _name, w, h, fps = QUALITIES[self.quality.currentIndex()]
         _sname, sw, sh, sfps = SECONDARY_QUALITY if n == 2 else QUALITIES[0]
         views = []
@@ -261,7 +247,7 @@ class OnboardPage(QWidget):
         if not self.isVisible():
             return
         now = time.monotonic()
-        if self._ac_live and self.video_btn.isChecked():
+        if self.hub.ac_live and self.video_btn.isChecked():
             if now - self._beat_t > 0.5:
                 self._push_request()
             for k in range(self._n_views):
@@ -277,162 +263,39 @@ class OnboardPage(QWidget):
             self._refresh()
 
     def _placeholder(self, k: int) -> str:
-        if not self.hub.running:
-            return "Acquisizione ferma: avvia la telemetria da Assetto Corsa." if k == 0 else ""
-        if not self._ac_live:
-            return ("Il video onboard arriva solo da Assetto Corsa. In demo e replay restano grafica, GPS e "
-                    "stato vettura." if k == 0 else "Solo con Assetto Corsa")
-        if not self.video_btn.isChecked():
-            return "Video spento: in AC non si rendono le viste in più (più FPS in gioco)."
-        if not self.feed.connected:
-            return ("App CSP Delta Suite Bridge non collegata o da aggiornare: aggiornala da Box & Assetto."
-                    if k == 0 else "App CSP non collegata")
-        inf = self.feed.info(k)
-        if inf is not None and inf.status.startswith("errore"):
-            return f"L'app CSP non riesce a rendere l'onboard: {inf.status}"
-        if self.panels[k].img is None:
-            return "In attesa del primo fotogramma…"
-        return ""
+        return rv.video_placeholder(self.hub, k == 0, self.panels[k].img is not None,
+                                    self.video_btn.isChecked(), k)
 
     def _refresh(self):
         self._sync_cameras()
         now = time.monotonic()
-        s = self.hub.last_sample
-        info = self.hub.session_info
-        laps = self.hub.laps
-        fpl = fuel_per_lap(laps) if laps else None
-        alerts = cs.car_alerts(s, info, fpl) if s is not None and s.status == ACStatus.LIVE else []
+        s, info, fpl, alerts = rv.live_state(self.hub)
         live_any = False
         for k in range(self._n_views):
             panel = self.panels[k]
-            if not self._ac_live:
+            if not self.hub.ac_live:
                 panel.img = None
             live = panel.img is not None and now - panel.frame_t < STALE_S
             live_any |= live
             panel.view.set_frame(panel.img, live)
             panel.view.set_hud(self._hud(k, s, alerts), self._placeholder(k) if not live else "")
         self.car_view.set_sample(s, info)
-        self._fill_side(s, alerts, fpl)
-        self._fill_gps(s)
-        self._fill_timing(s)
+        self.info.setText(rv.car_info_html(self.hub, s, fpl))
+        self.alerts.setText(rv.alerts_html(s, alerts))
+        rings = self._view_rings()
+        if s is not None and s.status == ACStatus.LIVE:
+            self.gps.add_trail(s.car_x, s.car_z)
+        self.gps.set_cars(rv.gps_cars(self.hub, s, rings))
+        self.timing.fill(rv.timing_rows(self.hub, s, rings))
         self._fill_status(live_any)
-
-    def _entry(self, idx: int):
-        b = self.hub.bridge_state
-        return next((c for c in (b.cars if b else []) if c.index == idx), None)
 
     def _hud(self, k: int, s, alerts) -> dict:
         panel = self.panels[k]
-        idx, cam = panel.car_index(), panel.camera.currentText()
-        if k > 0:       # riquadri piccoli: chi, quale telecamera, distacco e ultimo giro
-            if idx < 0:
-                who = self.hub.session_info.get("player") or "La mia auto"
-                row = next((r for r in self.hub.standings_rows if r.is_player), None)
-                if s is not None:
-                    who = f"P{s.position}  {who}"
-                last = s.last_lap_ms if s is not None else 0
-            else:
-                entry = self._entry(idx)
-                row = next((r for r in self.hub.standings_rows if r.index == idx), None)
-                who = f"P{entry.race_pos}  {entry.driver or 'auto ' + str(idx)}" if entry else panel.car.currentText()
-                last = entry.last_lap_ms if entry else 0
-            times = [("DISTACCO", fmt_gap(row), None)] if row is not None else []
-            times.append(("ULTIMO", fmt_ms(last), None))
-            return {"title": who, "camera": cam, "times": times}
-        if idx >= 0:
-            entry = self._entry(idx)
-            row = next((r for r in self.hub.standings_rows if r.index == idx), None)
-            if entry is None:
-                return {"title": panel.car.currentText(), "camera": cam}
-            times = [("POSIZIONE", f"P{entry.race_pos}", None), ("GIRO", str(entry.lap_count + 1), None),
-                     ("TEMPO", fmt_ms(entry.lap_time_ms), None), ("ULTIMO", fmt_ms(entry.last_lap_ms), None),
-                     ("MIGLIORE", fmt_ms(entry.best_lap_ms), C["purple"])]
-            if row is not None and row.interval_s is not None:
-                times.append(("INTERVAL", f"+{row.interval_s:.1f}", None))
-            return {"title": f"{entry.driver or 'Auto ' + str(idx)}  ·  {entry.model}", "camera": cam,
-                    "speed": entry.speed_kmh, "times": times}
-        if s is None:
-            return {}
-        info = self.hub.session_info
-        max_rpm = max(1000, int(info.get("max_rpm") or 9000))
-        player = info.get("player") or "Tu"
-        hud = {
-            "title": f"{player}  ·  {info.get('car', '')}", "camera": cam,
-            "speed": s.speed_kmh, "gear": gear_label(s.gear), "rpm": s.rpm, "rpm_frac": s.rpm / max_rpm,
-            "shift": s.rpm > 0.95 * max_rpm, "gas": s.gas, "brake": s.brake, "steer": s.steer_angle,
-            "times": [("POSIZIONE", f"P{s.position}", None), ("GIRO", f"{s.completed_laps + 1}"
-                                                             + ("  PIT" if s.is_in_pit else ""), None),
-                      ("TEMPO", fmt_ms(s.lap_time_ms), None), ("ULTIMO", fmt_ms(s.last_lap_ms), None),
-                      ("MIGLIORE", fmt_ms(s.best_lap_ms), C["purple"])],
-        }
-        h = cs.hybrid_state(s, info)
-        if h is not None:
-            hud["battery"], hud["battery_deploy"] = h.charge, h.deploying
-        if alerts:
-            hud["alert"] = (alerts[0].level, alerts[0].text)
-        return hud
+        args = (panel.car_index(), panel.camera.currentText(), panel.car.currentText())
+        return rv.main_hud(self.hub, s, alerts, *args) if k == 0 else rv.small_hud(self.hub, s, *args)
 
     def _view_rings(self) -> dict[int, str]:
-        """Colore del riquadro per ogni auto inquadrata (0 = la tua)."""
-        rings = {}
-        for k in range(self._n_views):
-            idx = self.panels[k].car_index()
-            rings.setdefault(0 if idx < 0 else idx, VIEW_COLORS[k])
-        return rings
-
-    def _fill_timing(self, s):
-        rings = self._view_rings()
-        rows = [(r.index, str(r.pos), r.driver or f"auto {r.index}", fmt_gap(r),
-                 "BOX" if r.in_pit else fmt_ms(r.last_ms), r.is_player, rings.get(r.index))
-                for r in self.hub.standings_rows]
-        if not rows and s is not None and s.status == ACStatus.LIVE:     # senza app CSP o in demo: solo tu
-            rows = [(0, str(s.position), self.hub.session_info.get("player") or "Tu", "-",
-                     fmt_ms(s.last_lap_ms), True, rings.get(0))]
-        self.timing.fill(rows)
-
-    def _fill_gps(self, s):
-        if s is not None and s.status == ACStatus.LIVE:
-            self.gps.add_trail(s.car_x, s.car_z)
-        rings = self._view_rings()
-        positions = self.feed.car_positions() if self._ac_live and self.feed.connected else {}
-        if not positions and s is not None and s.status == ACStatus.LIVE:
-            positions = {0: (s.car_x, s.car_z)}
-        b = self.hub.bridge_state
-        race_pos = {c.index: c.race_pos for c in b.cars} if b else {}
-        connected = {c.index for c in b.cars if c.connected} if b else set()
-        cars = []
-        for idx, (x, z) in positions.items():
-            if idx and connected and idx not in connected:
-                continue
-            pos = race_pos.get(idx) or (s.position if idx == 0 and s is not None else 0)
-            cars.append({"idx": idx, "x": x, "z": z, "me": idx == 0, "ring": rings.get(idx),
-                         "label": f"{pos}" if pos else ""})
-        self.gps.set_cars(cars)
-
-    def _fill_side(self, s, alerts, fpl):
-        if s is None:
-            self.info.setText("Nessun dato: avvia l'acquisizione.")
-            self.alerts.setText("")
-            return
-        b = self.hub.bridge_state
-        aids = f"ABS {b.abs_mode}/{b.abs_modes}  ·  TC {b.tc_mode}/{b.tc_modes}" if b else \
-            f"ABS {s.abs:.1f}  ·  TC {s.tc:.1f}"
-        fuel = f"carburante {s.fuel:.1f} L" + (f" (~{s.fuel / fpl:.1f} giri)" if fpl else "")
-        h = cs.hybrid_state(s, self.hub.session_info)
-        hybrid = ""
-        if h is not None:
-            lap = f"  ·  giro {h.lap_used_kj:.0f}/{h.lap_limit_kj:.0f} kJ" if h.lap_limit_kj > 0 else ""
-            hybrid = (f"<br><span style='color:{battery_color(h.charge)}'>batteria {h.charge * 100:.0f}%</span>"
-                      f"  ·  {h.mode_text}{lap}")
-        self.info.setText(
-            f"{fuel}{hybrid}<br>{aids}  ·  bias {s.brake_bias * 100:.1f}%  ·  freno motore {s.engine_brake}<br>"
-            f"altezza da terra ant. {s.ride_height[0] * 1000:.0f} mm  ·  post. {s.ride_height[1] * 1000:.0f} mm"
-            + ("<br>limitatore pit inserito" if s.pit_limiter else ""))
-        if not alerts:
-            self.alerts.setText(f"<span style='color:{C['green']}'>●</span>  Tutto in ordine")
-            return
-        self.alerts.setText("<br>".join(f"<span style='color:{LEVEL_COLORS[a.level]}'>●</span>  {a.text}"
-                                        for a in alerts[:6]))
+        return rv.view_rings([self.panels[k].car_index() for k in range(self._n_views)])
 
     def _fill_status(self, live_video: bool):
         parts = []
@@ -442,7 +305,7 @@ class OnboardPage(QWidget):
                 parts.append(f"<span style='color:{C['green']}'>●</span>  Video in diretta · "
                              f"{self._n_views} {'riquadro' if self._n_views == 1 else 'riquadri'} · "
                              f"AC a {inf.game_fps:.0f} FPS")
-        elif self._ac_live and self.video_btn.isChecked() and self.feed.connected:
+        elif self.hub.ac_live and self.video_btn.isChecked() and self.feed.connected:
             parts.append(f"<span style='color:{C['yellow']}'>●</span>  Video non in diretta")
         if self.feed.shared_error:
             parts.append("texture condivisa non disponibile, si usa la via più lenta")

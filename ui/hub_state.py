@@ -15,13 +15,14 @@ from ai_engine.radio import Msg, RadioConfig, RadioRules
 from ai_engine.stt import DEFAULT_MODEL, make_stt
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
 from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState
+from hub_core.ac.onboard_feed import OnboardFeed
 from hub_core.analysis.lap_recorder import LapData
 from hub_core.analysis.timing import TimingTower, neighbours
 from hub_core.database import TelemetryDB
 from hub_core.model import ACSessionType, ACStatus
 from ui.hub_data import KIND_CMD, HubDataProvider, Proposal
 from ui.mic import MicRecorder
-from ui.workers import Job, TelemetryWorker
+from ui.workers import SOURCE_AC, Job, TelemetryWorker
 
 MODES = {"pilota": "Pilota", "ingegnere": "Ingegnere", "analisi": "Analisi"}
 
@@ -77,6 +78,8 @@ class HubState(QObject):
         self.is_race = False
         self.proposals: list[Proposal] = []
         self._bridge_counts: tuple[int, int] | None = None
+        # video onboard dall'app CSP: uno solo, lo usa la pagina visibile (Onboard o Generale)
+        self.onboard_feed = OnboardFeed()
         self._ptt = False
 
         self.radio_rules = RadioRules(self.load_radio_config(), self.lang)
@@ -166,6 +169,11 @@ class HubState(QObject):
     @property
     def running(self) -> bool:
         return self.worker is not None and self.worker.isRunning()
+
+    @property
+    def ac_live(self) -> bool:
+        """Acquisizione da AC (non demo né replay): solo allora c'è il video onboard."""
+        return self.running and self.worker.source == SOURCE_AC
 
     def start(self, source: str, hz: float = 60.0, speed: float = 1.0, replay_path: str | None = None,
               record: bool = False):
@@ -419,6 +427,7 @@ class HubState(QObject):
     # ------------------------------------------------------------- chiusura
     def shutdown(self):
         self.stop()
+        self.onboard_feed.disconnect()
         if self.agent is not None:
             self.agent.cancel()
         self.voice.shutdown()

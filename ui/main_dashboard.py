@@ -15,11 +15,12 @@ from PyQt6.QtWidgets import (
 from hub_core.ac import csp_bridge
 from ui import theme
 from ui.hub_state import MODES, HubState
+from ui.navigation import GENERAL, SECTIONS
 from ui.pages.analysis_page import AnalysisPage
 from ui.pages.box_page import BoxPage
 from ui.pages.dynamics_page import DynamicsPage
 from ui.pages.engineer_page import EngineerPage
-from ui.pages.home_page import SECTIONS, HomePage
+from ui.pages.general_page import GeneralPage
 from ui.pages.onboard import OnboardPage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
@@ -73,11 +74,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         self._areas: dict[str, QScrollArea] = {}
-        self.home = HomePage(self.hub)
+        self.general = GeneralPage(self.hub)
         self.telemetry = TelemetryPage(self.hub)
         self.engineer = EngineerPage(self.hub)
         self.pages = {
-            "home": self.home,
+            "general": self.general,
             "telemetry": self.telemetry,
             "onboard": OnboardPage(self.hub),
             "engineer": self.engineer,
@@ -86,7 +87,7 @@ class MainWindow(QMainWindow):
             "strategy": StrategyPage(self.hub),
             "dynamics": DynamicsPage(self.hub),
         }
-        self._add_nav("home", "Home")
+        self._add_nav(GENERAL[0], GENERAL[1], GENERAL[2])
         for section, modules in SECTIONS:
             head = QListWidgetItem(section.upper())
             head.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -97,18 +98,18 @@ class MainWindow(QMainWindow):
             head.setFont(f)
             head.setForeground(QColor(theme.C["dim"]))
             self.nav.addItem(head)
-            for key, name, _desc, _replaces in modules:
-                self._add_nav(key, name)
+            for key, name, desc, replaces in modules:
+                self._add_nav(key, name, f"{desc}\nAl posto di: {replaces}")
         for key, page in self.pages.items():
             self.stack.addWidget(self._scrollable(key, page))
         self.nav.currentItemChanged.connect(self._on_nav)
-        self.open_page("home")
+        self.open_page("general")
 
         self.mode.setCurrentIndex(max(0, self.mode.findData(self.hub.mode)))
         self.mode.currentIndexChanged.connect(self._on_mode)
 
-        self.home.open_module.connect(self.open_page)
-        self.home.start_demo.connect(self._start_demo)
+        self.general.open_module.connect(self.open_page)
+        self.general.start_demo.connect(self.telemetry.start_demo)     # il demo parte restando sulla Generale
 
         self.status_label = QLabel("Pronto")
         self.statusBar().addWidget(self.status_label, 1)
@@ -126,9 +127,10 @@ class MainWindow(QMainWindow):
         self._areas[key] = area
         return area
 
-    def _add_nav(self, key: str, name: str):
+    def _add_nav(self, key: str, name: str, tip: str = ""):
         it = QListWidgetItem(name)
         it.setData(Qt.ItemDataRole.UserRole, key)
+        it.setToolTip(tip)
         it.setSizeHint(QSize(200, 44))
         self.nav.addItem(it)
 

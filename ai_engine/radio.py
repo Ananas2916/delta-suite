@@ -63,7 +63,7 @@ class RadioRules:
         self._tyre_said: set[str] = set()
         self._flag = ACFlag.NONE
         self._battery_said: set[str] = set()
-        self._lap_energy_lap: int | None = None
+        self._lap_energy_said = False
 
     def _p(self, key: str, **kw) -> str:
         return self.lang.phrases[key].format(**kw)
@@ -169,9 +169,13 @@ class RadioRules:
         return []
 
     def _hybrid_messages(self, s, info: dict | None) -> list[Msg]:
-        """Batteria al 20%, scarica, energia del giro finita: una volta, finché non si ricarica."""
+        """Batteria al 20% e scarica: una volta, finché non si ricarica. Energia del giro finita: una volta per
+        stint (con un limite per giro succede quasi a ogni giro, basta saperlo)."""
         h = cs.hybrid_state(s, info)
-        if h is None or s.is_in_pit:
+        if h is None:
+            return []
+        if s.is_in_pit:
+            self._lap_energy_said = False
             return []
         out = []
         if h.charge >= cs.BATTERY_WARN + 0.15:
@@ -182,7 +186,7 @@ class RadioRules:
         elif h.charge < cs.BATTERY_WARN and "low" not in self._battery_said:
             self._battery_said.add("low")
             out.append(Msg(self._p("battery_low", n=round(h.charge * 100)), PRIO_NORMAL, 15, "battery"))
-        if h.lap_left_kj is not None and h.lap_left_kj <= 0.5 and self._lap_energy_lap != s.completed_laps:
-            self._lap_energy_lap = s.completed_laps
+        if h.lap_left_kj is not None and h.lap_left_kj <= 0.5 and not self._lap_energy_said:
+            self._lap_energy_said = True
             out.append(Msg(self._p("lap_energy"), PRIO_LOW, 8, "lap_energy"))
         return out
