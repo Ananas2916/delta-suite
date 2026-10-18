@@ -65,18 +65,13 @@ L'archivio dei giri è in `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
 
 ```
 run_hub.py                        entry point (anche dell'exe)
-ac_app/DeltaSuiteBridge/          app Lua per CSP: setup, comandi, avversari, tasti radio
-hub_core/ac_shared_memory.py      strutture ctypes della shared memory di AC, lettura coerente
-hub_core/telemetry_receiver.py    TelemetryReceiver -> TelemetrySample
-hub_core/session_recording.py     registrazione .dsr e ReplaySource
-hub_core/csp_bridge.py            lato Python del ponte CSP e installazione dell'app
-hub_core/lap_recorder.py          segmentazione in giri e settori
-hub_core/lap_analysis.py          curve automatiche, confronto curva per curva
-hub_core/timing.py                classifica, gap, interval
-hub_core/race_strategy.py         carburante, finestra pit, degrado gomme, timing
+ac_app/DeltaSuiteBridge/          app Lua per CSP: ponte (setup, comandi, avversari, tasti radio) e
+                                  modulo onboard (video, GPS, telecamere F6)
+hub_core/model.py                 TelemetrySample, CarEntry, stati di AC: tipi usati da tutti
+hub_core/ac/                      tutto ciò che parla con AC: shared memory, receiver, registrazioni,
+                                  ponte CSP, video onboard, texture condivisa, mappe, setup
+hub_core/analysis/                giri e settori, curve, classifica, strategia, dinamica, stato vettura
 hub_core/database.py              DuckDB: sessioni, giri, campioni; export Parquet
-hub_core/setup_files.py           file di setup di AC
-hub_core/vehicle_dynamics.py      Pacejka, trasferimenti di carico, cinematica
 hub_core/demo_source.py           simulatore con la stessa interfaccia del receiver
 ai_engine/agent_cli.py            Claude Code / Codex / Antigravity come ingegnere
 ai_engine/mcp_server.py           server MCP locale (7 strumenti) con token
@@ -85,12 +80,13 @@ ai_engine/voice.py                Kokoro / Tsukumo, coda a priorità
 ai_engine/stt.py                  trascrizione: Whisper locale o Tsukumo
 ai_engine/lang.py                 lingue, voci e frasi della radio
 ai_engine/race_engineer_agent.py  backend API Anthropic (riepilogo stint)
-ui/                               PyQt6 + pyqtgraph: finestra principale e una pagina per modulo
+ui/                               PyQt6 + pyqtgraph: stato, thread, widget riusabili, una pagina per modulo
 tests/                            pytest (incluso un giro vero registrato al Red Bull Ring)
 ```
 
 ## Sviluppo
 
+- Come sono divisi i pacchetti e chi può importare chi: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Test: `pip install -r requirements-dev.txt`, poi `python -m pytest`.
 - Autotest dell'eseguibile: `set DELTA_SELFTEST=C:\cartella` prima di avviarlo; l'app avvia il demo,
   salva uno screenshot di ogni pagina, verifica voce, app CSP e server MCP e si chiude.

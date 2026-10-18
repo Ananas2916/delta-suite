@@ -1,4 +1,4 @@
-## Delta Suite 0.4.1 — più onboard e GPS
+## Delta Suite 0.5.0 — più onboard, GPS e riordino
 
 **Onboard live**
 - *Niente più tremolio*: le telecamere seguono la carrozzeria disegnata da AC, non più il centro delle
@@ -18,7 +18,14 @@
 
 **Finestra**: su uno schermo scalato al 150% non si taglia più a destra; le pagine larghe scorrono.
 
-Va aggiornata l'app CSP (*Box & Assetto → Aggiorna app CSP*).
+**Sotto il cofano**: il codice è stato riordinato per crescere senza diventare un groviglio. Nessuna
+funzione cambia, ma:
+- l'app CSP ora è fatta di due file, il ponte (setup, comandi, radio) e il modulo onboard: se il video dà
+  problemi, conferme e radio continuano a funzionare e la finestra dell'app dice cosa non va;
+- Delta Suite si accorge se *uno qualsiasi* dei file dell'app in AC è vecchio, non solo quello principale.
+
+Va aggiornata l'app CSP (*Box & Assetto → Aggiorna app CSP*), che ora installa anche
+`DeltaSuiteOnboard.lua`.
 
 ---
 

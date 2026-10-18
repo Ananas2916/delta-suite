@@ -24,14 +24,14 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    SRO; ▲ scambia con il principale), telecamere di Delta Suite (T-cam, cofano, posteriore, 4 ruote,
    inseguimento; anche sugli avversari) e F6 dell'auto con nomi ricavati da posizione e direzione
    (`f6_names`), grafica TV sopra, GPS della pista (map.png + data/map.ini di AC in
-   `hub_core/track_map.py`, altrimenti il percorso fatto; clic su un'auto → riquadro principale) e vista
+   `hub_core/ac/track_map.py`, altrimenti il percorso fatto; clic su un'auto → riquadro principale) e vista
    dall'alto dello stato vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
-   (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
+   (`hub_core/analysis/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
    post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
-   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v6` (`hub_core/onboard_feed.py`;
+   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v6` (`hub_core/ac/onboard_feed.py`;
    una vista resa per fotogramma di AC, la più in ritardo; secondarie al massimo 640×360)
-   in tre modi: texture D3D11 condivisa (`hub_core/d3d_shared.py`, Delta Suite la apre provando tutte
+   in tre modi: texture D3D11 condivisa (`hub_core/ac/d3d_shared.py`, Delta Suite la apre provando tutte
    le GPU e la copia lei: niente lettura dalla GPU in AC; se non si apre si torna alla memoria), in
    memoria come DDS grezzo a rotazione su 3 posti (`ExtraCanvas:encode()` in CSP 0.2.11 dà
    solo DDS non compresso, ~0,9 MB a 640×360) oppure JPG in `%LOCALAPPDATA%\DeltaSuite\onboard` (CSP
@@ -62,20 +62,21 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    cinematica sospensioni (centri di rollio, camber/toe dinamici, ride height).
 
 ## Struttura
+Dettagli e regole sugli import in `ARCHITECTURE.md` (controllate da `tests/test_structure.py`).
 ```
-ac_app/DeltaSuiteBridge/        # app Lua per CSP: ponte comandi/setup/avversari/tasti radio
-hub_core/telemetry_receiver.py # acquisizione dati (sample_from_pages condiviso con il replay)
-hub_core/session_recording.py  # registrazione .dsr delle pagine grezze e ReplaySource
-hub_core/csp_bridge.py         # lato Python del ponte CSP (layout = DeltaSuiteBridge.lua)
-hub_core/timing.py             # classifica, gap e interval
-hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v6, 4 viste)
-hub_core/track_map.py          # mappa della pista di AC per il GPS (map.png + data/map.ini)
-hub_core/d3d_shared.py         # lettura della texture condivisa D3D11 (ctypes, vtable COM)
-hub_core/car_status.py         # danni, gomme, freni, sospensioni → avvisi (pagina Onboard e MCP)
-hub_core/lap_analysis.py       # curve automatiche e confronto curva per curva
-hub_core/setup_files.py        # setup .ini in Documenti (rediretti su OneDrive)
-hub_core/vehicle_dynamics.py   # Pacejka & cinematica
-hub_core/race_strategy.py      # carburante, pit, timing
+ac_app/DeltaSuiteBridge/        # app Lua per CSP: DeltaSuiteBridge.lua (ponte comandi/setup/avversari/
+                                # tasti radio) + DeltaSuiteOnboard.lua (video, caricato con pcall(require))
+hub_core/model.py              # TelemetrySample, CarEntry, enum di AC (nessuna dipendenza)
+hub_core/ac/                   # parla con AC; si importa anche fuori da Windows (kernel32 al primo uso)
+  shared_memory.py, receiver.py  # pagine di AC → TelemetrySample (sample_from_pages condiviso col replay)
+  recording.py                 # registrazione .dsr delle pagine grezze e ReplaySource
+  csp_bridge.py                # ponte CSP (layout = DeltaSuiteBridge.lua), installazione app, cartella AC
+  onboard_feed.py              # video onboard (DeltaSuite_Onboard_v6 = DeltaSuiteOnboard.lua, 4 viste)
+  d3d_shared.py                # lettura della texture condivisa D3D11 (ctypes, vtable COM)
+  track_map.py                 # mappa della pista di AC per il GPS (map.png + data/map.ini)
+  setup_files.py, win32.py     # setup .ini in Documenti (OneDrive); MappedView
+hub_core/analysis/             # calcoli, senza AC: lap_recorder, lap_analysis, timing, race_strategy,
+                               # vehicle_dynamics, car_status (avvisi per pagina Onboard e MCP)
 hub_core/database.py           # DuckDB / SQLite
 ai_engine/race_engineer_agent.py  # backend API (riepilogo stint)
 ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in modalità non interattiva
@@ -83,9 +84,11 @@ ai_engine/mcp_server.py        # server MCP HTTP locale con token (7 strumenti)
 ai_engine/radio.py, voice.py   # regole radio, Kokoro/Tsukumo, coda a priorità
 ai_engine/stt.py               # trascrizione push-to-talk (Whisper locale / Tsukumo)
 ui/hub_state.py, hub_data.py   # stato hub, proposte, fornitore dati per l'MCP
-tests/                         # pytest, incluso un giro vero registrato al Red Bull Ring
+ui/workers.py                  # TelemetryWorker (thread di acquisizione) e Job
+ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table
 ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
-                               # (pagine per chiave: "telemetry", "engineer", "box", ...)
+                               # (pagine per chiave: "telemetry", "engineer", "box", ...; onboard/ è un pacchetto)
+tests/                         # pytest, incluso un giro vero registrato al Red Bull Ring
 ```
 
 ## Decisioni tecniche prese
@@ -131,17 +134,29 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard 0.4.1: telecamere calcolate nello spazio dell'auto e portate nel mondo con
+4. Onboard (0.5.0): telecamere calcolate nello spazio dell'auto e portate nel mondo con
    `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (prima: centro ruote + stato fisico → forte
    tremolio; con le F6 l'utente l'ha visto sparire); F6 da `ac.accessCarCamera(i)` (solo auto 0, `.look`
    all'indietro). Da verificare in AC: v6 con più riquadri (FPS con 2-4 viste:
    `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con la mappa di AC (verso e scala di
    map.ini) e con gli avversari. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+   Da 0.5.0 il video sta in `DeltaSuiteOnboard.lua`: verificare in AC che il `require` lo carichi.
+5. Passo interfaccia (0.6.0, chiesto dall'utente dopo il riordino del codice):
+   - pagina "Generale" da muretto/commissione di gara per il team: una Home con tutto (classifica e
+     tempi, GPS, onboard principale, stato vettura e avvisi, carburante/strategia, radio e proposte);
+     riusare `ui/widgets` (car_status, gps, timing_table);
+   - auto ibride: batteria e ERS (fisica `kersCharge`, `kersInput`, `kersCurrentKJ`, `ersRecoveryLevel`,
+     `ersPowerLevel`, `ersHeatCharging`, `ersIsCharging`; statica `hasERS`, `hasKERS`, `kersMaxJ`,
+     `ersMaxJ`, `ersPowerControllerCount`) in telemetria, stato vettura, Generale, MCP e radio, solo se
+     l'auto li ha;
+   - stato vettura a 300 px: le scritte ai lati delle gomme ("usura 99.5%") vengono tagliate.
 
 ## Stato
-- [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)
+- [x] Lettore shared memory (`hub_core/ac/shared_memory.py`, `receiver.py`)
 - [x] Hub completo con 6 moduli (7 con l'Onboard) + simulatore demo, exe compilato e autotestato
 - [x] Riordino (16/10/2026): via il CAD/CFD, ingegnere AI e radio in un'unica pagina, barra laterale in sezioni
+- [x] Riordino del codice (18/10/2026): `hub_core/ac` e `hub_core/analysis`, app CSP in ponte + modulo
+      onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`
 - [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)
