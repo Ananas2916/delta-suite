@@ -9,3 +9,6 @@ dist/
 *.parquet
 assets/*.ico
 .claude/settings.local.json
+
+# cartella creata da PowerShell quando non espande %LOCALAPPDATA%
+%LOCALAPPDATA%/

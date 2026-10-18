@@ -12,6 +12,7 @@ texture yebis/hdr/ldr; shader). Le immagini finiscono nella cartella come PNG.
 Meglio farlo girare mentre si guida: gli FPS da fermi ai box dicono poco.
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from hub_core.onboard_feed import (  # noqa: E402
     CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, DEFAULT_TRANSPORT, QUALITIES, TONEMAP_FILMIC, TONEMAP_GAMMA,
-    TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, OnboardFeed,
+    TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, OnboardFeed, onboard_dir,
 )
 
 TONE_NAMES = {0: "nessuna", 1: "gamma", 2: "filmica+gamma", 3: "yebis"}
@@ -64,7 +65,8 @@ def save(out: Path, name: str, frame) -> None:
 
 
 def main():
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "onboard_probe")
+    # %LOCALAPPDATA% lo espande cmd ma non PowerShell: lo si espande qui, sennò finisce nel progetto
+    out = Path(os.path.expandvars(sys.argv[1])) if len(sys.argv) > 1 else onboard_dir().parent / "onboard_probe"
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
     only_transports = len(sys.argv) > 3 and sys.argv[3] == "trasporti"
     out.mkdir(parents=True, exist_ok=True)
