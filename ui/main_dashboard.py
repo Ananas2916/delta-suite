@@ -25,7 +25,7 @@ from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 
 APP_NAME = "Delta Suite"
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 # pagina aperta da ogni modalità
 MODE_PAGES = {"pilota": "telemetry", "ingegnere": "box", "analisi": "analysis"}

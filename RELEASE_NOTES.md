@@ -1,3 +1,24 @@
+## Delta Suite 0.4.1 — più onboard e GPS
+
+**Onboard live**
+- *Niente più tremolio*: le telecamere seguono la carrozzeria disegnata da AC, non più il centro delle
+  ruote (che si muove con le sospensioni).
+- *Fino a 4 onboard insieme*, come nelle dirette con più feed: un riquadro principale con la grafica TV e
+  fino a tre secondari con auto e telecamera a scelta; ▲ porta un secondario nel principale. Ogni
+  riquadro è una vista in più resa da AC: le secondarie vanno a 640×360 o 480×270 e AC ne rende una per
+  fotogramma, così il costo non fa picchi.
+- *Telecamere F6 della tua auto* (quelle di CSP "Car": dietro il pilota, cruscotto, laterale…) con nomi
+  ricavati da dove sono montate, e telecamere di Delta Suite raggruppate e con nomi più corti.
+- *GPS*: la pista con tutte le auto e la loro posizione, presa dalla mappa di AC del tracciato (o
+  disegnata dal percorso dell'auto in demo e replay); i riquadri aperti hanno un cerchio del loro colore
+  sull'auto inquadrata, e un clic su un'auto la mette nel riquadro principale.
+
+**Finestra**: su uno schermo scalato al 150% non si taglia più a destra; le pagine larghe scorrono.
+
+Va aggiornata l'app CSP (*Box & Assetto → Aggiorna app CSP*).
+
+---
+
 ## Delta Suite 0.4.0 — onboard live
 
 **Nuova pagina Onboard live** (In pista, subito dopo la telemetria), come al muretto:

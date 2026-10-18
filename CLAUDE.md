@@ -20,13 +20,17 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
 **In pista**
 1. **Telemetria live** (sostituisce MoTeC i2 / ATLAS / WinDARAB): acquisizione 60–100 Hz (velocità,
    pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, KERS), registrazione e replay.
-2. **Onboard live** (18/10/2026): video da una telecamera sull'auto (T-cam, abitacolo, posteriore, 4
-   ruote, inseguimento; anche sugli avversari) con grafica TV sopra, più vista dall'alto dello stato
-   vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
+2. **Onboard live** (18/10/2026): fino a 4 onboard insieme (principale + 3 secondari, come le dirette
+   SRO; ▲ scambia con il principale), telecamere di Delta Suite (T-cam, cofano, posteriore, 4 ruote,
+   inseguimento; anche sugli avversari) e F6 dell'auto con nomi ricavati da posizione e direzione
+   (`f6_names`), grafica TV sopra, GPS della pista (map.png + data/map.ini di AC in
+   `hub_core/track_map.py`, altrimenti il percorso fatto; clic su un'auto → riquadro principale) e vista
+   dall'alto dello stato vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
    (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
    post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
-   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v5` (`hub_core/onboard_feed.py`)
+   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v6` (`hub_core/onboard_feed.py`;
+   una vista resa per fotogramma di AC, la più in ritardo; secondarie al massimo 640×360)
    in tre modi: texture D3D11 condivisa (`hub_core/d3d_shared.py`, Delta Suite la apre provando tutte
    le GPU e la copia lei: niente lettura dalla GPU in AC; se non si apre si torna alla memoria), in
    memoria come DDS grezzo a rotazione su 3 posti (`ExtraCanvas:encode()` in CSP 0.2.11 dà
@@ -64,7 +68,8 @@ hub_core/telemetry_receiver.py # acquisizione dati (sample_from_pages condiviso 
 hub_core/session_recording.py  # registrazione .dsr delle pagine grezze e ReplaySource
 hub_core/csp_bridge.py         # lato Python del ponte CSP (layout = DeltaSuiteBridge.lua)
 hub_core/timing.py             # classifica, gap e interval
-hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v5)
+hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v6, 4 viste)
+hub_core/track_map.py          # mappa della pista di AC per il GPS (map.png + data/map.ini)
 hub_core/d3d_shared.py         # lettura della texture condivisa D3D11 (ctypes, vtable COM)
 hub_core/car_status.py         # danni, gomme, freni, sospensioni → avvisi (pagina Onboard e MCP)
 hub_core/lap_analysis.py       # curve automatiche e confronto curva per curva
@@ -126,11 +131,12 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard v5 (dopo la 0.4.0): telecamere calcolate nello spazio dell'auto e portate nel mondo con
+4. Onboard 0.4.1: telecamere calcolate nello spazio dell'auto e portate nel mondo con
    `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (prima: centro ruote + stato fisico → forte
-   tremolio, segnalato dall'utente); telecamere F6 dell'auto da `ac.accessCarCamera(i)` (solo auto 0,
-   `.look` all'indietro) dopo le 8 di Delta Suite. Da verificare in AC: tremolio sparito, e se le F6
-   dentro l'abitacolo mostrano gli interni (la seconda vista finora non li rendeva). Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+   tremolio; con le F6 l'utente l'ha visto sparire); F6 da `ac.accessCarCamera(i)` (solo auto 0, `.look`
+   all'indietro). Da verificare in AC: v6 con più riquadri (FPS con 2-4 viste:
+   `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con la mappa di AC (verso e scala di
+   map.ini) e con gli avversari. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)

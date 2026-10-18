@@ -2,9 +2,10 @@
 Prova del video onboard senza interfaccia: con AC in pista e l'app CSP caricata, chiede all'app
 curve di colore, trasporti, qualità e telecamere diverse e salva un fotogramma per ciascuna prova.
 
-    python tools/onboard_probe.py <cartella di uscita> [secondi per prova] [trasporti]
+    python tools/onboard_probe.py <cartella di uscita> [secondi per prova] [trasporti|riquadri]
 
-Con "trasporti" come terzo argomento si provano solo condivisa/memoria/file per ogni qualità.
+Con "trasporti" come terzo argomento si provano solo condivisa/memoria/file per ogni qualità, con
+"riquadri" solo 1-4 onboard insieme (FPS di AC con più viste).
 
 Stampa per ogni prova i fotogrammi al secondo ricevuti, gli FPS del gioco, il tempo di render
 dichiarato dall'app, il peso del fotogramma e lo stato dell'app (via usata: condivisa, memoria o file;
@@ -22,7 +23,8 @@ sys.path.insert(0, str(ROOT))
 
 from hub_core.onboard_feed import (  # noqa: E402
     CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, DEFAULT_TRANSPORT, QUALITIES, TONEMAP_FILMIC, TONEMAP_GAMMA,
-    TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, OnboardFeed, onboard_dir,
+    SECONDARY_QUALITY, TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, VIEWS, OnboardFeed,
+    ViewRequest, onboard_dir,
 )
 
 TONE_NAMES = {0: "nessuna", 1: "gamma", 2: "filmica+gamma", 3: "yebis"}
@@ -30,12 +32,18 @@ TRANSPORT_NAMES = {TRANSPORT_FILE: "file", TRANSPORT_MEMORY: "memoria", TRANSPOR
 
 
 def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0, quality: int = 1,
-        exposure: float = DEFAULT_EXPOSURE, tonemap: int = DEFAULT_TONEMAP, transport: int = DEFAULT_TRANSPORT):
+        exposure: float = DEFAULT_EXPOSURE, tonemap: int = DEFAULT_TONEMAP, transport: int = DEFAULT_TRANSPORT,
+        views: int = 1):
     _name, w, h, fps = QUALITIES[quality]
+    _s, sw, sh, sfps = SECONDARY_QUALITY if views == 2 else QUALITIES[0]
+    requests = [ViewRequest(enabled, camera, -1, w, h, fps)] + \
+        [ViewRequest(enabled and k < views, [7, 3, 2][k - 1], -1, sw, sh, sfps) for k in range(1, VIEWS)]
     t0, got, last, game_fps, sizes = time.monotonic(), 0, None, [], []
     while time.monotonic() - t0 < seconds:
-        feed.request(enabled, camera, -1, w, h, fps, exposure, tonemap, transport)
+        feed.request(requests, exposure, tonemap, transport)
         frame = feed.new_frame()
+        for k in range(1, views):
+            feed.new_frame(k)
         if frame is not None:
             got += 1
             last = frame
@@ -68,13 +76,14 @@ def main():
     # %LOCALAPPDATA% lo espande cmd ma non PowerShell: lo si espande qui, sennò finisce nel progetto
     out = Path(os.path.expandvars(sys.argv[1])) if len(sys.argv) > 1 else onboard_dir().parent / "onboard_probe"
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
-    only_transports = len(sys.argv) > 3 and sys.argv[3] == "trasporti"
+    only = sys.argv[3] if len(sys.argv) > 3 else ""
+    only_transports = only in ("trasporti", "riquadri")
     out.mkdir(parents=True, exist_ok=True)
     feed = OnboardFeed()
     t0 = time.monotonic()
     while not feed.connect():
         if time.monotonic() - t0 > 20:
-            sys.exit("Mapping DeltaSuite_Onboard_v4 assente: AC non in pista o app CSP non aggiornata/caricata")
+            sys.exit("Mapping DeltaSuite_Onboard_v6 assente: AC non in pista o app CSP non aggiornata/caricata")
         time.sleep(1)
     print(f"collegato (cartella per la via su file: {feed.folder})")
 
@@ -87,6 +96,13 @@ def main():
         print(line(f"T-cam {TONE_NAMES[tonemap]} esp. {exposure}", rate, inf, gfps, kb))
         save(out, f"tone{tonemap}_{exposure}", frame)
 
+    for n in range(1, VIEWS + 1) if only != "trasporti" else ():
+        rate, frame, inf, gfps, kb = run(feed, seconds, views=n)
+        print(line(f"{n} {'riquadro' if n == 1 else 'riquadri'} insieme", rate, inf, gfps, kb))
+    if only == "riquadri":
+        feed.disconnect()
+        return
+
     for q, (name, *_rest) in enumerate(QUALITIES):
         for transport in (TRANSPORT_SHARED, TRANSPORT_MEMORY, TRANSPORT_FILE):
             rate, frame, inf, gfps, kb = run(feed, seconds, quality=q, transport=transport)
@@ -94,12 +110,12 @@ def main():
             save(out, f"q{q}_{TRANSPORT_NAMES[transport]}", frame)
             if transport == TRANSPORT_SHARED and feed.shared_error:
                 print(f"  texture condivisa non usabile: {feed.shared_error}")
-            elif transport == TRANSPORT_SHARED and feed._shared is not None:
-                print(f"  texture condivisa aperta sulla GPU {feed._shared.adapter_index}")
+            elif transport == TRANSPORT_SHARED and feed._shared[0] is not None:
+                print(f"  texture condivisa aperta sulla GPU {feed._shared[0].adapter_index}")
 
-    f6 = feed.info().car_cameras if feed.info() else 0      # l'app le conta ogni 2 s, anche a video spento
-    names = [key for key, _name in CAMERAS] + [f"f6_{i + 1}" for i in range(f6)]
-    print(f"telecamere F6 trovate sull'auto: {f6}")
+    f6 = feed.f6_cameras()      # l'app le conta ogni 2 s, anche a video spento
+    names = [key for key, _name in CAMERAS] + [f"f6 {name}" for name in f6]
+    print(f"telecamere F6 trovate sull'auto: {', '.join(f6) or 'nessuna'}")
     for cam, key in enumerate([] if only_transports else names):
         rate, frame, inf, gfps, kb = run(feed, seconds, camera=cam)
         print(line(f"telecamera {cam} {key}", rate, inf, gfps, kb))

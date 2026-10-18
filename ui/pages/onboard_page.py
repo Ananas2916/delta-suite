@@ -1,17 +1,25 @@
-"""Modulo 1b: Onboard live — video dalla telecamera sull'auto con grafica TV e stato della vettura."""
+"""Modulo 1b: Onboard live — fino a 4 onboard insieme con grafica TV, GPS della pista e stato della vettura."""
 
 from __future__ import annotations
 
 import time
+from collections import deque
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QLinearGradient, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QSlider, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QComboBox, QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QSlider, QSplitter, QVBoxLayout, QWidget,
+)
 
 from hub_core import car_status as cs
 from hub_core.ac_shared_memory import ACStatus, gear_label
-from hub_core.onboard_feed import DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, Frame, OnboardFeed, camera_names
+from hub_core.csp_bridge import find_ac_root
+from hub_core.onboard_feed import (
+    DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, Frame, OnboardFeed, ViewRequest,
+    camera_menu,
+)
 from hub_core.race_strategy import fmt_ms, fuel_per_lap
+from hub_core.track_map import TrackMap, find_track_map
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
 from ui.widgets import Card, label, temp_color
@@ -19,6 +27,7 @@ from ui.widgets import Card, label, temp_color
 STALE_S = 2.0          # senza fotogrammi nuovi da tanto: il video non è più in diretta
 LEVEL_COLORS = {cs.OK: C["green"], cs.WARN: C["yellow"], cs.CRIT: C["red"]}
 DAMAGE_COLORS = ("#3a414f", "#f1c40f", "#ff9f43", "#ff4d4d")
+VIEW_COLORS = ("#ffffff", C["blue"], C["yellow"], C["purple"])   # riquadro principale, poi secondari
 
 
 def frame_image(f: Frame) -> QImage:
@@ -44,7 +53,7 @@ class OnboardView(QWidget):
         self.live = False
         self.placeholder = ""
         self.hud: dict = {}
-        self.setMinimumSize(420, 236)
+        self.setMinimumSize(360, 203)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_frame(self, img: QImage | None, live: bool):
@@ -206,7 +215,7 @@ class CarStatusView(QWidget):
         super().__init__()
         self.s = None
         self.info: dict = {}
-        self.setMinimumSize(320, 400)
+        self.setMinimumSize(270, 300)
 
     def set_sample(self, s, info: dict):
         self.s, self.info = s, info or {}
@@ -309,60 +318,242 @@ class CarStatusView(QWidget):
         p.end()
 
 
+class GPSView(QWidget):
+    """Mappa della pista con le auto: la mappa di AC se c'è, altrimenti il percorso fatto dalla tua auto."""
+
+    car_clicked = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(200, 150)
+        self.track_map: TrackMap | None = None
+        self.map_img: QImage | None = None
+        self.trail: deque[tuple[float, float]] = deque(maxlen=8000)
+        self.cars: list[dict] = []       # {idx, x, z, label, me, ring}
+        self._screen: list[tuple[int, QPointF]] = []
+
+    def set_map(self, tmap: TrackMap | None):
+        self.track_map, self.map_img = tmap, None
+        if tmap is not None:
+            img = QImage(str(tmap.image))
+            self.map_img = None if img.isNull() else img
+        self.update()
+
+    def clear_trail(self):
+        self.trail.clear()
+        self.update()
+
+    def add_trail(self, x: float, z: float):
+        if not self.trail or (x - self.trail[-1][0]) ** 2 + (z - self.trail[-1][1]) ** 2 > 9.0:   # un punto ogni 3 m
+            self.trail.append((x, z))
+
+    def set_cars(self, cars: list[dict]):
+        self.cars = cars
+        self.update()
+
+    def _mapper(self, area: QRectF):
+        """Funzione mondo (x, z) → punto nel widget, con l'immagine della mappa se c'è."""
+        if self.map_img is not None and self.track_map is not None:
+            iw, ih = self.map_img.width(), self.map_img.height()
+            k = min(area.width() / iw, area.height() / ih)
+            ox, oy = area.center().x() - iw * k / 2, area.center().y() - ih * k / 2
+            target = QRectF(ox, oy, iw * k, ih * k)
+
+            def to_px(x, z):
+                px, py = self.track_map.to_map(x, z)
+                return QPointF(ox + px * k, oy + py * k)
+            return to_px, target
+        pts = list(self.trail) + [(c["x"], c["z"]) for c in self.cars]
+        if not pts:
+            return None, None
+        xs, zs = [p[0] for p in pts], [p[1] for p in pts]
+        w, h = max(max(xs) - min(xs), 50.0), max(max(zs) - min(zs), 50.0)
+        k = min(area.width() / w, area.height() / h)
+        cx, cz = (max(xs) + min(xs)) / 2, (max(zs) + min(zs)) / 2
+
+        def to_px(x, z):
+            return QPointF(area.center().x() + (x - cx) * k, area.center().y() + (z - cz) * k)
+        return to_px, None
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.fillRect(self.rect(), QColor(C["panel2"]))
+        area = QRectF(self.rect()).adjusted(12, 12, -12, -12)
+        to_px, target = self._mapper(area)
+        self._screen = []
+        if to_px is None:
+            p.setPen(QColor(C["dim"]))
+            p.setFont(_font(9, QFont.Weight.Normal))
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                       "La pista compare qui\nappena l'auto si muove")
+            p.end()
+            return
+        if target is not None:
+            p.setOpacity(0.85)
+            p.drawImage(target, self.map_img)
+            p.setOpacity(1.0)
+        elif len(self.trail) > 1:
+            path = QPainterPath(to_px(*self.trail[0]))
+            for x, z in list(self.trail)[1:]:
+                path.lineTo(to_px(x, z))
+            p.setPen(QPen(QColor(C["border"]), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                          Qt.PenJoinStyle.RoundJoin))
+            p.drawPath(path)
+            p.setPen(QPen(QColor(C["dim"]), 2))
+            p.drawPath(path)
+        # avversari prima, la tua auto sopra
+        for c in sorted(self.cars, key=lambda c: c["me"]):
+            pt = to_px(c["x"], c["z"])
+            self._screen.append((c["idx"], pt))
+            r = 7.0 if c["me"] else 5.5
+            if c.get("ring"):
+                p.setPen(QPen(QColor(c["ring"]), 2.5))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(pt, r + 4, r + 4)
+            p.setPen(QPen(QColor("#0b0d10"), 1.5))
+            p.setBrush(QColor(C["accent"] if c["me"] else "#d7dbe3"))
+            p.drawEllipse(pt, r, r)
+            if c.get("label"):
+                p.setPen(QColor(C["text"]))
+                p.setFont(_font(7.5))
+                p.drawText(QRectF(pt.x() + r + 2, pt.y() - 8, 40, 16), Qt.AlignmentFlag.AlignVCenter, c["label"])
+        p.end()
+
+    def mousePressEvent(self, e):
+        pos = e.position()
+        near = min(self._screen, key=lambda it: (it[1].x() - pos.x()) ** 2 + (it[1].y() - pos.y()) ** 2,
+                   default=None)
+        if near is not None and (near[1].x() - pos.x()) ** 2 + (near[1].y() - pos.y()) ** 2 < 15 ** 2:
+            self.car_clicked.emit(near[0])
+
+
+class ViewPanel(QWidget):
+    """Un riquadro onboard: scelta di auto e telecamera sopra, video con grafica sotto."""
+
+    changed = pyqtSignal()
+    make_main = pyqtSignal(int)
+
+    def __init__(self, index: int):
+        super().__init__()
+        self.index = index
+        self.img: QImage | None = None
+        self.frame_t = 0.0
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        bar = QHBoxLayout()
+        bar.setSpacing(6)
+        dot = label("●")
+        dot.setStyleSheet(f"color: {VIEW_COLORS[index]}; font-size: 12pt;")
+        dot.setToolTip("Colore del riquadro, uguale al cerchio dell'auto sul GPS")
+        self.car = QComboBox()
+        self.car.addItem("La mia auto", -1)
+        self.camera = QComboBox()
+        for combo in (self.car, self.camera):     # stringibili: nomi lunghi non allargano la pagina
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(8 if index else 11)
+            combo.currentIndexChanged.connect(lambda _: self.changed.emit())
+        bar.addWidget(dot)
+        bar.addWidget(self.car, 1)
+        bar.addWidget(self.camera, 1)
+        if index:
+            up = QPushButton("▲")
+            up.setToolTip("Metti questo onboard nel riquadro principale")
+            up.setFixedWidth(34)
+            up.clicked.connect(lambda: self.make_main.emit(self.index))
+            bar.addWidget(up)
+        lay.addLayout(bar)
+        self.view = OnboardView()
+        if index:
+            self.view.setMinimumSize(180, 101)
+        lay.addWidget(self.view, 1)
+
+    def car_index(self) -> int:
+        d = self.car.currentData()
+        return -1 if d is None else d
+
+    def camera_index(self) -> int:
+        d = self.camera.currentData()
+        return 0 if d is None else d
+
+    def fill_cameras(self, menu: list[tuple[str, int | None]], selected: int):
+        self.camera.blockSignals(True)
+        self.camera.clear()
+        for text, idx in menu:
+            self.camera.addItem(text if idx is not None else f"— {text} —", idx)
+            if idx is None:     # intestazione di gruppo: non selezionabile
+                self.camera.model().item(self.camera.count() - 1).setEnabled(False)
+        row = self.camera.findData(selected)
+        self.camera.setCurrentIndex(row if row >= 0 else 1)
+        self.camera.blockSignals(False)
+
+    def fill_cars(self, others: list[tuple[int, str]], selected: int):
+        self.car.blockSignals(True)
+        self.car.clear()
+        self.car.addItem("La mia auto", -1)
+        for idx, text in others:
+            self.car.addItem(text, idx)
+        self.car.setCurrentIndex(max(0, self.car.findData(selected)))
+        self.car.blockSignals(False)
+
+    def select(self, car: int, camera: int):
+        self.car.blockSignals(True)
+        self.camera.blockSignals(True)
+        self.car.setCurrentIndex(max(0, self.car.findData(car)))
+        row = self.camera.findData(camera)
+        self.camera.setCurrentIndex(row if row >= 0 else 1)
+        self.car.blockSignals(False)
+        self.camera.blockSignals(False)
+
+
 class OnboardPage(QWidget):
+    LAYOUTS = ["1 onboard", "1 + 1", "1 + 2", "1 + 3"]
+    DEFAULT_CAMERAS = [0, 7, 3, 2]      # T-cam, inseguimento, ruota ant. sx, posteriore
+
     def __init__(self, hub):
         super().__init__()
         self.hub = hub
         self.feed = OnboardFeed()
-        self._frame_t = 0.0
         self._beat_t = 0.0
-        self._img: QImage | None = None
+        self._ui_t = 0.0
+        self._f6: list[str] = [n for n in hub.setting("onboard/f6_names", "", str).split("|") if n]
+        self._cars_key = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(12)
+        root.setSpacing(10)
 
-        bar = QHBoxLayout()
-        bar.addWidget(label("Onboard live", "h1"))
-        bar.addStretch()
-        self.car = QComboBox()
-        self.car.addItem("La mia auto", -1)
-        self.camera = QComboBox()
-        # le F6 si conoscono solo con AC in pista: si ricorda quante erano per riaprire sulla stessa telecamera
-        self._car_cameras = hub.setting("onboard/car_cameras", 0, int)
-        self.camera.addItems(camera_names(self._car_cameras))
-        self.camera.setCurrentIndex(max(0, min(self.camera.count() - 1, hub.setting("onboard/camera", 0, int))))
-        self.quality = QComboBox()
-        for name, *_ in QUALITIES:
-            self.quality.addItem(name)
-        self.quality.setCurrentIndex(max(0, min(len(QUALITIES) - 1, hub.setting("onboard/quality", 1, int))))
-        self.quality.setToolTip("Il video è una seconda vista resa da AC: più qualità costa più FPS in gioco")
-        self.exposure = QSlider(Qt.Orientation.Horizontal)
-        self.exposure.setRange(30, 400)
-        self.exposure.setFixedWidth(110)
-        self.exposure.setValue(round(100 * hub.setting("onboard/exposure", DEFAULT_EXPOSURE, float)))
-        self.exposure.setToolTip("Esposizione del video: la seconda vista non ha il post-processing del gioco")
-        self.exposure.valueChanged.connect(lambda v: (hub.settings.setValue("onboard/exposure", v / 100),
-                                                      self._push_request()))
+        head = QHBoxLayout()
+        head.addWidget(label("Onboard live", "h1"))
+        head.addStretch()
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)
         self.video_btn.setChecked(hub.setting("onboard/video", True, bool))
         self._video_label()
-        self.camera.currentIndexChanged.connect(lambda i: (hub.settings.setValue("onboard/camera", i),
-                                                           self._push_request()))
-        self.quality.currentIndexChanged.connect(lambda i: (hub.settings.setValue("onboard/quality", i),
-                                                            self._push_request()))
-        self.car.currentIndexChanged.connect(lambda _: self._push_request())
         self.video_btn.toggled.connect(self._on_video_toggled)
-        bar.addWidget(self.video_btn)
-        root.addLayout(bar)
+        head.addWidget(self.video_btn)
+        root.addLayout(head)
+
         controls = QHBoxLayout()
-        for combo in (self.car, self.camera, self.quality):   # stringibili: nomi lunghi non allargano la pagina
-            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            combo.setMinimumContentsLength(14)
-        self.quality.setMinimumContentsLength(24)
-        for w in (label("Auto", "dim"), self.car, label("Telecamera", "dim"), self.camera, label("Qualità", "dim"),
-                  self.quality, label("Luminosità", "dim"), self.exposure):
+        self.layout_box = QComboBox()
+        self.layout_box.addItems(self.LAYOUTS)
+        self.layout_box.setCurrentIndex(max(0, min(3, hub.setting("onboard/layout", 0, int))))
+        self.layout_box.setToolTip("Quanti onboard insieme: ognuno è una vista in più resa da AC (costa FPS)")
+        self.quality = QComboBox()
+        for name, *_ in QUALITIES:
+            self.quality.addItem(name)
+        self.quality.setCurrentIndex(max(0, min(len(QUALITIES) - 1, hub.setting("onboard/quality", 1, int))))
+        self.quality.setToolTip("Qualità del riquadro principale; gli altri vanno a 640×360 o 480×270")
+        self.quality.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.quality.setMinimumContentsLength(22)
+        self.exposure = QSlider(Qt.Orientation.Horizontal)
+        self.exposure.setRange(30, 400)
+        self.exposure.setFixedWidth(110)
+        self.exposure.setValue(round(100 * hub.setting("onboard/exposure", DEFAULT_EXPOSURE, float)))
+        self.exposure.setToolTip("Esposizione del video: la vista in più non ha il post-processing del gioco")
+        for w in (label("Riquadri", "dim"), self.layout_box, label("Qualità", "dim"), self.quality,
+                  label("Luminosità", "dim"), self.exposure):
             controls.addWidget(w)
         controls.addStretch()
         root.addLayout(controls)
@@ -370,13 +561,36 @@ class OnboardPage(QWidget):
         self.status = label("", "dim")
         root.addWidget(self.status)
 
-        mid = QHBoxLayout()
-        mid.setSpacing(12)
-        self.view = OnboardView()
-        mid.addWidget(self.view, 1)
-        side = Card()
-        side.setFixedWidth(360)
-        sl = QVBoxLayout(side)
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        self.grid = QGridLayout()
+        self.grid.setSpacing(10)
+        self.panels = [ViewPanel(k) for k in range(VIEWS)]
+        menu = camera_menu(self._f6)
+        for k, panel in enumerate(self.panels):
+            panel.fill_cameras(menu, hub.setting(f"onboard/view{k}/camera", self.DEFAULT_CAMERAS[k], int))
+            panel.changed.connect(lambda k=k: self._on_panel_changed(k))
+            panel.make_main.connect(self._make_main)
+            if k == 0:
+                self.grid.addWidget(panel, 0, 0, 3, 1)
+            else:
+                self.grid.addWidget(panel, k - 1, 1)
+        body.addLayout(self.grid, 1)
+
+        side = QSplitter(Qt.Orientation.Vertical)
+        side.setFixedWidth(300)
+        side.setChildrenCollapsible(False)
+        gps_card = Card()
+        gl = QVBoxLayout(gps_card)
+        gl.setContentsMargins(12, 10, 12, 12)
+        gl.addWidget(label("GPS · POSIZIONE IN PISTA", "dim"))
+        self.gps = GPSView()
+        self.gps.setToolTip("Clic su un'auto per vederla nel riquadro principale")
+        self.gps.car_clicked.connect(self._on_gps_click)
+        gl.addWidget(self.gps, 1)
+        side.addWidget(gps_card)
+        status_card = Card()
+        sl = QVBoxLayout(status_card)
         sl.setContentsMargins(12, 10, 12, 12)
         sl.addWidget(label("STATO VETTURA", "dim"))
         self.car_view = CarStatusView()
@@ -384,26 +598,36 @@ class OnboardPage(QWidget):
         self.info = label("", "dim")
         self.info.setWordWrap(True)
         sl.addWidget(self.info)
-        sl.addWidget(label("AVVISI", "dim"))
         self.alerts = label("")
         self.alerts.setWordWrap(True)
         self.alerts.setTextFormat(Qt.TextFormat.RichText)
-        self.alerts.setMinimumHeight(110)
         self.alerts.setAlignment(Qt.AlignmentFlag.AlignTop)
         sl.addWidget(self.alerts)
-        mid.addWidget(side)
-        root.addLayout(mid, 1)
+        side.addWidget(status_card)
+        side.setSizes([260, 520])
+        body.addWidget(side)
+        root.addLayout(body, 1)
 
+        self.layout_box.currentIndexChanged.connect(self._on_layout)
+        self.quality.currentIndexChanged.connect(lambda i: (hub.settings.setValue("onboard/quality", i),
+                                                            self._push_request()))
+        self.exposure.valueChanged.connect(lambda v: (hub.settings.setValue("onboard/exposure", v / 100),
+                                                      self._push_request()))
         hub.standings_changed.connect(self._fill_cars)
-        hub.session_changed.connect(lambda _: self._fill_cars([]))
+        hub.session_changed.connect(self._on_session)
         hub.running_changed.connect(lambda _: self._refresh())
+        self._restore_cars()
+        self._on_layout(self.layout_box.currentIndex(), save=False)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(33)
-        self._ui_t = 0.0
 
     # ------------------------------------------------------------- controlli
+    @property
+    def _n_views(self) -> int:
+        return self.layout_box.currentIndex() + 1
+
     def _video_label(self):
         self.video_btn.setText("Video acceso" if self.video_btn.isChecked() else "Video spento")
 
@@ -412,22 +636,70 @@ class OnboardPage(QWidget):
         self._video_label()
         self._push_request()
 
+    def _on_layout(self, i: int, save: bool = True):
+        if save:
+            self.hub.settings.setValue("onboard/layout", i)
+        n = i + 1
+        for k, panel in enumerate(self.panels):
+            panel.setVisible(k < n)
+        self.grid.setColumnStretch(0, 2)
+        self.grid.setColumnStretch(1, 1 if n > 1 else 0)
+        self._push_request()
+
+    def _on_panel_changed(self, k: int):
+        panel = self.panels[k]
+        self.hub.settings.setValue(f"onboard/view{k}/camera", panel.camera_index())
+        self.hub.settings.setValue(f"onboard/view{k}/car", panel.car_index())
+        panel.img = None
+        self._push_request()
+
+    def _make_main(self, k: int):
+        """Scambia l'onboard k con quello principale."""
+        a, b = self.panels[0], self.panels[k]
+        sel_a, sel_b = (a.car_index(), a.camera_index()), (b.car_index(), b.camera_index())
+        a.select(*sel_b)
+        b.select(*sel_a)
+        a.img = b.img = None
+        for i in (0, k):
+            self._on_panel_changed(i)
+
+    def _on_gps_click(self, idx: int):
+        main = self.panels[0]
+        main.select(-1 if idx == 0 else idx, main.camera_index())
+        self._on_panel_changed(0)
+
+    def _restore_cars(self):
+        for k, panel in enumerate(self.panels):
+            panel.select(self.hub.setting(f"onboard/view{k}/car", -1, int), panel.camera_index())
+
     def _fill_cars(self, rows):
-        others = [(r.index, f"P{r.pos}  {r.driver or 'auto ' + str(r.index)}  ·  {r.model}") for r in rows
-                  if not r.is_player]
-        current = [(self.car.itemData(i), self.car.itemText(i)) for i in range(1, self.car.count())]
-        if others == current:
+        others = [(r.index, f"P{r.pos}  {r.driver or 'auto ' + str(r.index)}") for r in rows if not r.is_player]
+        if others == self._cars_key:
             return
-        sel = self.car.currentData()
-        self.car.blockSignals(True)
-        self.car.clear()
-        self.car.addItem("La mia auto", -1)
-        for idx, text in others:
-            self.car.addItem(text, idx)
-        self.car.setCurrentIndex(max(0, self.car.findData(sel)))
-        self.car.blockSignals(False)
-        if self.car.currentData() != sel:
-            self._push_request()
+        self._cars_key = others
+        for k, panel in enumerate(self.panels):
+            panel.fill_cars(others, self.hub.setting(f"onboard/view{k}/car", -1, int))
+
+    def _on_session(self, info: dict):
+        self._fill_cars([])
+        self.gps.clear_trail()
+        tmap = None
+        try:
+            tmap = find_track_map(find_ac_root(), info.get("track_id", ""), info.get("track_config", ""))
+        except OSError:
+            pass
+        self.gps.set_map(tmap)
+
+    def _sync_cameras(self):
+        """Aggiorna gli elenchi quando l'app trova (o cambia) le telecamere F6 dell'auto."""
+        f6 = self.feed.f6_cameras()
+        if not f6 or f6 == self._f6:
+            return
+        self._f6 = f6
+        self.hub.settings.setValue("onboard/f6_names", "|".join(f6))
+        menu = camera_menu(f6)
+        for panel in self.panels:
+            panel.fill_cameras(menu, panel.camera_index())
 
     @property
     def _ac_live(self) -> bool:
@@ -437,10 +709,16 @@ class OnboardPage(QWidget):
     def _push_request(self) -> bool:
         if not self._ac_live:
             return False
+        n = self._n_views
+        on = self.video_btn.isChecked() and self.isVisible()
         _name, w, h, fps = QUALITIES[self.quality.currentIndex()]
+        _sname, sw, sh, sfps = SECONDARY_QUALITY if n == 2 else QUALITIES[0]
+        views = []
+        for k, panel in enumerate(self.panels):
+            size = (w, h, fps) if k == 0 else (sw, sh, sfps)
+            views.append(ViewRequest(on and k < n, panel.camera_index(), panel.car_index(), *size))
         self._beat_t = time.monotonic()
-        return self.feed.request(self.video_btn.isChecked() and self.isVisible(), self.camera.currentIndex(),
-                                 self.car.currentData(), w, h, fps, self.exposure.value() / 100, DEFAULT_TONEMAP)
+        return self.feed.request(views, self.exposure.value() / 100, DEFAULT_TONEMAP)
 
     def hideEvent(self, e):
         self.feed.disconnect()          # niente rendering in AC mentre la pagina non si vede
@@ -454,77 +732,75 @@ class OnboardPage(QWidget):
         if self._ac_live and self.video_btn.isChecked():
             if now - self._beat_t > 0.5:
                 self._push_request()
-            frame = self.feed.new_frame()
-            if frame is not None:
-                img = frame_image(frame)
-                if not img.isNull():
-                    self._img, self._frame_t = img, now
+            for k in range(self._n_views):
+                frame = self.feed.new_frame(k)
+                if frame is not None:
+                    img = frame_image(frame)
+                    if not img.isNull():
+                        self.panels[k].img, self.panels[k].frame_t = img, now
         elif self.feed.connected:
             self.feed.disconnect()
-        if now - self._ui_t >= 0.066:       # grafica e stato a 15 Hz, il video a ogni fotogramma
+        if now - self._ui_t >= 0.066:       # grafica, GPS e stato a 15 Hz, il video a ogni fotogramma
             self._ui_t = now
             self._refresh()
 
-    def _placeholder(self) -> str:
+    def _placeholder(self, k: int) -> str:
         if not self.hub.running:
-            return "Acquisizione ferma: avvia la telemetria da Assetto Corsa per vedere l'onboard."
+            return "Acquisizione ferma: avvia la telemetria da Assetto Corsa." if k == 0 else ""
         if not self._ac_live:
-            return "Il video onboard arriva solo da Assetto Corsa. In demo e replay restano grafica e stato vettura."
+            return ("Il video onboard arriva solo da Assetto Corsa. In demo e replay restano grafica, GPS e "
+                    "stato vettura." if k == 0 else "Solo con Assetto Corsa")
         if not self.video_btn.isChecked():
-            return "Video spento: in AC non si rende la seconda vista (più FPS in gioco)."
+            return "Video spento: in AC non si rendono le viste in più (più FPS in gioco)."
         if not self.feed.connected:
-            return ("App CSP Delta Suite Bridge non collegata o da aggiornare: installala da Box & Assetto "
-                    "e riavvia la sessione in AC.")
-        inf = self.feed.info()
+            return ("App CSP Delta Suite Bridge non collegata o da aggiornare: aggiornala da Box & Assetto."
+                    if k == 0 else "App CSP non collegata")
+        inf = self.feed.info(k)
         if inf is not None and inf.status.startswith("errore"):
             return f"L'app CSP non riesce a rendere l'onboard: {inf.status}"
-        if self._img is None:
-            return "In attesa del primo fotogramma dall'app CSP…"
+        if self.panels[k].img is None:
+            return "In attesa del primo fotogramma…"
         return ""
-
-    def _sync_cameras(self):
-        """Aggiunge o toglie dall'elenco le telecamere F6 trovate dall'app sull'auto."""
-        inf = self.feed.info()
-        if inf is None or inf.car_cameras == self._car_cameras:
-            return
-        self._car_cameras = inf.car_cameras
-        self.hub.settings.setValue("onboard/car_cameras", inf.car_cameras)
-        current = self.camera.currentIndex()
-        self.camera.blockSignals(True)
-        self.camera.clear()
-        self.camera.addItems(camera_names(inf.car_cameras))
-        self.camera.setCurrentIndex(min(current, self.camera.count() - 1))
-        self.camera.blockSignals(False)
-        if self.camera.currentIndex() != current:
-            self.hub.settings.setValue("onboard/camera", self.camera.currentIndex())
-            self._push_request()
 
     def _refresh(self):
         self._sync_cameras()
-        live_video = self._img is not None and time.monotonic() - self._frame_t < STALE_S
-        if not self._ac_live:
-            self._img = None
-        ph = self._placeholder()
-        self.view.set_frame(self._img, live_video)
+        now = time.monotonic()
         s = self.hub.last_sample
         info = self.hub.session_info
         laps = self.hub.laps
         fpl = fuel_per_lap(laps) if laps else None
         alerts = cs.car_alerts(s, info, fpl) if s is not None and s.status == ACStatus.LIVE else []
-        self.view.set_hud(self._hud(s, alerts), ph if not live_video else "")
+        live_any = False
+        for k in range(self._n_views):
+            panel = self.panels[k]
+            if not self._ac_live:
+                panel.img = None
+            live = panel.img is not None and now - panel.frame_t < STALE_S
+            live_any |= live
+            panel.view.set_frame(panel.img, live)
+            panel.view.set_hud(self._hud(k, s, alerts), self._placeholder(k) if not live else "")
         self.car_view.set_sample(s, info)
         self._fill_side(s, alerts, fpl)
-        self._fill_status(live_video)
+        self._fill_gps(s)
+        self._fill_status(live_any)
 
-    def _hud(self, s, alerts) -> dict:
-        idx = self.car.currentData()
-        cam = self.camera.currentText()
-        if idx is not None and idx >= 0:
-            b = self.hub.bridge_state
-            entry = next((c for c in (b.cars if b else []) if c.index == idx), None)
+    def _entry(self, idx: int):
+        b = self.hub.bridge_state
+        return next((c for c in (b.cars if b else []) if c.index == idx), None)
+
+    def _hud(self, k: int, s, alerts) -> dict:
+        panel = self.panels[k]
+        idx, cam = panel.car_index(), panel.camera.currentText()
+        if k > 0:       # riquadri piccoli: solo chi e quale telecamera, come "ONBOARD #93" nelle dirette
+            entry = self._entry(idx) if idx >= 0 else None
+            who = (f"P{entry.race_pos}  {entry.driver or 'auto ' + str(idx)}" if entry else
+                   panel.car.currentText() if idx >= 0 else (self.hub.session_info.get("player") or "La mia auto"))
+            return {"title": who, "camera": cam}
+        if idx >= 0:
+            entry = self._entry(idx)
             row = next((r for r in self.hub.standings_rows if r.index == idx), None)
             if entry is None:
-                return {"title": self.car.currentText(), "camera": cam}
+                return {"title": panel.car.currentText(), "camera": cam}
             times = [("POSIZIONE", f"P{entry.race_pos}", None), ("GIRO", str(entry.lap_count + 1), None),
                      ("TEMPO", fmt_ms(entry.lap_time_ms), None), ("ULTIMO", fmt_ms(entry.last_lap_ms), None),
                      ("MIGLIORE", fmt_ms(entry.best_lap_ms), C["purple"])]
@@ -550,6 +826,28 @@ class OnboardPage(QWidget):
             hud["alert"] = (alerts[0].level, alerts[0].text)
         return hud
 
+    def _fill_gps(self, s):
+        if s is not None and s.status == ACStatus.LIVE:
+            self.gps.add_trail(s.car_x, s.car_z)
+        rings = {}
+        for k in range(self._n_views):
+            idx = self.panels[k].car_index()
+            rings.setdefault(0 if idx < 0 else idx, VIEW_COLORS[k])
+        positions = self.feed.car_positions() if self._ac_live and self.feed.connected else {}
+        if not positions and s is not None and s.status == ACStatus.LIVE:
+            positions = {0: (s.car_x, s.car_z)}
+        b = self.hub.bridge_state
+        race_pos = {c.index: c.race_pos for c in b.cars} if b else {}
+        connected = {c.index for c in b.cars if c.connected} if b else set()
+        cars = []
+        for idx, (x, z) in positions.items():
+            if idx and connected and idx not in connected:
+                continue
+            pos = race_pos.get(idx) or (s.position if idx == 0 and s is not None else 0)
+            cars.append({"idx": idx, "x": x, "z": z, "me": idx == 0, "ring": rings.get(idx),
+                         "label": f"{pos}" if pos else ""})
+        self.gps.set_cars(cars)
+
     def _fill_side(self, s, alerts, fpl):
         if s is None:
             self.info.setText("Nessun dato: avvia l'acquisizione.")
@@ -567,19 +865,22 @@ class OnboardPage(QWidget):
             self.alerts.setText(f"<span style='color:{C['green']}'>●</span>  Tutto in ordine")
             return
         self.alerts.setText("<br>".join(f"<span style='color:{LEVEL_COLORS[a.level]}'>●</span>  {a.text}"
-                                        for a in alerts[:7]))
+                                        for a in alerts[:6]))
 
     def _fill_status(self, live_video: bool):
         parts = []
         if live_video:
             inf = self.feed.info()
             if inf is not None:
-                parts.append(f"<span style='color:{C['green']}'>●</span>  Video in diretta "
-                             f"{inf.width}×{inf.height}  ·  AC a {inf.game_fps:.0f} FPS")
+                parts.append(f"<span style='color:{C['green']}'>●</span>  Video in diretta · "
+                             f"{self._n_views} {'riquadro' if self._n_views == 1 else 'riquadri'} · "
+                             f"AC a {inf.game_fps:.0f} FPS")
         elif self._ac_live and self.video_btn.isChecked() and self.feed.connected:
             parts.append(f"<span style='color:{C['yellow']}'>●</span>  Video non in diretta")
-        if self.car.currentData() not in (None, -1):
-            parts.append("lo stato vettura a destra è sempre quello della tua auto")
+        if self.feed.shared_error:
+            parts.append("texture condivisa non disponibile, si usa la via più lenta")
+        if any(self.panels[k].car_index() >= 0 for k in range(self._n_views)):
+            parts.append("lo stato vettura è sempre quello della tua auto")
         self.status.setText("  ·  ".join(parts) if parts else
-                            "Seconda telecamera resa da AC tramite l'app CSP; danni, gomme, freni e sospensioni "
-                            "dalla shared memory.")
+                            "Viste in più rese da AC tramite l'app CSP; GPS dalla posizione delle auto; danni, "
+                            "gomme, freni e sospensioni dalla shared memory.")
