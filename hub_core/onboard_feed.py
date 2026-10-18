@@ -1,0 +1,153 @@
+"""
+Video onboard dall'app Lua di CSP (ac_app/DeltaSuiteBridge).
+
+L'app rende una telecamera montata sull'auto scelta (ac.GeometryShot, una seconda vista oltre a
+quella del pilota) e salva i fotogrammi in JPG nella cartella indicata da qui, a rotazione su
+SLOTS file. Lo scambio passa da una mapping a parte, DeltaSuite_Onboard_v1, così il layout del
+ponte comandi resta invariato:
+  - Delta Suite scrive le richieste (attivo, telecamera, auto, risoluzione, fps, cartella) e hostBeat;
+  - l'app scrive frame (ultimo fotogramma salvato, nel file frame % SLOTS), dimensioni e stato.
+Si legge sempre il fotogramma precedente all'ultimo: il salvataggio del JPG può non essere ancora
+finito, mentre quello prima è chiuso e l'app non lo riscrive per altri SLOTS - 1 fotogrammi.
+
+Il layout deve restare identico a ONBOARD_LAYOUT in DeltaSuiteBridge.lua.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v1"
+ONBOARD_VERSION = 1
+END_MARKER = 0x44534F31   # 'DSO1'
+SLOTS = 3
+
+# telecamere: (chiave, nome) nello stesso ordine degli indici in DeltaSuiteBridge.lua
+CAMERAS = [
+    ("tcam", "T-cam (sopra il roll-bar)"),
+    ("cockpit", "Abitacolo"),
+    ("rear", "Posteriore"),
+    ("wheel_fl", "Ruota anteriore sinistra"),
+    ("wheel_fr", "Ruota anteriore destra"),
+    ("wheel_rl", "Ruota posteriore sinistra"),
+    ("wheel_rr", "Ruota posteriore destra"),
+    ("chase", "Inseguimento"),
+]
+
+# qualità: (nome, larghezza, altezza, fps)
+QUALITIES = [
+    ("Bassa · 480×270 · 10 fps", 480, 270, 10),
+    ("Media · 640×360 · 15 fps", 640, 360, 15),
+    ("Alta · 960×540 · 20 fps", 960, 540, 20),
+    ("Massima · 1280×720 · 25 fps", 1280, 720, 25),
+]
+
+c_int, c_float, c_char = ctypes.c_int, ctypes.c_float, ctypes.c_char
+
+
+class OnboardShared(ctypes.Structure):
+    _fields_ = [
+        ("version", c_int),
+        # scritti da Delta Suite
+        ("hostBeat", c_int), ("enabled", c_int), ("camera", c_int), ("carIndex", c_int),
+        ("width", c_int), ("height", c_int), ("fps", c_int), ("folder", c_char * 260),
+        # scritti dall'app
+        ("frame", c_int), ("shotWidth", c_int), ("shotHeight", c_int), ("shotCar", c_int),
+        ("renderMs", c_float), ("status", c_char * 96),
+        ("endMarker", c_int),
+    ]
+
+
+def onboard_dir() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    return Path(base) / "DeltaSuite" / "onboard"
+
+
+def frame_file(folder: Path, frame: int) -> Path:
+    return folder / f"onboard_{frame % SLOTS}.jpg"
+
+
+def readable_frame(frame: int) -> int | None:
+    """Fotogramma sicuro da leggere quando l'app ha appena pubblicato `frame`."""
+    return frame - 1 if frame >= 2 else None
+
+
+@dataclass
+class OnboardInfo:
+    frame: int
+    width: int
+    height: int
+    car: int
+    render_ms: float
+    status: str
+
+
+class OnboardFeed:
+    """Lato Delta Suite del video onboard. Non bloccante: si chiama da un QTimer della UI."""
+
+    def __init__(self, folder: Path | None = None):
+        self.folder = folder or onboard_dir()
+        self._view = None
+        self._last_read = None
+
+    @property
+    def connected(self) -> bool:
+        return self._view is not None
+
+    def connect(self) -> bool:
+        if self._view is not None:
+            return True
+        from hub_core.csp_bridge import _FILE_MAP_READ, _FILE_MAP_WRITE, _View
+        try:
+            self._view = _View(ONBOARD_TAG, OnboardShared, _FILE_MAP_READ | _FILE_MAP_WRITE)
+        except (FileNotFoundError, OSError):
+            return False
+        self.folder.mkdir(parents=True, exist_ok=True)
+        return True
+
+    def disconnect(self) -> None:
+        if self._view is not None:
+            try:
+                self._view.struct.enabled = 0
+            except (OSError, ValueError):
+                pass
+            self._view.close()
+            self._view = None
+        self._last_read = None
+
+    def request(self, enabled: bool, camera: int, car_index: int, width: int, height: int, fps: int) -> bool:
+        """Aggiorna le richieste e il battito (va chiamata almeno una volta al secondo)."""
+        if not self.connect():
+            return False
+        s = self._view.struct
+        s.version = ONBOARD_VERSION
+        s.endMarker = END_MARKER
+        s.folder = str(self.folder).encode("utf-8")[:259]
+        s.camera, s.carIndex = camera, car_index
+        s.width, s.height, s.fps = width, height, fps
+        s.enabled = 1 if enabled else 0
+        s.hostBeat = (s.hostBeat + 1) & 0x7FFFFFFF
+        return True
+
+    def info(self) -> OnboardInfo | None:
+        if self._view is None:
+            return None
+        s = self._view.struct
+        if s.version != ONBOARD_VERSION:
+            return None
+        return OnboardInfo(s.frame, s.shotWidth, s.shotHeight, s.shotCar, s.renderMs,
+                           s.status.split(b"\0", 1)[0].decode("utf-8", errors="replace"))
+
+    def new_frame(self) -> Path | None:
+        """Percorso del fotogramma da mostrare, se ce n'è uno nuovo dall'ultima chiamata."""
+        inf = self.info()
+        if inf is None:
+            return None
+        n = readable_frame(inf.frame)
+        if n is None or n == self._last_read:
+            return None
+        self._last_read = n
+        return frame_file(self.folder, n)

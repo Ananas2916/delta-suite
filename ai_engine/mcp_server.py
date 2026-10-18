@@ -38,7 +38,8 @@ TOOLS: list[dict] = [
         "name": "stato_live",
         "description": "Stato attuale della vettura in pista: velocità, marcia, carburante, gomme (temperatura "
                        "°C, pressione psi, usura % dove 100 = nuova) e freni per ruota [AS, AD, PS, PD], giro e "
-                       "settore, condizioni pista, regolazioni di abitacolo (bias freni, ABS, TC, freno motore).",
+                       "settore, condizioni pista, regolazioni di abitacolo (bias freni, ABS, TC, freno motore), "
+                       "stato vettura (danni per zona, sporco gomme, corsa sospensioni, avvisi).",
         "inputSchema": _obj({}),
     },
     {

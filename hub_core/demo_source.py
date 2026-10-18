@@ -94,6 +94,8 @@ class DemoSource:
             "max_fuel": TANK_L,
             "sector_count": 3,
             "player": "Pilota Demo",
+            "damage_rate": 1.0,
+            "suspension_max_travel": [0.10, 0.10, 0.12, 0.12],
         }
 
     def car_and_track(self) -> tuple[str, str]:
@@ -147,7 +149,7 @@ class DemoSource:
             target += 0.25 * self._stint_laps
             self._tyre_t[w] += (target - self._tyre_t[w]) * min(1.0, dt / 18.0)
             heat = (110 if front else 75) * brake   # °C/s in frenata
-            self._brake_t[w] += (heat - (self._brake_t[w] - 150) * 0.012 * (1 + v / 60)) * dt
+            self._brake_t[w] += (heat - (self._brake_t[w] - 150) * 0.035 * (1 + v / 60)) * dt
             self._wear[w] = max(0.0, self._wear[w] - (0.00008 + 0.00025 * abs(ay)) * v * dt / 10.0)
 
         # settori a 1/3 e 2/3 del giro

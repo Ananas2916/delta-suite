@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 
 from hub_core import race_strategy as rs
+from hub_core.car_status import status_dict
 from hub_core.csp_bridge import (
     CMD_ABS, CMD_BRAKE_BIAS, CMD_ENGINE_BRAKE, CMD_SETUP, CMD_TC, BridgeState,
 )
@@ -144,6 +145,7 @@ class HubDataProvider:
         if fpl:
             out["consumo_medio_l_giro"] = round(fpl, 3)
             out["giri_di_carburante"] = round(s.fuel / fpl, 1)
+        out["stato_vettura"] = status_dict(s, info, fpl)
         if b is not None:
             out.update({"abs": b.abs_mode, "abs_livelli": b.abs_modes, "tc": b.tc_mode, "tc_livelli": b.tc_modes,
                         "freno_motore_livelli": b.engine_brake_count, "setup_modificabile_ora": b.setup_editable})

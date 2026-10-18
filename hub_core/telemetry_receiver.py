@@ -80,6 +80,9 @@ class TelemetrySample:
     session_time_left: float = -1.0   # ms, negativo se la sessione non ha limite
     brake_bias: float = 0.0     # 0..1 quota anteriore
     engine_brake: int = 0
+    car_damage: tuple[float, ...] = (0.0,) * 5   # zone: anteriore, posteriore, sinistra, destra, centro
+    tyre_dirt: Quad = (0.0,) * 4
+    pit_limiter: bool = False
 
 
 def _quad(arr) -> Quad:
@@ -139,6 +142,9 @@ def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) ->
         session_time_left=gfx.sessionTimeLeft,
         brake_bias=phy.brakeBias,
         engine_brake=phy.engineBrake,
+        car_damage=tuple(phy.carDamage),
+        tyre_dirt=_quad(phy.tyreDirtyLevel),
+        pit_limiter=bool(phy.pitLimiterOn),
     )
 
 
@@ -156,6 +162,8 @@ def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
         "max_fuel": float(st.maxFuel),
         "sector_count": int(st.sectorCount),
         "player": f"{st.playerName} {st.playerSurname}".strip(),
+        "damage_rate": float(st.aidMechanicalDamage),   # 0 = danni disattivati
+        "suspension_max_travel": list(st.suspensionMaxTravel),
     }
 
 

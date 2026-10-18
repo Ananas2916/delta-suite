@@ -10,6 +10,7 @@ con un ingegnere di pista AI che ti parla in cuffia.
 | Modulo | Cosa fa | Al posto di |
 |---|---|---|
 | Telemetria live | Cruscotto 60–200 Hz: velocità, RPM, pedali, sterzo, gomme, freni, G-G, giri e settori; registrazione delle sessioni e replay | MoTeC i2, ATLAS, WinDARAB |
+| Onboard live | Video da una telecamera sull'auto (T-cam, abitacolo, posteriore, ruote, inseguimento; anche sugli avversari) con grafica TV; stato vettura dall'alto: danni per zona, gomme, freni, sospensioni, sporco e avvisi | feed onboard del muretto |
 | Ingegnere di pista | Un solo agente (Claude Code, Codex, Antigravity o API) per chat di analisi e radio in cuffia: legge i dati di Delta Suite, analizza curva per curva, risponde al push-to-talk dal volante e propone setup e strategia; in più la radio automatica con voce Kokoro (giro, carburante, gomme, bandiere) | ingegnere e radio di squadra |
 | Box & Assetto | Bias freni, ABS, TC e freno motore in diretta; setup completo; proposte dell'ingegnere da confermare; classifica con gap e interval | muretto box |
 
@@ -41,6 +42,9 @@ Si scelgono in alto nella barra laterale:
 - **App CSP** (serve Custom Shaders Patch): *Box & Assetto → Installa app CSP in AC*. In gioco, dalla
   barra delle app apri **Delta Suite Bridge** e assegna i tasti: radio (tieni premuto), conferma
   proposta, scarta proposta.
+- **Onboard live:** serve l'app CSP aggiornata. Il video è una seconda vista resa da AC solo mentre la
+  pagina è aperta e "Video acceso": se gli FPS in gioco calano, abbassa la qualità o spegnilo (lo stato
+  vettura resta, anche in demo e replay).
 - **Ingegnere AI:** *Ingegnere di pista → Impostazioni → Agente AI*. Con Claude Code basta averlo
   installato e aver fatto il login: usa il tuo abbonamento, senza chiave API. L'agente vede solo i dati
   di Delta Suite (server MCP locale), non può eseguire comandi né toccare file. Chat scritta e

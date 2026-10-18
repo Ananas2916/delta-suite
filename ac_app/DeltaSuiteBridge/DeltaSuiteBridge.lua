@@ -3,6 +3,8 @@
 -- Ponte tra Assetto Corsa e Delta Suite (programma esterno), tramite due file mappati in memoria:
 --   DeltaSuite_Bridge_Out_v1  scritto qui: regolazioni attuali, setup, pit stop, avversari, tasti radio
 --   DeltaSuite_Bridge_In_v1   scritto da Delta Suite: un comando alla volta, numerato da `seq`
+--   DeltaSuite_Onboard_v1     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
+--                             una seconda vista (ac.GeometryShot) e si salvano i fotogrammi in JPG
 -- I layout devono restare identici a quelli in hub_core/csp_bridge.py (solo int/float a 4 byte e
 -- array di char, così l'allineamento è lo stesso in LuaJIT e in ctypes).
 
@@ -78,9 +80,30 @@ local IN_LAYOUT = [[
   int endMarker;
 ]]
 
+local ONBOARD_LAYOUT = [[
+  int version;
+  int hostBeat;
+  int enabled;
+  int camera;
+  int carIndex;
+  int width;
+  int height;
+  int fps;
+  char folder[260];
+  int frame;
+  int shotWidth;
+  int shotHeight;
+  int shotCar;
+  float renderMs;
+  char status[96];
+  int endMarker;
+]]
+local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS = 1, 0x44534F31, 3 -- 'DSO1'
+
 -- Variabili a livello di modulo: restano vive finché l'app è caricata.
 local out = ac.writeMemoryMappedFile('DeltaSuite_Bridge_Out_v1', OUT_LAYOUT)
 local inp = ac.writeMemoryMappedFile('DeltaSuite_Bridge_In_v1', IN_LAYOUT)
+local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v1', ONBOARD_LAYOUT)
 
 local btnRadio = ac.ControlButton('DeltaSuite/Radio ingegnere (tieni premuto)')
 local btnOk = ac.ControlButton('DeltaSuite/Conferma proposta')
@@ -198,6 +221,101 @@ local function updateCars(sim, withNames)
   end
 end
 
+-- ------------------------------------------------------------------ onboard
+
+local shot, shotCanvas, shotW, shotH = nil, nil, 0, 0
+local onbTimer, onbBeat, onbBeatChange = 0, onb.hostBeat, -100
+local onbActive = false
+
+local function freeShot()
+  if shot then shot:dispose() end
+  if shotCanvas then shotCanvas:dispose() end
+  shot, shotCanvas, shotW, shotH = nil, nil, 0, 0
+end
+
+local function makeShot(w, h)
+  freeShot()
+  shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(w, h), 1, true)
+  if shot.setBestSceneShotQuality then pcall(shot.setBestSceneShotQuality, shot)
+  elseif render.ShadersType then pcall(shot.setShadersType, shot, render.ShadersType.Main) end
+  pcall(shot.setClippingPlanes, shot, 0.05, 4000)
+  shotW, shotH = w, h
+end
+
+local function avg(a, b) return (a + b) * 0.5 end
+
+-- campo di una struct ffi che può mancare nelle versioni di CSP più vecchie (lì leggerlo è un errore)
+local function field(obj, name)
+  local ok, v = pcall(function () return obj[name] end)
+  if ok then return v end
+  return nil
+end
+
+-- telecamera montata sull'auto: posizione, direzione, alto, fov (stesso ordine di CAMERAS in onboard_feed.py)
+local function cameraFor(car, kind)
+  local fwd, up = car.look, car.up
+  local side = field(car, 'side') or fwd:clone():cross(up)
+  local w = { car.wheels[0].position, car.wheels[1].position, car.wheels[2].position, car.wheels[3].position }
+  local front, rear = avg(w[1], w[2]), avg(w[3], w[4])
+  local centre = avg(front, rear)
+  if kind == 1 then -- abitacolo
+    local eyes, tr = field(car, 'driverEyesPosition'), field(car, 'transform')
+    local pos = (eyes and tr) and tr:transformPoint(eyes) or (centre + up * 0.62 - fwd * 0.15)
+    return pos, fwd, up, 72
+  elseif kind == 2 then -- posteriore
+    return centre + up * 0.95 - fwd * 0.6, (fwd * -1 - up * 0.08):normalize(), up, 60
+  elseif kind >= 3 and kind <= 6 then -- ruote
+    local wp = w[kind - 2]
+    local out = side * ((wp - centre):dot(side) >= 0 and 1 or -1)
+    local dirSign = kind <= 4 and 1 or -1 -- anteriori: si guarda avanti, posteriori: indietro
+    local pos = wp + out * 0.28 + up * 0.22 - fwd * (0.95 * dirSign)
+    local look = (fwd * (2 * dirSign) + (wp - pos):normalize()):normalize()
+    return pos, look, up, 68
+  elseif kind == 7 then -- inseguimento
+    return centre - fwd * 5.5 + up * 1.7, (fwd - up * 0.14):normalize(), up, 55
+  end
+  return centre + up * 0.98 - fwd * 0.25, (fwd - up * 0.06):normalize(), up, 58 -- T-cam
+end
+
+local function saveShot(path)
+  if shot.save then return shot:save(path, ac.ImageFormat.JPG) end
+  shotCanvas = shotCanvas or ui.ExtraCanvas(vec2(shotW, shotH))
+  shotCanvas:update(function () ui.drawImage(shot, vec2(), vec2(shotW, shotH)) end)
+  return shotCanvas:save(path, ac.ImageFormat.JPG)
+end
+
+local function updateOnboard(dt, sim)
+  onb.version = ONBOARD_VERSION
+  onb.endMarker = ONBOARD_END
+  if onb.hostBeat ~= onbBeat then onbBeat, onbBeatChange = onb.hostBeat, clock end
+  local folder = ffi.string(onb.folder)
+  onbActive = onb.enabled == 1 and clock - onbBeatChange < 2 and folder ~= ''
+  if not onbActive then
+    if shot then freeShot(); setStr(onb.status, 96, 'in pausa') end
+    return
+  end
+  onbTimer = onbTimer - dt
+  if onbTimer > 0 then return end
+  onbTimer = 1 / math.max(1, math.min(30, onb.fps))
+
+  local idx = onb.carIndex >= 0 and onb.carIndex or sim.focusedCar
+  local car = ac.getCar(idx)
+  if not car then setStr(onb.status, 96, 'auto ' .. idx .. ' non trovata'); return end
+  local w = math.max(160, math.min(1920, onb.width))
+  local h = math.max(90, math.min(1080, onb.height))
+  if not shot or w ~= shotW or h ~= shotH then makeShot(w, h) end
+
+  local t0 = os.clock()
+  local pos, look, up, fov = cameraFor(car, onb.camera)
+  shot:update(pos, look, up, fov)
+  local n = onb.frame + 1
+  saveShot(string.format('%s\\onboard_%d.jpg', folder, n % ONBOARD_SLOTS))
+  onb.renderMs = (os.clock() - t0) * 1000
+  onb.shotWidth, onb.shotHeight, onb.shotCar = w, h, idx
+  onb.frame = n -- per ultimo: Delta Suite legge il fotogramma n - 1
+  setStr(onb.status, 96, 'in diretta')
+end
+
 function script.update(dt)
   clock = clock + dt
   out.version = VERSION
@@ -247,12 +365,21 @@ function script.update(dt)
     setStr(out.ackMsg, 64, lastAck)
     out.ackSeq = lastSeq
   end
+
+  local ok, err = pcall(updateOnboard, dt, sim)
+  if not ok then
+    freeShot()
+    onbTimer = 2 -- si riprova fra un po' invece di ripetere l'errore a ogni frame
+    setStr(onb.status, 96, 'errore: ' .. tostring(err))
+    ac.log('DeltaSuite onboard: ' .. tostring(err))
+  end
 end
 
 function script.windowMain(dt)
   local connected = clock - lastBeatChange < 2
   ui.text(connected and 'Delta Suite: collegato' or 'Delta Suite: non collegato (avvia l\'acquisizione)')
   if lastAck ~= '' then ui.text('Ultimo comando: ' .. lastAck) end
+  if onbActive then ui.text(string.format('Onboard in diretta: %dx%d, %.1f ms', shotW, shotH, onb.renderMs)) end
   ui.text(' ')
   ui.text('Radio ingegnere (tieni premuto):')
   btnRadio:control(vec2(0, 0))

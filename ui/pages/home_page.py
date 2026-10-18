@@ -14,6 +14,8 @@ SECTIONS = [
     ("In pista", [
         ("telemetry", "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa, "
          "registrazione delle sessioni e replay.", "MoTeC i2 · ATLAS · WinDARAB"),
+        ("onboard", "Onboard live", "Telecamera sull'auto (o sugli avversari) resa da AC con grafica TV, e stato "
+         "vettura: danni per zona, gomme, freni, sospensioni, sporco e avvisi.", "Feed onboard del muretto"),
         ("engineer", "Ingegnere di pista", "Chat di analisi e radio in cuffia con lo stesso agente (Claude Code o "
          "altro): push-to-talk dal volante, radio automatica su giro, carburante, gomme e bandiere, proposte di "
          "setup da confermare.", "Ingegnere e radio di squadra"),
@@ -65,7 +67,7 @@ class HomePage(QWidget):
         for row, (section, modules) in enumerate(SECTIONS):
             head = label(section.upper(), "dim")
             head.setStyleSheet("font-size: 9pt; font-weight: 700; letter-spacing: 1px; padding-top: 6px;")
-            grid.addWidget(head, row * 2, 0, 1, 3)
+            grid.addWidget(head, row * 2, 0, 1, max(len(m) for _, m in SECTIONS))
             for col, (key, name, desc, replaces) in enumerate(modules):
                 card = Card()
                 cl = QVBoxLayout(card)
