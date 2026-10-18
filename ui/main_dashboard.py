@@ -20,7 +20,7 @@ from ui.pages.box_page import BoxPage
 from ui.pages.dynamics_page import DynamicsPage
 from ui.pages.engineer_page import EngineerPage
 from ui.pages.home_page import SECTIONS, HomePage
-from ui.pages.onboard_page import OnboardPage
+from ui.pages.onboard import OnboardPage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 

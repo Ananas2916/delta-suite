@@ -6,7 +6,7 @@ import os
 import threading
 import time
 
-from PyQt6.QtCore import QObject, QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
 from ai_engine.agent_cli import APIAgent, CLIAgent
 from ai_engine.mcp_server import MCPServer
@@ -14,121 +14,16 @@ from ai_engine.lang import DEFAULT_VOICE, Language, language_of
 from ai_engine.radio import Msg, RadioConfig, RadioRules
 from ai_engine.stt import DEFAULT_MODEL, make_stt
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
-from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState, CSPBridge
-from hub_core.ac.receiver import TelemetryReceiver
-from hub_core.ac.recording import ReplaySource, SessionRecorder, recording_path
-from hub_core.analysis.lap_recorder import LapData, LapRecorder
+from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState
+from hub_core.analysis.lap_recorder import LapData
 from hub_core.analysis.timing import TimingTower, neighbours
 from hub_core.database import TelemetryDB
-from hub_core.demo_source import DemoSource
 from hub_core.model import ACSessionType, ACStatus
 from ui.hub_data import KIND_CMD, HubDataProvider, Proposal
 from ui.mic import MicRecorder
-
-SOURCE_AC = "ac"
-SOURCE_DEMO = "demo"
-SOURCE_REPLAY = "replay"
+from ui.workers import Job, TelemetryWorker
 
 MODES = {"pilota": "Pilota", "ingegnere": "Ingegnere", "analisi": "Analisi"}
-
-
-class TelemetryWorker(QThread):
-    sample_ready = pyqtSignal(object)
-    lap_completed = pyqtSignal(object)
-    session_started = pyqtSignal(dict)
-    status = pyqtSignal(str, bool)
-    bridge_state = pyqtSignal(object)
-    recording = pyqtSignal(str)
-
-    def __init__(self, source: str, hz: float, speed: float, replay_path: str | None = None, record: bool = False):
-        super().__init__()
-        self.source, self.hz, self.speed = source, hz, speed
-        self.replay_path, self.record = replay_path, record
-        self.bridge = CSPBridge() if source == SOURCE_AC else None
-        self._running = False
-
-    def stop(self):
-        self._running = False
-        self.wait(3000)
-
-    def _make_source(self):
-        if self.source == SOURCE_DEMO:
-            return DemoSource(self.speed)
-        if self.source == SOURCE_REPLAY:
-            return ReplaySource(self.replay_path, self.speed)
-        return TelemetryReceiver()
-
-    def run(self):
-        src = self._make_source()
-        period = 1.0 / self.hz
-        self._running = True
-        waiting = False
-        recorder: SessionRecorder | None = None
-        while self._running and not src.finished:
-            try:
-                connected = src.connect()
-            except (OSError, ValueError) as exc:
-                self.status.emit(f"Sorgente non disponibile: {exc}", False)
-                break
-            if not connected:
-                if not waiting:
-                    self.status.emit(src.waiting_message, False)
-                    waiting = True
-                self.msleep(1000)
-                continue
-            waiting = False
-            info = src.session_info()
-            rec = LapRecorder(info.get("track_length") or 1.0, info.get("sector_count") or 3)
-            self.session_started.emit(info)
-            self.status.emit(f"{info['source']}: {info['car']} @ {info['track']}", True)
-            if self.record and self.source == SOURCE_AC:
-                path = recording_path(info)
-                recorder = SessionRecorder(path, src.static_page())
-                self.recording.emit(str(path))
-
-            last_packet, stale_since, next_tick = None, time.perf_counter(), time.perf_counter()
-            next_bridge = 0.0
-            while self._running:
-                s = src.sample()
-                if s.packet_id != last_packet:
-                    last_packet, stale_since = s.packet_id, s.t
-                elif s.t - stale_since > 5.0 and s.status == ACStatus.OFF:
-                    src.disconnect()
-                    self.status.emit("Replay terminato" if src.finished else
-                                     "AC non aggiorna più i dati, riaggancio...", False)
-                    break
-                if recorder is not None and src.last_pages is not None and s.status != ACStatus.OFF:
-                    recorder.write(*src.last_pages, s.t)
-                lap = rec.feed(s)
-                if rec.session_reset:
-                    self.session_started.emit(src.session_info())
-                if lap is not None:
-                    self.lap_completed.emit(lap)
-                self.sample_ready.emit(s)
-                if src.finished:
-                    self.status.emit("Replay terminato", False)
-                    break
-
-                now = time.perf_counter()
-                if self.bridge is not None and now >= next_bridge:
-                    next_bridge = now + 0.1
-                    self.bridge_state.emit(self.bridge.read())
-
-                next_tick += period
-                delay = next_tick - time.perf_counter()
-                if delay > 0:
-                    time.sleep(delay)
-                else:
-                    next_tick = time.perf_counter()
-            if recorder is not None:
-                recorder.close()
-                recorder = None
-        src.disconnect()
-        if self.bridge is not None:
-            self.bridge.disconnect()
-            self.bridge_state.emit(None)
-        if not src.finished:
-            self.status.emit("Acquisizione ferma", False)
 
 
 def _quiet(fn):
@@ -136,24 +31,6 @@ def _quiet(fn):
         fn()
     except Exception:
         pass        # l'errore riemerge, con il suo messaggio, alla prima trascrizione
-
-
-class _Job(QThread):
-    """Esegue una funzione bloccante fuori dal thread della UI."""
-
-    text = pyqtSignal(str)
-    done = pyqtSignal(object)
-    failed = pyqtSignal(str)
-
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
-
-    def run(self):
-        try:
-            self.done.emit(self.fn(self.text.emit))
-        except Exception as exc:
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
 class HubState(QObject):
@@ -215,9 +92,9 @@ class HubState(QObject):
         self.mcp = MCPServer(self.provider, int(self.settings.value("mcp_port", 8787)))
         self.mcp.start()
         self.agent = None
-        self._job: _Job | None = None
+        self._job: Job | None = None
         self._job_mode = "ANALISI"
-        self._stt_job: _Job | None = None
+        self._stt_job: Job | None = None
 
         self.proposal_requested.connect(self._add_proposal)
 
@@ -485,7 +362,7 @@ class HubState(QObject):
         timeout = 120.0 if mode == "RADIO" else 600.0
         # via radio si parla la lingua della voce; l'analisi scritta segue l'interfaccia (italiano)
         lang_name = self.lang.name if mode == "RADIO" else "italiano"
-        self._job = _Job(lambda emit: agent.ask(question, mode, emit, timeout, lang_name))
+        self._job = Job(lambda emit: agent.ask(question, mode, emit, timeout, lang_name))
         self._job.text.connect(self.engineer_text)
         self._job.done.connect(lambda ans, m=mode: self._on_engineer_done(ans, m))
         self._job.failed.connect(self._on_engineer_failed)
@@ -525,7 +402,7 @@ class HubState(QObject):
         if len(pcm) < 16000 * 2 * 0.4:          # meno di 0,4 s: pressione accidentale
             return
         stt, lang = self.stt, self.lang
-        self._stt_job = _Job(lambda _emit: stt.transcribe(pcm, lang))
+        self._stt_job = Job(lambda _emit: stt.transcribe(pcm, lang))
         self._stt_job.done.connect(self._on_transcript)
         self._stt_job.failed.connect(lambda e: (self.radio_log.emit("sistema", f"Trascrizione: {e}"),
                                                 self.say(self.phrase("stt_error"), PRIO_URGENT, 10)))

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 from hub_core.ac.recording import recordings_dir
 from hub_core.analysis.race_strategy import best_sectors, fmt_ms
 from hub_core.model import ACStatus, gear_label
-from ui.hub_state import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
+from ui.workers import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
 from ui.theme import C
 from ui.widgets import Bar, Card, TyreGrid, ValueTile, label, make_plot, readonly_table, table_item
 

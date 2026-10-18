@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pyqtgraph as pg
 from PyQt6.QtCore import QRectF, Qt
-from PyQt6.QtGui import QColor, QPainter
+from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QFrame, QGridLayout, QLabel, QSizePolicy, QTableWidget,
     QTableWidgetItem, QAbstractItemView, QHeaderView, QVBoxLayout, QWidget,
@@ -229,3 +229,11 @@ class SessionPicker(QComboBox):
             return self.hub.session_info, list(self.hub.laps), self.hub.session_id
         info = next((s for s in self.hub.db.sessions() if s["id"] == sid), {})
         return info, self.hub.db.laps(sid), sid
+
+
+def paint_font(size: float, weight=QFont.Weight.Bold) -> QFont:
+    """Font per i widget disegnati a mano (grafica TV, GPS, schema dell'auto)."""
+    f = QFont("Segoe UI")
+    f.setPointSizeF(size)
+    f.setWeight(weight)
+    return f

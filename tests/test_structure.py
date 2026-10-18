@@ -42,3 +42,20 @@ def test_model_is_plain_data():
 
 def test_ai_engine_has_no_ui():
     assert violations("ai_engine", ("PyQt6", "pyqtgraph", "ui")) == []
+
+
+def test_widgets_do_not_know_pages():
+    # i widget (classifica, GPS, schema dell'auto...) li usano più pagine: non dipendono da nessuna
+    assert violations("ui/widgets", ("ui.pages", "ui.hub_state", "ui.main_dashboard")) == []
+
+
+def test_pages_do_not_import_each_other():
+    bad = []
+    pages = ROOT / "ui" / "pages"
+    for path in sorted(pages.rglob("*.py")):
+        rel = path.relative_to(pages)
+        own = f"ui.pages.{rel.parts[0].removesuffix('.py')}"
+        for mod in imported_modules(path):
+            if mod.startswith("ui.pages.") and not (mod == own or mod.startswith(own + ".")):
+                bad.append(f"{rel.as_posix()} importa {mod}")
+    assert bad == []
