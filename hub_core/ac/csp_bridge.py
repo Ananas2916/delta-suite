@@ -275,9 +275,12 @@ def install_app(ac_root: Path | None = None) -> Path:
 
 
 def app_needs_update(ac_root: Path | None = None) -> bool:
+    """Vero se un file dell'app (ponte, modulo onboard, manifest...) manca o è diverso da quello incluso."""
     target = installed_app_dir(ac_root)
     if target is None:
         return False
-    src = bundled_app_dir() / f"{APP_NAME}.lua"
-    dst = target / f"{APP_NAME}.lua"
-    return not dst.is_file() or dst.read_bytes() != src.read_bytes()
+    for src in bundled_app_dir().iterdir():
+        dst = target / src.name
+        if src.is_file() and (not dst.is_file() or dst.read_bytes() != src.read_bytes()):
+            return True
+    return False

@@ -19,7 +19,7 @@ Lo scambio passa da una mapping a parte, DeltaSuite_Onboard_v6, così il ponte c
 Si legge sempre il fotogramma precedente all'ultimo: l'ultimo può essere ancora in scrittura, quello
 prima è chiuso e l'app non lo riscrive per altri SLOTS - 1 fotogrammi.
 
-Il layout deve restare identico a ONBOARD_LAYOUT in DeltaSuiteBridge.lua.
+Il layout deve restare identico a ONBOARD_LAYOUT in DeltaSuiteOnboard.lua.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ MAX_CAR_CAMERAS = 16
 MAX_CARS = 64
 DATA_MAX = 3686656        # byte per fotogramma nella mapping: DDS 1280×720 a 8 bit per canale + intestazione
 
-# telecamere di Delta Suite: (chiave, nome) nello stesso ordine degli indici in DeltaSuiteBridge.lua
+# telecamere di Delta Suite: (chiave, nome) nello stesso ordine degli indici in DeltaSuiteOnboard.lua
 CAMERAS = [
     ("tcam", "T-cam"),
     ("hood", "Cofano"),            # dagli occhi del pilota: l'abitacolo in una vista in più non viene reso

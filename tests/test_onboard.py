@@ -10,8 +10,12 @@ from tests.conftest import REAL_LAP, create_mapping, windows_only
 INFO = {"damage_rate": 1.0, "suspension_max_travel": [0.1] * 4}
 
 
+def _lua(name: str) -> str:
+    return (cb.bundled_app_dir() / name).read_text(encoding="utf-8")
+
+
 def test_onboard_layout_matches_lua_in_order():
-    lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
+    lua = _lua("DeltaSuiteOnboard.lua")
     block = re.search(r"ONBOARD_LAYOUT = \[\[(.*?)\]\]", lua, re.S).group(1)
     names = re.findall(r"\b(\w+)(?:\[\d+\])*;", block)
     assert names == [n for n, _ in ob.OnboardShared._fields_]
@@ -47,8 +51,8 @@ def _lua_names_used_before_declaration(lua: str) -> list[str]:
 
 
 def test_lua_locals_declared_before_use():
-    lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
-    assert _lua_names_used_before_declaration(lua) == []
+    for name in ("DeltaSuiteBridge.lua", "DeltaSuiteOnboard.lua"):
+        assert _lua_names_used_before_declaration(_lua(name)) == [], name
     # il controllo trova davvero i due errori già capitati (field e carNodes)
     bad = "local function a()\n  return field(1) + #carNodes\nend\nlocal function field(x) return x end\nlocal carNodes = {}\n"
     assert _lua_names_used_before_declaration(bad) == ["field", "carNodes"]
@@ -56,8 +60,28 @@ def test_lua_locals_declared_before_use():
 
 def test_shared_handle_is_cross_process():
     # sharedHandle(false) è un id interno agli script di AC; per Delta Suite serve crossProcess = true
-    lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
+    lua = _lua("DeltaSuiteOnboard.lua")
     assert "pcall(fn, c, true)" in lua and "pcall(fn, c, false)" not in lua
+
+
+def test_bridge_loads_onboard_module_safely():
+    # il video sta in un modulo a parte: un suo errore non deve fermare il ponte (setup, radio, conferme)
+    bridge, onboard = _lua("DeltaSuiteBridge.lua"), _lua("DeltaSuiteOnboard.lua")
+    assert "pcall(require, 'DeltaSuiteOnboard')" in bridge
+    assert "if onboard then onboard.update(dt, sim) end" in bridge
+    assert "ONBOARD" not in bridge and "DeltaSuite_Onboard_v" not in bridge
+    assert onboard.rstrip().endswith("return M")
+    assert "function M.update(dt, sim)" in onboard and "pcall(updateOnboard, dt, sim)" in onboard
+
+
+def test_app_update_checks_every_file(tmp_path, monkeypatch):
+    target = tmp_path / "apps" / "lua" / cb.APP_NAME
+    monkeypatch.setattr(cb, "find_ac_root", lambda: tmp_path)
+    assert cb.app_needs_update()
+    cb.install_app()
+    assert not cb.app_needs_update()
+    (target / "DeltaSuiteOnboard.lua").write_text("-- vecchio", encoding="utf-8")
+    assert cb.app_needs_update()
 
 
 def test_reads_the_frame_before_the_latest():
