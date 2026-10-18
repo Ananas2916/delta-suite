@@ -1,38 +1,55 @@
-"""GPS della pista: mappa di AC (o percorso fatto) con le auto; clic su un'auto → segnale car_clicked."""
+"""
+GPS della pista: la linea della pista disegnata come un tracciato (fascia scura con bordo chiaro), traguardo,
+corsia box, tratti colorati per gialla (auto lenta), rossa (auto ferma) e blu, e le auto come cerchi con la
+posizione. Clic su un'auto → segnale car_clicked.
+"""
 
 from __future__ import annotations
 
+import math
 from collections import deque
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget
 
-from hub_core.ac.track_map import TrackMap
+from hub_core.analysis.track_status import TrackLine, Zone
 from ui.theme import C
 from ui.widgets import paint_font
 
+TRACK_EDGE, TRACK_FILL, PIT_LANE = "#e6e9ef", "#2f3540", "#6b7280"
+ZONE_FILL = {"yellow": "#f5c518", "red": "#ff3b3b", "blue": "#3d9bff"}
+ME_FILL, LEADER_FILL, CAR_FILL = "#f5c518", "#c43cff", "#e7e9ee"
+
+
+def _pen(color: str, width: float, alpha: int = 255, style=Qt.PenStyle.SolidLine) -> QPen:
+    col = QColor(color)
+    col.setAlpha(alpha)
+    return QPen(col, width, style, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+
 
 class GPSView(QWidget):
-    """Mappa della pista con le auto: la mappa di AC se c'è, altrimenti il percorso fatto dalla tua auto."""
+    """Mappa della pista con le auto. La linea viene dalla linea AI del tracciato (o è imparata girando); finché
+    non c'è si disegna il percorso fatto dalla tua auto."""
 
     car_clicked = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self.setMinimumSize(200, 150)
-        self.track_map: TrackMap | None = None
-        self.map_img: QImage | None = None
+        self.line: TrackLine | None = None
+        self.pit: list[tuple[float, float]] = []
+        self._pit_src = None
         self.trail: deque[tuple[float, float]] = deque(maxlen=8000)
-        self.cars: list[dict] = []       # {idx, x, z, label, me, ring}
+        self.zones: list[Zone] = []
+        self.cars: list[dict] = []       # {idx, pos, x, z, num, me, leader, ring, pit}
         self._screen: list[tuple[int, QPointF]] = []
 
-    def set_map(self, tmap: TrackMap | None):
-        self.track_map, self.map_img = tmap, None
-        if tmap is not None:
-            img = QImage(str(tmap.image))
-            self.map_img = None if img.isNull() else img
-        self.update()
+    # ------------------------------------------------------------- dati
+    def set_track(self, line: TrackLine | None, pit: list[tuple[float, float]] | None = None):
+        if line is not self.line or pit is not self._pit_src:
+            self.line, self._pit_src, self.pit = line, pit, list(pit or [])
+            self.update()
 
     def clear_trail(self):
         self.trail.clear()
@@ -42,78 +59,136 @@ class GPSView(QWidget):
         if not self.trail or (x - self.trail[-1][0]) ** 2 + (z - self.trail[-1][1]) ** 2 > 9.0:   # un punto ogni 3 m
             self.trail.append((x, z))
 
+    def set_zones(self, zones: list[Zone]):
+        self.zones = zones
+
     def set_cars(self, cars: list[dict]):
         self.cars = cars
         self.update()
 
-    def _mapper(self, area: QRectF):
-        """Funzione mondo (x, z) → punto nel widget, con l'immagine della mappa se c'è."""
-        if self.map_img is not None and self.track_map is not None:
-            iw, ih = self.map_img.width(), self.map_img.height()
-            k = min(area.width() / iw, area.height() / ih)
-            ox, oy = area.center().x() - iw * k / 2, area.center().y() - ih * k / 2
-            target = QRectF(ox, oy, iw * k, ih * k)
+    # ------------------------------------------------------------- disegno
+    def _car_xy(self, c: dict) -> tuple[float, float] | None:
+        if self.line is not None and c.get("pos") is not None:
+            return self.line.point(c["pos"])
+        if c.get("x") is not None:
+            return c["x"], c["z"]
+        return None
 
-            def to_px(x, z):
-                px, py = self.track_map.to_map(x, z)
-                return QPointF(ox + px * k, oy + py * k)
-            return to_px, target
-        pts = list(self.trail) + [(c["x"], c["z"]) for c in self.cars]
+    def _mapper(self, area: QRectF):
+        """Funzione mondo (x, z) → punto nel widget: tutta la pista (o il percorso fatto) al centro."""
+        if self.line is not None:
+            pts = list(zip(self.line.xs, self.line.zs)) + self.pit
+        else:
+            pts = list(self.trail) + [xy for xy in (self._car_xy(c) for c in self.cars) if xy is not None]
         if not pts:
-            return None, None
+            return None
         xs, zs = [p[0] for p in pts], [p[1] for p in pts]
         w, h = max(max(xs) - min(xs), 50.0), max(max(zs) - min(zs), 50.0)
         k = min(area.width() / w, area.height() / h)
         cx, cz = (max(xs) + min(xs)) / 2, (max(zs) + min(zs)) / 2
+        ox, oy = area.center().x(), area.center().y()
+        return lambda x, z: QPointF(ox + (x - cx) * k, oy + (z - cz) * k)
 
-        def to_px(x, z):
-            return QPointF(area.center().x() + (x - cx) * k, area.center().y() + (z - cz) * k)
-        return to_px, None
+    @staticmethod
+    def _path(to_px, pts, closed: bool = False) -> QPainterPath:
+        path = QPainterPath(to_px(*pts[0]))
+        for x, z in pts[1:]:
+            path.lineTo(to_px(x, z))
+        if closed:
+            path.closeSubpath()
+        return path
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor(C["panel2"]))
-        area = QRectF(self.rect()).adjusted(12, 12, -12, -12)
-        to_px, target = self._mapper(area)
+        size = min(self.width(), self.height())
+        r = max(7.0, min(11.0, size / 34))            # raggio delle auto
+        edge, fill = r * 1.6, r * 1.1                 # spessore della pista: bordo e fascia
+        area = QRectF(self.rect()).adjusted(r * 2.2, r * 2.2, -r * 2.2, -r * 2.2)
+        to_px = self._mapper(area)
         self._screen = []
         if to_px is None:
             p.setPen(QColor(C["dim"]))
             p.setFont(paint_font(9, QFont.Weight.Normal))
-            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-                       "La pista compare qui\nappena l'auto si muove")
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "La pista compare qui\nappena l'auto si muove")
             p.end()
             return
-        if target is not None:
-            p.setOpacity(0.85)
-            p.drawImage(target, self.map_img)
-            p.setOpacity(1.0)
+
+        if self.line is not None:
+            if len(self.pit) > 1:
+                p.setPen(_pen(PIT_LANE, max(2.0, fill * 0.35), 220, Qt.PenStyle.DashLine))
+                p.drawPath(self._path(to_px, self.pit))
+            track = self._path(to_px, list(zip(self.line.xs, self.line.zs)), closed=True)
+            p.setPen(_pen(TRACK_EDGE, edge))
+            p.drawPath(track)
+            p.setPen(_pen(TRACK_FILL, fill))
+            p.drawPath(track)
+            for z in self.zones:
+                seg = self._path(to_px, self.line.points(z.start, z.end))
+                p.setPen(_pen(ZONE_FILL[z.kind], edge * 1.9, 70))     # alone
+                p.drawPath(seg)
+                p.setPen(_pen(ZONE_FILL[z.kind], fill))
+                p.drawPath(seg)
+            self._finish_line(p, to_px, edge)
         elif len(self.trail) > 1:
-            path = QPainterPath(to_px(*self.trail[0]))
-            for x, z in list(self.trail)[1:]:
-                path.lineTo(to_px(x, z))
-            p.setPen(QPen(QColor(C["border"]), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                          Qt.PenJoinStyle.RoundJoin))
-            p.drawPath(path)
-            p.setPen(QPen(QColor(C["dim"]), 2))
-            p.drawPath(path)
-        # avversari prima, la tua auto sopra
-        for c in sorted(self.cars, key=lambda c: c["me"]):
-            pt = to_px(c["x"], c["z"])
+            trail = self._path(to_px, list(self.trail))
+            p.setPen(_pen(TRACK_EDGE, edge, 160))
+            p.drawPath(trail)
+            p.setPen(_pen(TRACK_FILL, fill))
+            p.drawPath(trail)
+
+        # in ordine: avversari, leader, auto inquadrate, la tua sopra a tutte
+        order = sorted(self.cars, key=lambda c: (c.get("me", False), bool(c.get("ring")), c.get("leader", False)))
+        for c in order:
+            xy = self._car_xy(c)
+            if xy is None:
+                continue
+            pt = to_px(*xy)
             self._screen.append((c["idx"], pt))
-            r = 7.0 if c["me"] else 5.5
-            if c.get("ring"):
-                p.setPen(QPen(QColor(c["ring"]), 2.5))
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawEllipse(pt, r + 4, r + 4)
-            p.setPen(QPen(QColor("#0b0d10"), 1.5))
-            p.setBrush(QColor(C["accent"] if c["me"] else "#d7dbe3"))
-            p.drawEllipse(pt, r, r)
-            if c.get("label"):
-                p.setPen(QColor(C["text"]))
-                p.setFont(paint_font(7.5))
-                p.drawText(QRectF(pt.x() + r + 2, pt.y() - 8, 40, 16), Qt.AlignmentFlag.AlignVCenter, c["label"])
+            self._car(p, pt, c, r)
         p.end()
+
+    def _finish_line(self, p: QPainter, to_px, edge: float):
+        a, b = to_px(*self.line.point(0.0)), to_px(*self.line.point(0.004))
+        dx, dy = b.x() - a.x(), b.y() - a.y()
+        n = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / n, dx / n                       # perpendicolare alla pista
+        half = edge * 0.9
+        p.setPen(QPen(QColor("#ff3b3b"), max(3.0, edge * 0.28), Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
+        p.drawLine(QPointF(a.x() - nx * half, a.y() - ny * half), QPointF(a.x() + nx * half, a.y() + ny * half))
+        # bandierina a scacchi fuori dalla pista
+        sq = max(3.5, edge * 0.3)
+        ox, oy = a.x() + nx * (half + sq * 1.6), a.y() + ny * (half + sq * 1.6)
+        p.setPen(Qt.PenStyle.NoPen)
+        for i in range(2):
+            for j in range(3):
+                p.setBrush(QColor("#ffffff" if (i + j) % 2 == 0 else "#111111"))
+                p.drawRect(QRectF(ox + i * sq - sq, oy + j * sq - sq * 1.5, sq, sq))
+
+    @staticmethod
+    def _car(p: QPainter, pt: QPointF, c: dict, r: float):
+        me, leader, pit = c.get("me", False), c.get("leader", False), c.get("pit", False)
+        rad = r * (1.12 if me else 1.0)
+        if c.get("ring"):
+            p.setPen(QPen(QColor(c["ring"]), 2.5))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(pt, rad + 3.5, rad + 3.5)
+        if pit:
+            p.setPen(QPen(QColor(C["dim"]), 1.5))
+            p.setBrush(QColor(C["panel2"]))
+            text_col = C["dim"]
+        else:
+            fill = ME_FILL if me else LEADER_FILL if leader else CAR_FILL
+            p.setPen(QPen(QColor("#0b0d10"), 1.5))
+            p.setBrush(QColor(fill))
+            text_col = "#ffffff" if leader and not me else "#111111"
+        p.drawEllipse(pt, rad, rad)
+        num = c.get("num", "")
+        if num:
+            p.setPen(QColor(text_col))
+            p.setFont(paint_font(max(6.0, rad * (0.62 if len(num) > 1 else 0.75)), QFont.Weight.Black))
+            p.drawText(QRectF(pt.x() - rad, pt.y() - rad, rad * 2, rad * 2), Qt.AlignmentFlag.AlignCenter, num)
 
     def mousePressEvent(self, e):
         pos = e.position()

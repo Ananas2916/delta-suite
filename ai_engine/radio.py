@@ -69,8 +69,10 @@ class RadioRules:
         return self.lang.phrases[key].format(**kw)
 
     # ------------------------------------------------------------- per giro
-    def on_lap(self, lap: LapData, laps: list[LapData], neighbours=None, race: bool = False) -> list[Msg]:
-        """`laps` sono i giri della sessione, con `lap` (appena completato) in fondo."""
+    def on_lap(self, lap: LapData, laps: list[LapData], neighbours=None, race: bool = False,
+               to_go: int | None = None) -> list[Msg]:
+        """`laps` sono i giri della sessione, con `lap` (appena completato) in fondo; `to_go` i giri che mancano
+        alla fine della gara (dal leader, compreso quello appena iniziato)."""
         out: list[Msg] = []
         c, lg = self.cfg, self.lang
         previous = laps[-2] if len(laps) >= 2 else None
@@ -88,6 +90,10 @@ class RadioRules:
             else:
                 delta = speak_delta((lap.lap_time_ms - min(older)) / 1000, lg)
                 out.append(Msg(self._p("lap", t=t, delta=delta), PRIO_NORMAL, 25, "lap"))
+        if c.lap_times and race and to_go == 1:
+            out.append(Msg(self._p("last_lap"), PRIO_HIGH, 30, "to_go"))
+        elif c.lap_times and race and to_go in (10, 5, 3):
+            out.append(Msg(self._p("laps_to_go", n=to_go), PRIO_NORMAL, 30, "to_go"))
 
         if c.fuel:
             fpl = rs.fuel_per_lap(laps)

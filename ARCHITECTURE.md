@@ -44,15 +44,18 @@ creano mapping vere sono marcati `windows_only`.
 | `csp_bridge.py` | ponte con l'app CSP (`DeltaSuite_Bridge_Out_v1` / `_In_v1`), installazione dell'app, cartella di AC |
 | `onboard_feed.py` | video onboard (`DeltaSuite_Onboard_v6`): richieste, fotogrammi, posizioni, telecamere F6 |
 | `d3d_shared.py` | apre e copia la texture D3D11 condivisa dall'app (ctypes, vtable COM) |
-| `track_map.py` | `map.png` + `data/map.ini` del tracciato per il GPS |
+| `track_map.py` | linea AI del tracciato (`ai/fast_lane.ai`, `pit_lane.ai`) per il GPS |
 | `setup_files.py` | setup `.ini` nei Documenti (anche rediretti su OneDrive) |
 | `win32.py` | `MappedView`: vista su una mapping creata da un altro processo |
 
 ## hub_core/analysis
 
 `lap_recorder.py` (giri e settori), `lap_analysis.py` (curve automatiche, confronto), `timing.py`
-(classifica, gap, interval), `race_strategy.py` (carburante, pit, degrado gomme), `vehicle_dynamics.py`
-(Pacejka, cinematica), `car_status.py` (danni, gomme, freni, sospensioni → avvisi; anche per l'MCP).
+(classifica, gap, interval), `race_strategy.py` (carburante, pit, degrado gomme, giri mancanti),
+`vehicle_dynamics.py` (Pacejka, cinematica), `car_status.py` (danni, gomme, freni, sospensioni, batteria →
+avvisi; anche per l'MCP), `track_status.py` (linea della pista per posizione sul giro, velocità tipiche, auto
+lente o ferme → tratti gialli/rossi, blu, bandiera per il pilota). `HubState.track` ne tiene una per sessione:
+la linea AI arriva a inizio sessione, le zone si aggiornano a ogni stato dell'app CSP.
 
 ## App CSP (ac_app/DeltaSuiteBridge)
 

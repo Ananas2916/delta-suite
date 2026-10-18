@@ -21,7 +21,7 @@ from hub_core.ac.onboard_feed import (
     DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, VIEWS, ViewRequest, camera_menu,
 )
 from hub_core.analysis import race_strategy as rs
-from hub_core.model import ACFlag, ACSessionType, ACStatus
+from hub_core.model import ACSessionType
 from ui import race_view as rv
 from ui.race_view import STALE_S
 from ui.theme import C
@@ -38,10 +38,10 @@ SESSION_NAMES = {
     ACSessionType.HOTLAP: "Hotlap", ACSessionType.TIME_ATTACK: "Time attack", ACSessionType.DRIFT: "Drift",
     ACSessionType.DRAG: "Drag",
 }
-FLAGS = {   # bandiera: (testo, sfondo, testo scuro)
-    ACFlag.YELLOW: ("BANDIERA GIALLA", C["yellow"], True), ACFlag.BLUE: ("BANDIERA BLU", C["blue"], False),
-    ACFlag.BLACK: ("BANDIERA NERA", "#000000", False), ACFlag.WHITE: ("BANDIERA BIANCA", "#ffffff", True),
-    ACFlag.CHECKERED: ("BANDIERA A SCACCHI", "#ffffff", True), ACFlag.PENALTY: ("PENALITÀ", C["red"], False),
+FLAG_STYLES = {   # tipo di bandiera: (sfondo, testo scuro)
+    "yellow": (C["yellow"], True), "red": (C["red"], False), "blue": (C["blue"], False),
+    "black": ("#000000", False), "white": ("#ffffff", True), "checkered": ("#ffffff", True),
+    "penalty": (C["red"], False),
 }
 WHO_COLORS = {"radio": C["blue"], "pilota": C["green"], "ingegnere": C["purple"], "sistema": C["dim"]}
 WHO_NAMES = {"radio": "Radio", "pilota": "Pilota", "ingegnere": "Ingegnere", "sistema": "Sistema"}
@@ -117,7 +117,7 @@ class GeneralPage(QWidget):
         self.t_last = ValueTile("Ultimo", "--:--.---", 20)
         self.t_best = ValueTile("Migliore", "--:--.---", 20)
         self.t_fuel = ValueTile("Carburante", "-- L", 20)
-        self.t_left = ValueTile("Tempo rimasto", "—", 20)
+        self.t_left = ValueTile("Mancano", "—", 20)
         for t in (self.t_pos, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel, self.t_left):
             tiles.addWidget(t)
         root.addLayout(tiles)
@@ -243,7 +243,6 @@ class GeneralPage(QWidget):
     def _on_session(self, info: dict):
         self._fill_cars([])
         self.gps.clear_trail()
-        self.gps.set_map(rv.track_map_for(info))
 
     def _sync_cameras(self):
         f6 = self.feed.f6_cameras()
@@ -339,17 +338,16 @@ class GeneralPage(QWidget):
 
         # classifica, GPS, stato vettura
         rings = rv.view_rings([self.panel.car_index()])
-        if s is not None and s.status == ACStatus.LIVE:
-            self.gps.add_trail(s.car_x, s.car_z)
-        self.gps.set_cars(rv.gps_cars(self.hub, s, rings))
+        rv.update_gps(self.hub, self.gps, s, rings)
         self.timing.fill(rv.timing_rows(self.hub, s, rings))
         self.car_view.set_sample(s, info)
         self.info.setText(rv.car_info_html(self.hub, s, fpl))
         self.alerts.setText(rv.alerts_html(s, alerts, 8))
         self.hybrid.update_from(s, info)
+        prog = rv.progress(self.hub, s)
         self._fill_head(s, info)
-        self._fill_tiles(s, fpl)
-        self._fill_strategy(s, fpl)
+        self._fill_tiles(s, fpl, prog)
+        self._fill_strategy(s, fpl, prog)
 
     def _fill_head(self, s, info):
         if not self.hub.running or not info:
@@ -359,28 +357,46 @@ class GeneralPage(QWidget):
         kind = SESSION_NAMES.get(s.session_type, "") if s is not None else ""
         self.session.setText("  ·  ".join(x for x in (info.get("source", ""), f"{info.get('car', '')} @ "
                                                       f"{info.get('track', '')}", kind) if x))
-        flag = FLAGS.get(s.flag) if s is not None else None
+        flag = rv.flag_status(self.hub, s)
         if flag is None:
             self.flag.setText("")
+            self.flag.setStyleSheet("")
+            self.flag.setMinimumWidth(0)
             return
-        text, bg, dark = flag
-        self.flag.setText(text)
+        bg, dark = FLAG_STYLES.get(flag.kind, (C["yellow"], True))
         self.flag.setStyleSheet(f"background: {bg}; color: {'#111111' if dark else '#ffffff'}; font-weight: 800;"
                                 "padding: 4px 10px; border-radius: 4px;")
+        self.flag.ensurePolished()
+        self.flag.setText(flag.text)
+        # larghezza dal testo: con la riga piena la QLabel restava un quadratino colorato senza scritta
+        self.flag.setMinimumWidth(self.flag.fontMetrics().horizontalAdvance(flag.text) + 28)
 
-    def _fill_tiles(self, s, fpl):
+    def _fill_tiles(self, s, fpl, prog):
         if s is None:
             return
         self.t_pos.set(f"P{s.position}" if s.position else "-")
-        self.t_lap.set(f"{s.completed_laps + 1}" + (" PIT" if s.is_in_pit else ""))
+        total = f"/{prog.total}" if prog is not None and prog.total else ""
+        self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" PIT" if s.is_in_pit else ""))
         self.t_cur.set(rs.fmt_ms(s.lap_time_ms))
         self.t_last.set(rs.fmt_ms(s.last_lap_ms))
         self.t_best.set(rs.fmt_ms(s.best_lap_ms), C["purple"])
         laps_left = s.fuel / fpl if fpl else None
         self.t_fuel.set(f"{s.fuel:.1f} L", C["red"] if laps_left is not None and laps_left < 2 else None)
-        self.t_left.set(fmt_time_left(s.session_time_left))
+        self.t_left.set(*self._to_go(prog))
 
-    def _fill_strategy(self, s, fpl):
+    @staticmethod
+    def _to_go(prog) -> tuple[str, str | None]:
+        """Giri che mancano (dal leader) o tempo rimasto; giallo all'ultimo giro."""
+        if prog is None:
+            return "—", None
+        if prog.to_go is not None:
+            text = prog.to_go_text
+            if prog.estimated and prog.time_left_s is not None:
+                text += f" · {fmt_time_left(prog.time_left_s * 1000)}"
+            return text, C["yellow"] if prog.to_go <= 1 else None
+        return (fmt_time_left(prog.time_left_s * 1000), None) if prog.time_left_s is not None else ("—", None)
+
+    def _fill_strategy(self, s, fpl, prog):
         laps = self.hub.laps
         if s is None:
             self.strategy.setText("Nessun dato")
@@ -388,6 +404,13 @@ class GeneralPage(QWidget):
         lines = []
         if fpl:
             lines.append(f"Consumo {fpl:.2f} L/giro  ·  ~{s.fuel / fpl:.1f} giri")
+            if prog is not None and prog.to_go:
+                # al traguardo: carburante rimasto dopo i giri che mancano (il giro in corso conta intero)
+                margin = s.fuel - prog.to_go * fpl
+                col = C["green"] if margin >= fpl else C["yellow"] if margin >= 0 else C["red"]
+                verdict = (f"avanzano {margin:.1f} L" if margin >= 0 else
+                           f"mancano {-margin:.1f} L: serve una sosta")
+                lines.append(f"Al traguardo: <span style='color:{col}'>{verdict}</span>")
         else:
             lines.append("Consumo: serve un giro completo")
         theo = rs.theoretical_best(laps) if laps else None

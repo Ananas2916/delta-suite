@@ -284,18 +284,3 @@ def test_real_lap_reads_new_fields():
     assert len(s.car_damage) == 5 and len(s.tyre_dirt) == 4 and s.pit_limiter is False
     d = cs.status_dict(s, info)
     assert set(d["danni"]) == set(cs.DAMAGE_ZONES)
-
-
-def test_track_map_from_ac_folder(tmp_path):
-    from hub_core.ac.track_map import find_track_map, parse_map_ini
-    ini = "[PARAMETERS]\nWIDTH=1210\nHEIGHT=700\nMARGIN=20\nSCALE_FACTOR=2 ; metri per pixel\nX_OFFSET=600\nZ_OFFSET=350\n"
-    assert parse_map_ini(ini)["SCALE_FACTOR"] == 2.0
-    layout = tmp_path / "content" / "tracks" / "ks_red_bull_ring" / "layout_gp"
-    (layout / "data").mkdir(parents=True)
-    (layout / "map.png").write_bytes(b"png")
-    (layout / "data" / "map.ini").write_text(ini, encoding="utf-8")
-    m = find_track_map(tmp_path, "ks_red_bull_ring", "layout_gp")
-    assert m is not None and m.image == layout / "map.png"
-    assert m.to_map(0.0, 0.0) == (300.0, 175.0) and m.to_map(-600.0, 50.0) == (0.0, 200.0)
-    assert find_track_map(tmp_path, "ks_red_bull_ring", "layout_national") is None
-    assert find_track_map(None, "x") is None

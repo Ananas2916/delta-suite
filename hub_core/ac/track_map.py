@@ -1,63 +1,69 @@
 """
-Mappa della pista per il GPS della pagina Onboard.
+Linea della pista per il GPS: la linea AI del tracciato di AC (`ai/fast_lane.ai`, e `pit_lane.ai` per la corsia
+box).
 
-AC ha per ogni tracciato (o layout) un `map.png` con il disegno della pista e `data/map.ini` con scala
-e spostamento: il punto (x, z) del mondo cade nel pixel ((x + X_OFFSET) / SCALE_FACTOR,
-(z + Z_OFFSET) / SCALE_FACTOR). Se la mappa non c'è (demo, replay di un tracciato non installato) la
-pagina disegna la pista dal percorso fatto dall'auto.
+È la stessa spline con cui AC calcola la posizione sul giro delle auto (normalizedCarPosition, splinePosition
+dell'app CSP): la distanza lungo la linea divisa per la sua lunghezza. Quindi ogni auto si mette sulla mappa dalla
+sua posizione sul giro, anche senza le coordinate, e i tratti della pista (gialle, auto ferme) si colorano per
+posizione. Le coordinate (x, z) sono quelle del mondo di AC, come carCoordinates.
+
+Formato di fast_lane.ai: 4 int32 (versione, numero di punti, tempo sul giro, campioni), poi per ogni punto
+x, y, z, lunghezza (float32) e id (int32); dopo vengono altri dati che qui non servono.
 """
 
 from __future__ import annotations
 
-import configparser
-from dataclasses import dataclass
+import math
+import struct
 from pathlib import Path
 
-
-@dataclass(frozen=True)
-class TrackMap:
-    image: Path
-    width: float
-    height: float
-    scale: float
-    x_offset: float
-    z_offset: float
-
-    def to_map(self, x: float, z: float) -> tuple[float, float]:
-        """Pixel della mappa per un punto (x, z) del mondo di AC."""
-        return (x + self.x_offset) / self.scale, (z + self.z_offset) / self.scale
+POINT = struct.Struct("<4fi")
+HEADER = struct.Struct("<4i")
+MAX_POINTS = 200_000
+MAX_COORD = 50_000.0        # m: oltre non è una pista (file diverso da quello atteso)
+MAX_STEP = 100.0            # m tra due punti consecutivi (di solito ~1 m)
 
 
-def parse_map_ini(text: str) -> dict[str, float]:
-    cp = configparser.ConfigParser(strict=False, inline_comment_prefixes=(";", "#"))
-    cp.read_string(text)
-    if not cp.has_section("PARAMETERS"):
-        return {}
-    out = {}
-    for key, value in cp.items("PARAMETERS"):
-        try:
-            out[key.upper()] = float(value)
-        except ValueError:
-            pass
-    return out
+def read_ai_line(path: Path, closed: bool = True) -> list[tuple[float, float]]:
+    """Punti (x, z) della linea AI, nell'ordine del giro (il primo è sul traguardo). [] se il file non va.
+    `closed=False` per la corsia box, che non è un anello."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return []
+    if len(data) < HEADER.size:
+        return []
+    _version, count, _lap_time, _samples = HEADER.unpack_from(data, 0)
+    if not 10 <= count <= MAX_POINTS or len(data) < HEADER.size + count * POINT.size:
+        return []
+    pts = []
+    for i in range(count):
+        x, _y, z, _length, _id = POINT.unpack_from(data, HEADER.size + i * POINT.size)
+        if not (math.isfinite(x) and math.isfinite(z) and abs(x) < MAX_COORD and abs(z) < MAX_COORD):
+            return []
+        pts.append((x, z))
+    return pts if _looks_like_a_line(pts, closed) else []
 
 
-def map_dirs(ac_root: Path, track_id: str, config: str = "") -> list[Path]:
-    """Dove cercare map.png: prima la cartella del layout, poi quella del tracciato."""
+def _looks_like_a_line(pts: list[tuple[float, float]], closed: bool) -> bool:
+    """Punti vicini tra loro (e giro chiuso): se no, meglio la linea imparata girando che una mappa sbagliata."""
+    steps = [math.dist(a, b) for a, b in zip(pts, pts[1:] + (pts[:1] if closed else []))]
+    return max(steps) <= MAX_STEP and sum(steps) >= 100.0
+
+
+def ai_dirs(ac_root: Path, track_id: str, config: str = "") -> list[Path]:
+    """Dove cercare la cartella ai: prima quella del layout, poi quella del tracciato."""
     base = ac_root / "content" / "tracks" / track_id
-    return ([base / config] if config else []) + [base]
+    return ([base / config / "ai"] if config else []) + [base / "ai"]
 
 
-def find_track_map(ac_root: Path | None, track_id: str, config: str = "") -> TrackMap | None:
+def find_ai_lines(ac_root: Path | None, track_id: str, config: str = "") \
+        -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """(linea del giro, corsia box) del tracciato; liste vuote se non ci sono (tracciato non installato, demo)."""
     if ac_root is None or not track_id:
-        return None
-    for folder in map_dirs(ac_root, track_id, config):
-        png, ini = folder / "map.png", folder / "data" / "map.ini"
-        if not (png.is_file() and ini.is_file()):
-            continue
-        p = parse_map_ini(ini.read_text(encoding="utf-8", errors="replace"))
-        if p.get("SCALE_FACTOR", 0) <= 0:
-            continue
-        return TrackMap(png, p.get("WIDTH", 0.0), p.get("HEIGHT", 0.0), p["SCALE_FACTOR"],
-                        p.get("X_OFFSET", 0.0), p.get("Z_OFFSET", 0.0))
-    return None
+        return [], []
+    for folder in ai_dirs(ac_root, track_id, config):
+        lap = read_ai_line(folder / "fast_lane.ai")
+        if lap:
+            return lap, read_ai_line(folder / "pit_lane.ai", closed=False)
+    return [], []

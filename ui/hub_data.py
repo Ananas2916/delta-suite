@@ -140,11 +140,20 @@ class HubDataProvider:
             "aria_c": round(s.air_temp, 1), "asfalto_c": round(s.road_temp, 1),
             "bias_freni_pct": round(s.brake_bias * 100, 1), "freno_motore": s.engine_brake,
         }
+        prog = rs.race_progress_for(s, b.cars if b else [], self.hub.is_race, info.get("extra_lap", False))
+        out["gara"] = {"giro_leader": prog.lap, "giri_totali": prog.total, "giri_mancanti": prog.to_go,
+                       "giri_mancanti_stimati": prog.estimated,
+                       "tempo_rimasto_s": round(prog.time_left_s) if prog.time_left_s is not None else None}
+        flag = self.hub.track.player_flag(s.lap_position, s.flag, time.monotonic(),
+                                          cars_known=bool(b and len(b.cars) > 1))
+        out["bandiera"] = flag.text if flag is not None else None
         laps = list(self.hub.laps)
         fpl = rs.fuel_per_lap(laps)
         if fpl:
             out["consumo_medio_l_giro"] = round(fpl, 3)
             out["giri_di_carburante"] = round(s.fuel / fpl, 1)
+            if prog.to_go:
+                out["carburante_al_traguardo_l"] = round(s.fuel - prog.to_go * fpl, 1)
         out["stato_vettura"] = status_dict(s, info, fpl)
         if b is not None:
             out.update({"abs": b.abs_mode, "abs_livelli": b.abs_modes, "tc": b.tc_mode, "tc_livelli": b.tc_modes,

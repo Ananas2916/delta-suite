@@ -30,8 +30,10 @@ tolto (16/10/2026): non c'entrava con la suite.
 2. **Onboard live** (18/10/2026): fino a 4 onboard insieme (principale + 3 secondari, come le dirette
    SRO; ▲ scambia con il principale), telecamere di Delta Suite (T-cam, cofano, posteriore, 4 ruote,
    inseguimento; anche sugli avversari) e F6 dell'auto con nomi ricavati da posizione e direzione
-   (`f6_names`), grafica TV sopra, GPS della pista (map.png + data/map.ini di AC in
-   `hub_core/ac/track_map.py`, altrimenti il percorso fatto; clic su un'auto → riquadro principale) e vista
+   (`f6_names`), grafica TV sopra, GPS della pista (0.5.1: linea AI `ai/fast_lane.ai` del tracciato in
+   `hub_core/ac/track_map.py`, stessa spline della posizione sul giro delle auto, che si mettono sulla mappa da
+   `splinePosition`; senza linea AI la si impara girando; tratti gialli/rossi/blu da
+   `hub_core/analysis/track_status.py`; clic su un'auto → riquadro principale) e vista
    dall'alto dello stato vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
    (`hub_core/analysis/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
@@ -80,10 +82,11 @@ hub_core/ac/                   # parla con AC; si importa anche fuori da Windows
   csp_bridge.py                # ponte CSP (layout = DeltaSuiteBridge.lua), installazione app, cartella AC
   onboard_feed.py              # video onboard (DeltaSuite_Onboard_v6 = DeltaSuiteOnboard.lua, 4 viste)
   d3d_shared.py                # lettura della texture condivisa D3D11 (ctypes, vtable COM)
-  track_map.py                 # mappa della pista di AC per il GPS (map.png + data/map.ini)
+  track_map.py                 # linea AI del tracciato (fast_lane.ai, pit_lane.ai) per il GPS
   setup_files.py, win32.py     # setup .ini in Documenti (OneDrive); MappedView
-hub_core/analysis/             # calcoli, senza AC: lap_recorder, lap_analysis, timing, race_strategy,
-                               # vehicle_dynamics, car_status (avvisi per pagina Onboard e MCP)
+hub_core/analysis/             # calcoli, senza AC: lap_recorder, lap_analysis, timing, race_strategy
+                               # (anche giri mancanti), vehicle_dynamics, car_status (avvisi per pagina
+                               # Onboard e MCP), track_status (linea della pista, auto lente/ferme, bandiere)
 hub_core/database.py           # DuckDB / SQLite
 ai_engine/race_engineer_agent.py  # backend API (riepilogo stint)
 ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in modalità non interattiva
@@ -148,12 +151,16 @@ tests/                         # pytest, incluso un giro vero registrato al Red 
    `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (prima: centro ruote + stato fisico → forte
    tremolio; con le F6 l'utente l'ha visto sparire); F6 da `ac.accessCarCamera(i)` (solo auto 0, `.look`
    all'indietro). Da verificare in AC: v6 con più riquadri (FPS con 2-4 viste:
-   `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con la mappa di AC (verso e scala di
-   map.ini) e con gli avversari. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+   `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con gli avversari. Soglie dei danni
+   (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
    Da 0.5.0 il video sta in `DeltaSuiteOnboard.lua`: verificare in AC che il `require` lo carichi.
-5. 0.5.0 da provare in AC: pagina Generale con il video (un solo collegamento `hub.onboard_feed`,
-   condiviso con la pagina Onboard: lo usa la pagina visibile), ibride con un'auto vera (significato di
-   `kersCurrentKJ` e dei limiti `ersMaxJ`/`kersMaxJ`, segno di `ersIsCharging` con le auto solo KERS).
+5. Provato dall'utente il 18/10 (Barcellona layout_moto, gara con IA, trr_lmh_ferrari_499p ibrida): Generale
+   con video ok. Visti e corretti in 0.5.1: mancavano i giri alla fine; la `flag` di AC restava gialla a
+   incidente passato (ora la gialla viene dalle auto lente/ferme dell'app CSP, quella di AC vale solo ~8 s se
+   nessuna auto la conferma); mappa map.png troppo spoglia (ora linea AI disegnata come un tracciato, auto con
+   la posizione, tratti gialli/rossi/blu); la 499P dichiara `ersMaxJ` = 9.99e16 (= nessun limite per giro).
+   Da verificare in AC: lettura di `fast_lane.ai` su piste vere (se il formato non torna si impara girando),
+   soglie delle auto lente (`SLOW_FRACTION`, `SLOW_KMH`) in gara vera.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac/shared_memory.py`, `receiver.py`)
@@ -161,7 +168,8 @@ tests/                         # pytest, incluso un giro vero registrato al Red 
 - [x] Riordino (16/10/2026): via il CAD/CFD, ingegnere AI e radio in un'unica pagina, barra laterale in sezioni
 - [x] Riordino del codice (18/10/2026): `hub_core/ac` e `hub_core/analysis`, app CSP in ponte + modulo
       onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`; build Windows ok
-- [x] Pagina Generale e dati delle ibride (18/10/2026, demo); da provare in AC
+- [x] Pagina Generale e dati delle ibride (18/10/2026), provata dall'utente in gara con la 499P
+- [x] 0.5.1: giri mancanti, bandiere dalle auto lente/ferme, mappa dalla linea AI (provato in demo)
 - [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)

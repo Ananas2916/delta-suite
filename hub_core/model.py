@@ -101,6 +101,7 @@ class TelemetrySample:
     ers_power: int = 0          # livello di potenza (mappa di spinta)
     ers_heat_charging: bool = False   # MGU-H verso la batteria (altrimenti verso il motore)
     ers_charging: bool = False
+    session_laps: int = 0       # giri della sessione (numberOfLaps), 0 se a tempo o senza limite
 
 
 @dataclass

@@ -7,10 +7,11 @@ Solo dati pronti per i widget di ui/widgets; le pagine decidono dove metterli. I
 
 from __future__ import annotations
 
-from hub_core.ac.csp_bridge import find_ac_root
-from hub_core.ac.track_map import TrackMap, find_track_map
+import time
+
 from hub_core.analysis import car_status as cs
-from hub_core.analysis.race_strategy import fmt_ms, fuel_per_lap
+from hub_core.analysis.race_strategy import RaceProgress, fmt_ms, fuel_per_lap, race_progress_for
+from hub_core.analysis.track_status import FlagStatus
 from hub_core.analysis.timing import fmt_gap
 from hub_core.model import ACStatus, gear_label
 from ui.theme import C
@@ -29,11 +30,23 @@ def live_state(hub):
     return s, info, fpl, alerts
 
 
-def track_map_for(info: dict) -> TrackMap | None:
-    try:
-        return find_track_map(find_ac_root(), info.get("track_id", ""), info.get("track_config", ""))
-    except OSError:
+def progress(hub, s) -> RaceProgress | None:
+    """Giro e giri che mancano (dal leader), o None senza dati."""
+    if s is None:
         return None
+    b = hub.bridge_state
+    return race_progress_for(s, b.cars if b else [], hub.is_race, hub.session_info.get("extra_lap", False))
+
+
+def _player_pos(s):
+    return s.lap_position if s is not None and s.status == ACStatus.LIVE else None
+
+
+def flag_status(hub, s) -> FlagStatus | None:
+    if s is None or s.status != ACStatus.LIVE:
+        return None
+    b = hub.bridge_state
+    return hub.track.player_flag(_player_pos(s), s.flag, time.monotonic(), cars_known=bool(b and len(b.cars) > 1))
 
 
 def car_entry(hub, idx: int):
@@ -60,21 +73,38 @@ def timing_rows(hub, s, rings: dict[int, str]) -> list[tuple]:
 
 
 def gps_cars(hub, s, rings: dict[int, str]) -> list[dict]:
+    """Auto per il GPS: posizione sul giro (dall'app CSP; la tua dalla shared memory, più fresca) e, se ci sono,
+    le coordinate (servono finché la linea della pista non è pronta)."""
     feed = hub.onboard_feed
-    positions = feed.car_positions() if hub.ac_live and feed.connected else {}
-    if not positions and s is not None and s.status == ACStatus.LIVE:
-        positions = {0: (s.car_x, s.car_z)}
+    coords = feed.car_positions() if hub.ac_live and feed.connected else {}
+    live = s is not None and s.status == ACStatus.LIVE
+    if live:
+        coords[0] = (s.car_x, s.car_z)
     b = hub.bridge_state
-    race_pos = {c.index: c.race_pos for c in b.cars} if b else {}
-    connected = {c.index for c in b.cars if c.connected} if b else set()
     cars = []
-    for idx, (x, z) in positions.items():
-        if idx and connected and idx not in connected:
+    for c in (b.cars if b else []):
+        if not c.connected:
             continue
-        pos = race_pos.get(idx) or (s.position if idx == 0 and s is not None else 0)
-        cars.append({"idx": idx, "x": x, "z": z, "me": idx == 0, "ring": rings.get(idx),
-                     "label": f"{pos}" if pos else ""})
+        me = c.index == 0
+        x, z = coords.get(c.index, (None, None))
+        cars.append({"idx": c.index, "pos": s.lap_position if me and live else c.spline, "x": x, "z": z,
+                     "num": str(c.race_pos) if c.race_pos else "", "me": me, "leader": c.race_pos == 1,
+                     "ring": rings.get(c.index), "pit": c.in_pitlane or c.in_pit})
+    if not cars and live:                  # senza app CSP o in demo: solo la tua auto
+        cars.append({"idx": 0, "pos": s.lap_position, "x": s.car_x, "z": s.car_z,
+                     "num": str(s.position) if s.position else "", "me": True, "leader": s.position == 1,
+                     "ring": rings.get(0), "pit": s.is_in_pit})
     return cars
+
+
+def update_gps(hub, gps, s, rings: dict[int, str]) -> None:
+    """Linea della pista, zone colorate e auto sul widget GPS (pagine Onboard e Generale)."""
+    track = hub.track
+    if s is not None and s.status == ACStatus.LIVE:
+        gps.add_trail(s.car_x, s.car_z)
+    gps.set_track(track.line, track.pit)
+    gps.set_zones(track.display_zones(_player_pos(s), s.flag if s is not None else 0))
+    gps.set_cars(gps_cars(hub, s, rings))
 
 
 def car_info_html(hub, s, fpl) -> str:
@@ -141,11 +171,12 @@ def main_hud(hub, s, alerts, idx: int, camera: str, car_text: str) -> dict:
     info = hub.session_info
     max_rpm = max(1000, int(info.get("max_rpm") or 9000))
     player = info.get("player") or "Tu"
+    total = f"/{s.session_laps}" if hub.is_race and s.session_laps > 0 else ""
     hud = {
         "title": f"{player}  ·  {info.get('car', '')}", "camera": camera,
         "speed": s.speed_kmh, "gear": gear_label(s.gear), "rpm": s.rpm, "rpm_frac": s.rpm / max_rpm,
         "shift": s.rpm > 0.95 * max_rpm, "gas": s.gas, "brake": s.brake, "steer": s.steer_angle,
-        "times": [("POSIZIONE", f"P{s.position}", None), ("GIRO", f"{s.completed_laps + 1}"
+        "times": [("POSIZIONE", f"P{s.position}", None), ("GIRO", f"{s.completed_laps + 1}{total}"
                                                          + ("  PIT" if s.is_in_pit else ""), None),
                   ("TEMPO", fmt_ms(s.lap_time_ms), None), ("ULTIMO", fmt_ms(s.last_lap_ms), None),
                   ("MIGLIORE", fmt_ms(s.best_lap_ms), C["purple"])],

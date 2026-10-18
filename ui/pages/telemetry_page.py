@@ -209,7 +209,8 @@ class TelemetryPage(QWidget):
         self.t_gear.set(gear_label(s.gear), C["accent"] if s.rpm > 0.95 * self.rpm_bar.maximum() else None)
         self.t_rpm.set(f"{s.rpm}")
         self.rpm_bar.setValue(int(s.rpm))
-        self.t_lap.set(f"{s.completed_laps + 1}" + (" PIT" if s.is_in_pit else ""))
+        total = f"/{s.session_laps}" if self.hub.is_race and s.session_laps > 0 else ""
+        self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" PIT" if s.is_in_pit else ""))
         self.t_cur.set(fmt_ms(s.lap_time_ms))
         self.t_last.set(fmt_ms(s.last_lap_ms))
         self.t_best.set(fmt_ms(s.best_lap_ms), C["purple"])

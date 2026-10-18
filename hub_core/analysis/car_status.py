@@ -22,6 +22,7 @@ BRAKE_WARN, BRAKE_CRIT = 750.0, 850.0
 DIRT_WARN = 0.5
 DEFAULT_SUSP_TRAVEL = 0.12                   # m, se la shared memory non dà la corsa massima
 BATTERY_WARN, BATTERY_CRIT = 0.20, 0.05      # carica della batteria delle ibride (0..1)
+MAX_LAP_LIMIT_KJ = 50_000.0                  # oltre è il "nessun limite" di AC (es. 9.99e16 J sulla 499P)
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,8 @@ def hybrid_state(s, info: dict | None) -> HybridState | None:
     info = info or {}
     if not is_hybrid(info):
         return None
-    ers_j, kers_j = info.get("ers_max_j", 0.0), info.get("kers_max_j", 0.0)
+    ers_j, kers_j = (v if 0 < v <= MAX_LAP_LIMIT_KJ * 1000 else 0.0
+                     for v in (info.get("ers_max_j", 0.0), info.get("kers_max_j", 0.0)))
     limit_j = (ers_j or kers_j) if info.get("has_ers") else (kers_j or ers_j)
     return HybridState(
         charge=max(0.0, min(1.0, s.kers_charge)),

@@ -93,6 +93,7 @@ def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) ->
         ers_power=phy.ersPowerLevel,
         ers_heat_charging=bool(phy.ersHeatCharging),
         ers_charging=bool(phy.ersIsCharging),
+        session_laps=gfx.numberOfLaps,
     )
 
 
@@ -118,6 +119,8 @@ def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
         "kers_max_j": float(st.kersMaxJ),
         "ers_max_j": float(st.ersMaxJ),
         "ers_power_modes": int(st.ersPowerControllerCount),
+        "timed_race": bool(st.isTimedRace),
+        "extra_lap": bool(st.hasExtraLap),
     }
 
 

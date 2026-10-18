@@ -74,6 +74,15 @@ def test_radio_lap_and_fuel():
     assert "Box, box. Carburante per un giro." in texts
 
 
+def test_radio_laps_to_go():
+    r = RadioRules(RadioConfig(tyres=False, gaps=False, fuel=False))
+    laps = [lap(1, 90500), lap(2, 90700)]
+    said = lambda to_go, race=True: [m.text for m in r.on_lap(laps[1], laps, race=race, to_go=to_go)][1:]  # noqa: E731
+    assert said(5) == ["Mancano 5 giri."]
+    assert said(4) == [] and said(None) == [] and said(5, race=False) == []
+    assert said(1) == ["Ultimo giro, spingi."]
+
+
 def test_radio_tyres_once_per_stint():
     r = RadioRules(RadioConfig(lap_times=False, fuel=False, gaps=False))
     cold = (60.0, 61.0, 85.0, 85.0)

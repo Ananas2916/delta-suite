@@ -1,3 +1,24 @@
+## Delta Suite 0.5.1 — giri alla fine, bandiere vere, mappa nuova
+
+Dalla prima prova in gara con la 0.5.0:
+- **Giri che mancano**: nella Generale ("Giro 9/25", "Mancano 16 giri", "ULTIMO GIRO"; nelle gare a tempo una
+  stima con il tempo rimasto), nella grafica TV e in Telemetria; nella strategia il carburante al traguardo
+  ("avanzano 3,2 L" o "serve una sosta"). La radio avvisa a 10, 5 e 3 giri dalla fine e all'ultimo giro.
+- **Bandiere**: la gialla non resta più accesa a incidente passato. Delta Suite guarda le auto lente o ferme
+  in pista (dall'app CSP) e la mostra solo se una è davanti a te, con la distanza ("auto lenta a 350 m";
+  "DOPPIA GIALLA · auto ferma" se è ferma); la gialla di AC da sola vale pochi secondi. Blu, scacchi, nera e
+  penalità come le dà AC, con il testo intero (prima restava un quadratino colorato).
+- **Mappa nuova**: la pista disegnata come un tracciato, dalla linea del tracciato di AC (la stessa con cui AC
+  calcola la posizione sul giro), con corsia box, traguardo e le auto come cerchi con la posizione: tu in
+  giallo, il leader in viola, le auto ai box vuote. I tratti si colorano di giallo dove c'è un'auto lenta, di
+  rosso dove una è ferma, di blu dietro di te quando hai la bandiera blu. Le auto sono sulla mappa anche a
+  video spento.
+- **Ibride**: le auto senza limite di energia per giro (es. la 499P) non mostrano più un limite di
+  99999998430675 kJ.
+- L'ingegnere AI vede anche giri mancanti, bandiera e carburante al traguardo.
+
+---
+
 ## Delta Suite 0.5.0 — Generale, ibride, più onboard e GPS
 
 **Nuova pagina Generale** (la prima, al posto della vecchia Home): tutto insieme, come al muretto.

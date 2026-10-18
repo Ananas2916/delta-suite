@@ -14,10 +14,13 @@ from ai_engine.lang import DEFAULT_VOICE, Language, language_of
 from ai_engine.radio import Msg, RadioConfig, RadioRules
 from ai_engine.stt import DEFAULT_MODEL, make_stt
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
-from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState
+from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState, find_ac_root
 from hub_core.ac.onboard_feed import OnboardFeed
+from hub_core.ac.track_map import find_ai_lines
 from hub_core.analysis.lap_recorder import LapData
+from hub_core.analysis.race_strategy import race_progress_for
 from hub_core.analysis.timing import TimingTower, neighbours
+from hub_core.analysis.track_status import TrackWatch
 from hub_core.database import TelemetryDB
 from hub_core.model import ACSessionType, ACStatus
 from ui.hub_data import KIND_CMD, HubDataProvider, Proposal
@@ -80,6 +83,7 @@ class HubState(QObject):
         self._bridge_counts: tuple[int, int] | None = None
         # video onboard dall'app CSP: uno solo, lo usa la pagina visibile (Onboard o Generale)
         self.onboard_feed = OnboardFeed()
+        self.track = TrackWatch()           # linea della pista e zone gialle/rosse/blu della sessione
         self._ptt = False
 
         self.radio_rules = RadioRules(self.load_radio_config(), self.lang)
@@ -211,7 +215,17 @@ class HubState(QObject):
         self.laps = []
         self.radio_rules.reset()
         self.timing.reset()
+        self.track = self._load_track(info)
         self.session_changed.emit(info)
+
+    @staticmethod
+    def _load_track(info: dict) -> TrackWatch:
+        """Linea AI del tracciato (se AC è installato e il tracciato c'è), altrimenti si impara girando."""
+        try:
+            lap, pit = find_ai_lines(find_ac_root(), info.get("track_id", ""), info.get("track_config", ""))
+        except OSError:
+            lap, pit = [], []
+        return TrackWatch(lap, pit, info.get("track_length") or 0.0)
 
     def _on_lap(self, lap: LapData):
         if self.session_id is None:
@@ -221,12 +235,17 @@ class HubState(QObject):
         self.lap_completed.emit(lap)
         self.db_changed.emit()
         if self.radio_active:
-            for m in self.radio_rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race):
+            s, b = self.last_sample, self.bridge_state
+            to_go = race_progress_for(s, b.cars if b else [], self.is_race,
+                                      self.session_info.get("extra_lap", False)).to_go if s is not None else None
+            for m in self.radio_rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race, to_go):
                 self._say(m)
 
     def _on_sample(self, s):
         self.last_sample = s
         self.is_race = s.session_type == ACSessionType.RACE
+        if s.status == ACStatus.LIVE:
+            self.track.feed_position(s.lap_position, s.car_x, s.car_z)
         if self.radio_active and s.status == ACStatus.LIVE:
             for m in self.radio_rules.on_sample(s, self.session_info):
                 self._say(m)
@@ -257,6 +276,9 @@ class HubState(QObject):
                     if p.status == "ai box":
                         self._send_proposal(p)
             now = time.monotonic()
+            s = self.last_sample
+            self.track.update_cars(b.cars, now, s.session_laps if s is not None and self.is_race else 0,
+                                   live=s is not None and s.status == ACStatus.LIVE)
             self.timing.update(now, b.cars)
             self.standings_rows = self.timing.standings(now, b.cars, self.is_race, 0)
             self.standings_changed.emit(self.standings_rows)

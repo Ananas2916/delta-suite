@@ -50,6 +50,56 @@ def race_laps_remaining(race_laps: int | None, laps_done: int, time_left_s: floa
     return 0
 
 
+@dataclass(frozen=True)
+class RaceProgress:
+    """A che punto è la gara, dal giro del leader (come le grafiche TV)."""
+
+    lap: int                    # giro in corso del leader (1 = primo)
+    total: int | None           # giri della gara; None se a tempo o senza limite
+    to_go: int | None           # giri che mancano compreso quello in corso (stimati se a tempo); None se non si sa
+    time_left_s: float | None   # tempo rimasto della sessione, se ha un limite
+    estimated: bool = False
+
+    @property
+    def lap_text(self) -> str:
+        return f"{self.lap}/{self.total}" if self.total else str(self.lap)
+
+    @property
+    def to_go_text(self) -> str:
+        if self.to_go is None:
+            return "—"
+        if self.to_go == 0:
+            return "FINITA"
+        if self.to_go == 1:
+            return "ULTIMO GIRO"
+        return f"{'~' if self.estimated else ''}{self.to_go} giri"
+
+
+def race_progress(race_laps: int, leader_done: int, time_left_ms: float | None, lap_s: float | None,
+                  is_race: bool, extra_lap: bool = False) -> RaceProgress:
+    """Giri della gara (numberOfLaps di AC) o, a tempo, stima dal giro medio: allo scadere si chiude il giro in
+    corso, più uno se il server ha il giro in più."""
+    time_left = time_left_ms / 1000 if time_left_ms is not None and time_left_ms > 0 else None
+    lap = leader_done + 1
+    if is_race and race_laps > 0:
+        return RaceProgress(min(lap, race_laps), race_laps, max(0, race_laps - leader_done), time_left)
+    if is_race and time_left is not None and lap_s:
+        to_go = int(math.ceil(time_left / lap_s)) + (1 if extra_lap else 0)
+        return RaceProgress(lap, None, max(1, to_go), time_left, estimated=True)
+    return RaceProgress(lap, None, None, time_left)
+
+
+def race_progress_for(s, cars, is_race: bool, extra_lap: bool = False) -> RaceProgress:
+    """RaceProgress da un campione e dalle auto dell'app CSP: il giro è quello del leader, se si conosce."""
+    leader_done, lap_ms = s.completed_laps, s.last_lap_ms or s.best_lap_ms
+    leader = min((c for c in cars or [] if c.connected and c.race_pos > 0), key=lambda c: c.race_pos, default=None)
+    if leader is not None:
+        leader_done = leader.lap_count
+        lap_ms = leader.last_lap_ms or leader.best_lap_ms or lap_ms
+    return race_progress(s.session_laps, leader_done, s.session_time_left, lap_ms / 1000 if lap_ms > 0 else None,
+                         is_race, extra_lap)
+
+
 def fuel_plan(fuel_now: float, per_lap: float, laps_remaining: int, tank: float,
               laps_done: int, margin_laps: float = 1.0) -> FuelPlan:
     needed = (laps_remaining + margin_laps) * per_lap

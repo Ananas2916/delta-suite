@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
 from hub_core.ac.onboard_feed import (
     DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, ViewRequest, camera_menu,
 )
-from hub_core.model import ACStatus
 from ui import race_view as rv
 from ui.race_view import STALE_S
 from ui.theme import C
@@ -207,7 +206,6 @@ class OnboardPage(QWidget):
     def _on_session(self, info: dict):
         self._fill_cars([])
         self.gps.clear_trail()
-        self.gps.set_map(rv.track_map_for(info))
 
     def _sync_cameras(self):
         """Aggiorna gli elenchi quando l'app trova (o cambia) le telecamere F6 dell'auto."""
@@ -283,9 +281,7 @@ class OnboardPage(QWidget):
         self.info.setText(rv.car_info_html(self.hub, s, fpl))
         self.alerts.setText(rv.alerts_html(s, alerts))
         rings = self._view_rings()
-        if s is not None and s.status == ACStatus.LIVE:
-            self.gps.add_trail(s.car_x, s.car_z)
-        self.gps.set_cars(rv.gps_cars(self.hub, s, rings))
+        rv.update_gps(self.hub, self.gps, s, rings)
         self.timing.fill(rv.timing_rows(self.hub, s, rings))
         self._fill_status(live_any)
 
