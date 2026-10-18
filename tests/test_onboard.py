@@ -27,6 +27,15 @@ def test_onboard_layout_matches_lua_in_order():
     assert len(ob.CAMERAS) == 8
 
 
+def test_lua_local_functions_defined_before_use():
+    # una local function chiamata prima della sua definizione in Lua è una globale nil: errore solo in AC
+    lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
+    code = "\n".join(line.split("--", 1)[0] for line in lua.splitlines())
+    for m in re.finditer(r"^local function (\w+)", code, re.M):
+        first_use = re.search(rf"(?<![\w.:]){m.group(1)}\(", code)
+        assert first_use.start() > m.start(), f"{m.group(1)} usata prima di essere definita"
+
+
 def test_reads_the_frame_before_the_latest():
     assert ob.readable_frame(0) is None and ob.readable_frame(1) is None
     assert ob.readable_frame(5) == 4

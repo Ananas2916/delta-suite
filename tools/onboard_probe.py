@@ -2,7 +2,9 @@
 Prova del video onboard senza interfaccia: con AC in pista e l'app CSP caricata, chiede all'app
 curve di colore, trasporti, qualità e telecamere diverse e salva un fotogramma per ciascuna prova.
 
-    python tools/onboard_probe.py <cartella di uscita> [secondi per prova]
+    python tools/onboard_probe.py <cartella di uscita> [secondi per prova] [trasporti]
+
+Con "trasporti" come terzo argomento si provano solo condivisa/memoria/file per ogni qualità.
 
 Stampa per ogni prova i fotogrammi al secondo ricevuti, gli FPS del gioco, il tempo di render
 dichiarato dall'app, il peso del fotogramma e lo stato dell'app (via usata: condivisa, memoria o file;
@@ -64,6 +66,7 @@ def save(out: Path, name: str, frame) -> None:
 def main():
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "onboard_probe")
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
+    only_transports = len(sys.argv) > 3 and sys.argv[3] == "trasporti"
     out.mkdir(parents=True, exist_ok=True)
     feed = OnboardFeed()
     t0 = time.monotonic()
@@ -76,7 +79,7 @@ def main():
     rate, _, inf, gfps, kb = run(feed, seconds, enabled=False)
     print(line("video spento", rate, inf, gfps, kb))
 
-    for tonemap, exposure in ((TONEMAP_FILMIC, 1.6), (TONEMAP_FILMIC, 1.3), (TONEMAP_GAMMA, 1.6),
+    for tonemap, exposure in () if only_transports else ((TONEMAP_FILMIC, 1.6), (TONEMAP_FILMIC, 1.3), (TONEMAP_GAMMA, 1.6),
                               (TONEMAP_YEBIS, 1.0), (TONEMAP_YEBIS, 1.6)):
         rate, frame, inf, gfps, kb = run(feed, seconds, exposure=exposure, tonemap=tonemap)
         print(line(f"T-cam {TONE_NAMES[tonemap]} esp. {exposure}", rate, inf, gfps, kb))
@@ -92,7 +95,7 @@ def main():
             elif transport == TRANSPORT_SHARED and feed._shared is not None:
                 print(f"  texture condivisa aperta sulla GPU {feed._shared.adapter_index}")
 
-    for cam, (key, _name) in enumerate(CAMERAS):
+    for cam, (key, _name) in enumerate([] if only_transports else CAMERAS):
         rate, frame, inf, gfps, kb = run(feed, seconds, camera=cam)
         print(line(f"telecamera {cam} {key}", rate, inf, gfps, kb))
         save(out, f"cam{cam}_{key}", frame)

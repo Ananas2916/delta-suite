@@ -252,6 +252,15 @@ float4 main(PS_IN pin) {
   return float4(saturate(c), 1);
 }]]
 
+local function avg(a, b) return (a + b) * 0.5 end
+
+-- campo che può mancare nelle versioni di CSP più vecchie (su una struct ffi leggerlo è un errore)
+local function field(obj, name)
+  local ok, v = pcall(function () return obj[name] end)
+  if ok then return v end
+  return nil
+end
+
 local function freeShot()
   if shot then shot:dispose() end
   if shotCanvas then shotCanvas:dispose() end
@@ -310,15 +319,6 @@ local function makeShot(w, h, yebis, shared, key)
   end
   shotCanvas = shotCanvas or ui.ExtraCanvas(vec2(w, h))
   shotW, shotH, shotKey = w, h, key
-end
-
-local function avg(a, b) return (a + b) * 0.5 end
-
--- campo che può mancare nelle versioni di CSP più vecchie (su una struct ffi leggerlo è un errore)
-local function field(obj, name)
-  local ok, v = pcall(function () return obj[name] end)
-  if ok then return v end
-  return nil
 end
 
 -- telecamera montata sull'auto: posizione, direzione, alto, fov (stesso ordine di CAMERAS in onboard_feed.py)
