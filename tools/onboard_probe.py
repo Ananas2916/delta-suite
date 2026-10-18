@@ -67,7 +67,10 @@ def save(out: Path, name: str, frame) -> None:
     if frame.kind == "jpg":
         (out / f"{name}.jpg").write_bytes(frame.data)
         return
-    from PyQt6.QtGui import QImage
+    try:
+        from PyQt6.QtGui import QImage
+    except ImportError:         # python di sistema senza il venv: niente PNG, le misure restano
+        return
     fmt = QImage.Format.Format_RGBX8888 if frame.kind == "rgba" else QImage.Format.Format_RGB32
     QImage(frame.data, frame.width, frame.height, frame.stride, fmt).save(str(out / f"{name}.png"))
 
@@ -107,11 +110,11 @@ def main():
         for transport in (TRANSPORT_SHARED, TRANSPORT_MEMORY, TRANSPORT_FILE):
             rate, frame, inf, gfps, kb = run(feed, seconds, quality=q, transport=transport)
             print(line(f"{name} {TRANSPORT_NAMES[transport]}", rate, inf, gfps, kb))
-            save(out, f"q{q}_{TRANSPORT_NAMES[transport]}", frame)
             if transport == TRANSPORT_SHARED and feed.shared_error:
                 print(f"  texture condivisa non usabile: {feed.shared_error}")
             elif transport == TRANSPORT_SHARED and feed._shared[0] is not None:
                 print(f"  texture condivisa aperta sulla GPU {feed._shared[0].adapter_index}")
+            save(out, f"q{q}_{TRANSPORT_NAMES[transport]}", frame)
 
     f6 = feed.f6_cameras()      # l'app le conta ogni 2 s, anche a video spento
     names = [key for key, _name in CAMERAS] + [f"f6 {name}" for name in f6]
