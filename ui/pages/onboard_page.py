@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from hub_core import car_status as cs
-from hub_core.ac_shared_memory import ACStatus, gear_label
+from hub_core.model import ACStatus, gear_label
 from hub_core.csp_bridge import find_ac_root
 from hub_core.onboard_feed import (
     DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, Frame, OnboardFeed, ViewRequest,

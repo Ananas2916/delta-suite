@@ -2,7 +2,8 @@ import time
 
 import pytest
 
-from hub_core.ac_shared_memory import ACStatus, SPageFileGraphic, SPageFilePhysics, SPageFileStatic
+from hub_core.ac_shared_memory import SPageFileGraphic, SPageFilePhysics, SPageFileStatic, put_wstr
+from hub_core.model import ACStatus
 from hub_core.session_recording import ReplaySource, SessionRecorder, read_samples
 
 
@@ -15,7 +16,9 @@ def _pages(i):
 
 def test_roundtrip(tmp_path):
     st = SPageFileStatic()
-    st.carModel, st.track, st.trackSPlineLength, st.sectorCount = "car_x", "track_y", 3000.0, 3
+    put_wstr(st, "carModel", "car_x")
+    put_wstr(st, "track", "track_y")
+    st.trackSPlineLength, st.sectorCount = 3000.0, 3
     path = tmp_path / "s.dsr"
     rec = SessionRecorder(path, st)
     for i in range(500):

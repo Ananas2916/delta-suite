@@ -14,8 +14,7 @@ import time
 
 import numpy as np
 
-from hub_core.ac_shared_memory import ACSessionType, ACStatus
-from hub_core.telemetry_receiver import TelemetrySample
+from hub_core.model import ACSessionType, ACStatus, TelemetrySample
 
 G = 9.81
 GEAR_TOP_KMH = (85.0, 125.0, 165.0, 205.0, 245.0, 290.0)

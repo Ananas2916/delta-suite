@@ -14,75 +14,17 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from dataclasses import dataclass
 
 from hub_core.ac_shared_memory import (
     ACSharedMemory,
-    ACSessionType,
-    ACStatus,
     SharedMemoryNotAvailable,
     SPageFileGraphic,
     SPageFilePhysics,
     SPageFileStatic,
-    gear_label,
+    wstr,
 )
+from hub_core.model import ACSessionType, ACStatus, Quad, TelemetrySample, gear_label
 
-Quad = tuple[float, float, float, float]   # valori per ruota: FL, FR, RL, RR
-
-
-@dataclass(frozen=True)
-class TelemetrySample:
-    """Un campione di telemetria, indipendente dalla sorgente (AC o simulatore)."""
-
-    t: float                    # time.perf_counter() al momento della lettura
-    packet_id: int
-    status: ACStatus
-    session_type: ACSessionType
-    # guida
-    speed_kmh: float
-    rpm: int
-    gear: int                   # convenzione AC: 0=R, 1=N, 2=1a
-    gas: float                  # 0..1
-    brake: float                # 0..1
-    clutch: float               # 0..1 (1 = frizione rilasciata)
-    steer_angle: float
-    fuel: float                 # litri
-    acc_g: tuple[float, float, float]   # laterale, verticale, longitudinale
-    # gomme / freni / telaio
-    tyre_core_temp: Quad        # °C
-    tyre_pressure: Quad         # psi
-    tyre_wear: Quad
-    wheel_slip: Quad
-    brake_temp: Quad            # °C
-    suspension_travel: Quad     # m
-    ride_height: tuple[float, float]    # anteriore, posteriore (m)
-    tc: float
-    abs: float
-    drs: float
-    kers_charge: float
-    tyres_out: int
-    air_temp: float
-    road_temp: float
-    # timing
-    lap_time_ms: int
-    last_lap_ms: int
-    best_lap_ms: int
-    completed_laps: int
-    lap_position: float         # 0..1 lungo il giro
-    sector_index: int
-    last_sector_ms: int
-    is_in_pit: bool
-    position: int
-    car_x: float
-    car_z: float
-    # campi aggiunti dopo: hanno un default così le sorgenti più vecchie (demo) restano valide
-    flag: int = 0               # ACFlag
-    session_time_left: float = -1.0   # ms, negativo se la sessione non ha limite
-    brake_bias: float = 0.0     # 0..1 quota anteriore
-    engine_brake: int = 0
-    car_damage: tuple[float, ...] = (0.0,) * 5   # zone: anteriore, posteriore, sinistra, destra, centro
-    tyre_dirt: Quad = (0.0,) * 4
-    pit_limiter: bool = False
 
 
 def _quad(arr) -> Quad:
@@ -149,19 +91,20 @@ def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) ->
 
 
 def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
-    track = st.track + (f" ({st.trackConfiguration})" if st.trackConfiguration else "")
+    track_id, config, car = wstr(st.track), wstr(st.trackConfiguration), wstr(st.carModel)
+    track = track_id + (f" ({config})" if config else "")
     return {
         "source": source,
-        "car": st.carModel,
-        "car_id": st.carModel,
+        "car": car,
+        "car_id": car,
         "track": track,
-        "track_id": st.track,
-        "track_config": st.trackConfiguration,
+        "track_id": track_id,
+        "track_config": config,
         "track_length": float(st.trackSPlineLength),
         "max_rpm": int(st.maxRpm),
         "max_fuel": float(st.maxFuel),
         "sector_count": int(st.sectorCount),
-        "player": f"{st.playerName} {st.playerSurname}".strip(),
+        "player": f"{wstr(st.playerName)} {wstr(st.playerSurname)}".strip(),
         "damage_rate": float(st.aidMechanicalDamage),   # 0 = danni disattivati
         "suspension_max_travel": list(st.suspensionMaxTravel),
     }

@@ -8,11 +8,11 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox,
+    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QProgressBar, QPushButton, QSpinBox,
     QVBoxLayout, QWidget,
 )
 
-from hub_core.ac_shared_memory import ACStatus, gear_label
+from hub_core.model import ACStatus, gear_label
 from hub_core.race_strategy import best_sectors, fmt_ms
 from hub_core.session_recording import recordings_dir
 from ui.hub_state import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY

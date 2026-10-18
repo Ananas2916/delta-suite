@@ -29,6 +29,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from hub_core.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+
 ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v6"
 ONBOARD_VERSION = 6
 END_MARKER = 0x44534F31   # 'DSO1'
@@ -246,9 +248,8 @@ class OnboardFeed:
     def connect(self) -> bool:
         if self._view is not None:
             return True
-        from hub_core.csp_bridge import _FILE_MAP_READ, _FILE_MAP_WRITE, _View
         try:
-            self._view = _View(ONBOARD_TAG, OnboardShared, _FILE_MAP_READ | _FILE_MAP_WRITE)
+            self._view = MappedView(ONBOARD_TAG, OnboardShared, FILE_MAP_READ | FILE_MAP_WRITE)
         except (FileNotFoundError, OSError):
             return False
         self.folder.mkdir(parents=True, exist_ok=True)

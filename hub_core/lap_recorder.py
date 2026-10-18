@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from hub_core.ac_shared_memory import ACStatus
-from hub_core.telemetry_receiver import TelemetrySample
+from hub_core.model import ACStatus, TelemetrySample
 
 CHANNELS = ("t", "dist", "speed", "gas", "brake", "rpm", "gear", "steer", "x", "z", "lat_g", "lon_g")
 

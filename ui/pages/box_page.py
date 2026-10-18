@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QGridLayout, QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
+    QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
 from hub_core import csp_bridge

@@ -5,7 +5,7 @@ from hub_core import car_status as cs
 from hub_core import csp_bridge as cb
 from hub_core import onboard_feed as ob
 from hub_core.session_recording import read_samples
-from tests.conftest import REAL_LAP
+from tests.conftest import REAL_LAP, create_mapping, windows_only
 
 INFO = {"damage_rate": 1.0, "suspension_max_travel": [0.1] * 4}
 
@@ -103,17 +103,9 @@ def test_camera_menu_groups_and_indices():
     assert "Auto (F6)" not in [t for t, _ in ob.camera_menu([])]
 
 
+@windows_only
 def test_onboard_roundtrip_with_fake_app(tmp_path):
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    k32.CreateFileMappingW.restype = ctypes.c_void_p
-    k32.CreateFileMappingW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
-                                       ctypes.c_uint32, ctypes.c_wchar_p]
-    k32.MapViewOfFile.restype = ctypes.c_void_p
-    k32.MapViewOfFile.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
-                                  ctypes.c_size_t]
-    h = k32.CreateFileMappingW(ctypes.c_void_p(-1), None, 0x04, 0, ctypes.sizeof(ob.OnboardShared), ob.ONBOARD_TAG)
-    assert h
-    app = ob.OnboardShared.from_address(k32.MapViewOfFile(h, 0xF001F, 0, 0, 0))
+    app = create_mapping(ob.ONBOARD_TAG, ob.OnboardShared)
 
     feed = ob.OnboardFeed(tmp_path / "onboard")
     views = [ob.ViewRequest(True, 3, -1, 640, 360, 15), None, ob.ViewRequest(True, 9, 4, 480, 270, 10)]

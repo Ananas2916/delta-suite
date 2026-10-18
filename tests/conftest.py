@@ -1,3 +1,4 @@
+import ctypes
 import os
 import sys
 from pathlib import Path
@@ -8,10 +9,29 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DELTA_MUTE", "1")
 
-from hub_core.ac_shared_memory import ACSessionType, ACStatus  # noqa: E402
-from hub_core.telemetry_receiver import TelemetrySample  # noqa: E402
+from hub_core.model import ACSessionType, ACStatus, TelemetrySample  # noqa: E402
 
 DATA = ROOT / "tests" / "data"
+
+# prove con file mapping vere (come quelle di AC e dell'app CSP): solo su Windows
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="file mapping di Windows")
+
+
+def create_mapping(tag: str, struct_type):
+    """Crea una mapping come farebbe l'app Lua (INVALID_HANDLE_VALUE = file di paging) e la restituisce
+    come struttura ctypes. Resta aperta fino alla fine del processo di test."""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileMappingW.restype = ctypes.c_void_p
+    k32.CreateFileMappingW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+                                       ctypes.c_uint32, ctypes.c_wchar_p]
+    k32.MapViewOfFile.restype = ctypes.c_void_p
+    k32.MapViewOfFile.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
+                                  ctypes.c_size_t]
+    h = k32.CreateFileMappingW(ctypes.c_void_p(-1), None, 0x04, 0, ctypes.sizeof(struct_type), tag)
+    assert h
+    return struct_type.from_address(k32.MapViewOfFile(h, 0xF001F, 0, 0, 0))
+
+
 REAL_LAP = DATA / "redbullring_bmw_m4_gt3_1lap.dsr"
 
 _BASE = dict(

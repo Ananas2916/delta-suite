@@ -17,42 +17,37 @@ con la nostra dimensione e acs.exe si aggancerebbe a quella.
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
-from enum import IntEnum
+
+from hub_core.win32 import FILE_MAP_READ, MappedView
 
 c_float = ctypes.c_float
 c_int = ctypes.c_int
-c_wchar = ctypes.c_wchar
+# wchar di Windows a 2 byte: fuori da Windows c_wchar ne ha 4 e il layout non tornerebbe (registrazioni
+# lette nei test); lì si usano interi a 16 bit e wstr() li riporta a stringa
+c_wchar = ctypes.c_wchar if ctypes.sizeof(ctypes.c_wchar) == 2 else ctypes.c_uint16
 
 
-# --------------------------------------------------------------------------- enum
-
-class ACStatus(IntEnum):
-    OFF = 0
-    REPLAY = 1
-    LIVE = 2
-    PAUSE = 3
-
-
-class ACSessionType(IntEnum):
-    UNKNOWN = -1
-    PRACTICE = 0
-    QUALIFY = 1
-    RACE = 2
-    HOTLAP = 3
-    TIME_ATTACK = 4
-    DRIFT = 5
-    DRAG = 6
+def wstr(value) -> str:
+    """Testo di un campo wchar[] delle pagine di AC, su qualunque sistema."""
+    if isinstance(value, str):
+        return value
+    chars = []
+    for code in value:
+        if code == 0:
+            break
+        chars.append(chr(code))
+    return "".join(chars)
 
 
-class ACFlag(IntEnum):
-    NONE = 0
-    BLUE = 1
-    YELLOW = 2
-    BLACK = 3
-    WHITE = 4
-    CHECKERED = 5
-    PENALTY = 6
+def put_wstr(struct: ctypes.Structure, name: str, text: str) -> None:
+    """Scrive un campo wchar[] (per test e registrazioni create a mano), su qualunque sistema."""
+    if c_wchar is ctypes.c_wchar:
+        setattr(struct, name, text)
+        return
+    arr = getattr(struct, name)
+    codes = [ord(ch) for ch in text[:len(arr) - 1]]
+    for i in range(len(arr)):
+        arr[i] = codes[i] if i < len(codes) else 0
 
 
 # ---------------------------------------------------------------------- strutture
@@ -212,41 +207,6 @@ GRAPHICS_TAG = "Local\\acpmf_graphics"
 STATIC_TAG = "Local\\acpmf_static"
 
 
-# -------------------------------------------------------------------- Win32 API
-
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-
-_FILE_MAP_READ = 0x0004
-
-_kernel32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
-_kernel32.OpenFileMappingW.restype = wintypes.HANDLE
-_kernel32.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
-                                    wintypes.DWORD, ctypes.c_size_t]
-_kernel32.MapViewOfFile.restype = ctypes.c_void_p
-_kernel32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
-_kernel32.UnmapViewOfFile.restype = wintypes.BOOL
-_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-_kernel32.CloseHandle.restype = wintypes.BOOL
-
-
-class _MEMORY_BASIC_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("BaseAddress", ctypes.c_void_p),
-        ("AllocationBase", ctypes.c_void_p),
-        ("AllocationProtect", wintypes.DWORD),
-        ("PartitionId", wintypes.WORD),
-        ("RegionSize", ctypes.c_size_t),
-        ("State", wintypes.DWORD),
-        ("Protect", wintypes.DWORD),
-        ("Type", wintypes.DWORD),
-    ]
-
-
-_kernel32.VirtualQuery.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MEMORY_BASIC_INFORMATION),
-                                   ctypes.c_size_t]
-_kernel32.VirtualQuery.restype = ctypes.c_size_t
-
-
 class SharedMemoryNotAvailable(RuntimeError):
     """La mapping non esiste: AC non è in esecuzione (o non è ancora in sessione)."""
 
@@ -256,21 +216,13 @@ class _MappedPage:
 
     def __init__(self, tag: str, struct_type: type[ctypes.Structure]):
         self._struct_type = struct_type
-        self._view = None
-        self._handle = _kernel32.OpenFileMappingW(_FILE_MAP_READ, False, tag)
-        if not self._handle:
-            raise SharedMemoryNotAvailable(f"{tag} non trovata (errore {ctypes.get_last_error()})")
-        self._view = _kernel32.MapViewOfFile(self._handle, _FILE_MAP_READ, 0, 0, 0)
-        if not self._view:
-            err = ctypes.get_last_error()
-            _kernel32.CloseHandle(self._handle)
-            self._handle = None
-            raise OSError(err, f"MapViewOfFile fallita su {tag}")
-
+        try:
+            self._map = MappedView(tag, struct_type, FILE_MAP_READ, size=0)   # 0 = tutta la mapping
+        except FileNotFoundError as exc:
+            raise SharedMemoryNotAvailable(str(exc)) from None
+        self._view = self._map.ptr
         # Non leggere mai oltre la dimensione reale della mapping.
-        mbi = _MEMORY_BASIC_INFORMATION()
-        _kernel32.VirtualQuery(self._view, ctypes.byref(mbi), ctypes.sizeof(mbi))
-        self._read_size = min(mbi.RegionSize, ctypes.sizeof(struct_type))
+        self._read_size = min(self._map.region_size(), ctypes.sizeof(struct_type))
 
     def read(self) -> ctypes.Structure:
         """Copia la pagina corrente in una nuova struttura (snapshot indipendente)."""
@@ -294,12 +246,10 @@ class _MappedPage:
         return out
 
     def close(self) -> None:
-        if self._view:
-            _kernel32.UnmapViewOfFile(self._view)
+        if getattr(self, "_map", None) is not None:
+            self._map.close()
+            self._map = None
             self._view = None
-        if self._handle:
-            _kernel32.CloseHandle(self._handle)
-            self._handle = None
 
     def __del__(self):
         self.close()
@@ -343,12 +293,3 @@ class ACSharedMemory:
 
     def __exit__(self, *exc) -> None:
         self.close()
-
-
-def gear_label(gear: int) -> str:
-    """Converte la marcia di AC (0=R, 1=N, 2=1a...) in etichetta leggibile."""
-    if gear == 0:
-        return "R"
-    if gear == 1:
-        return "N"
-    return str(gear - 1)

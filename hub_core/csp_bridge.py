@@ -15,10 +15,15 @@ import ctypes
 import os
 import shutil
 import sys
-import winreg
-from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from hub_core.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+
+try:
+    import winreg
+except ImportError:          # fuori da Windows: niente registro, AC non si trova
+    winreg = None
 
 OUT_TAG = "Local\\DeltaSuite_Bridge_Out_v1"
 IN_TAG = "Local\\DeltaSuite_Bridge_In_v1"
@@ -170,46 +175,14 @@ def state_from_struct(o: BridgeOut) -> BridgeState:
     )
 
 
-# ----------------------------------------------------------------------- Win32
-
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_FILE_MAP_WRITE, _FILE_MAP_READ = 0x0002, 0x0004
-_k32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
-_k32.OpenFileMappingW.restype = wintypes.HANDLE
-_k32.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
-_k32.MapViewOfFile.restype = ctypes.c_void_p
-_k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
-_k32.CloseHandle.argtypes = [wintypes.HANDLE]
-
-
-class _View:
-    """Vista su una mapping creata dall'app Lua (qui non si crea mai nulla)."""
-
-    def __init__(self, tag: str, struct_type, access: int):
-        self.handle = _k32.OpenFileMappingW(access, False, tag)
-        if not self.handle:
-            raise FileNotFoundError(tag)
-        self.ptr = _k32.MapViewOfFile(self.handle, access, 0, 0, ctypes.sizeof(struct_type))
-        if not self.ptr:
-            _k32.CloseHandle(self.handle)
-            raise OSError(ctypes.get_last_error(), f"MapViewOfFile fallita su {tag}")
-        self.struct = struct_type.from_address(self.ptr)
-
-    def close(self):
-        if self.ptr:
-            _k32.UnmapViewOfFile(self.ptr)
-            self.ptr = None
-        if self.handle:
-            _k32.CloseHandle(self.handle)
-            self.handle = None
-
+# ----------------------------------------------------------------------- ponte
 
 class CSPBridge:
     """Collegamento all'app Lua. Tutti i metodi sono non bloccanti."""
 
     def __init__(self):
-        self._out: _View | None = None
-        self._in: _View | None = None
+        self._out: MappedView | None = None
+        self._in: MappedView | None = None
         self.layout_error: str | None = None
 
     @property
@@ -220,11 +193,11 @@ class CSPBridge:
         if self._out is not None:
             return True
         try:
-            out = _View(OUT_TAG, BridgeOut, _FILE_MAP_READ)
+            out = MappedView(OUT_TAG, BridgeOut, FILE_MAP_READ)
         except (FileNotFoundError, OSError):
             return False
         try:
-            inp = _View(IN_TAG, BridgeIn, _FILE_MAP_READ | _FILE_MAP_WRITE)
+            inp = MappedView(IN_TAG, BridgeIn, FILE_MAP_READ | FILE_MAP_WRITE)
         except (FileNotFoundError, OSError):
             out.close()
             return False
@@ -282,6 +255,8 @@ def bundled_app_dir() -> Path:
 def find_ac_root() -> Path | None:
     """Cartella di installazione di AC: librerie di Steam dal registro, poi percorso standard."""
     candidates: list[Path] = []
+    if winreg is None:
+        return None
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as k:
             steam = Path(winreg.QueryValueEx(k, "SteamPath")[0])

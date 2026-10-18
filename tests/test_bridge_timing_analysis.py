@@ -6,6 +6,7 @@ import pytest
 from hub_core import csp_bridge as cb
 from hub_core.lap_analysis import compare_laps, find_corners
 from hub_core.timing import TimingTower
+from tests.conftest import create_mapping, windows_only
 from ui.hub_data import validate_proposal
 
 
@@ -24,24 +25,12 @@ def test_lua_layout_matches_python():
         assert f" {name};" in lua or f" {name}[" in lua, name
 
 
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_k32.CreateFileMappingW.restype = ctypes.c_void_p
-_k32.CreateFileMappingW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
-                                    ctypes.c_uint32, ctypes.c_wchar_p]
-_k32.MapViewOfFile.restype = ctypes.c_void_p
-_k32.MapViewOfFile.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_size_t]
-
-
 def _fake_lua_app():
-    """Crea le due mapping come farebbe l'app Lua (INVALID_HANDLE_VALUE = file di paging)."""
-    views = []
-    for tag, st in ((cb.OUT_TAG, cb.BridgeOut), (cb.IN_TAG, cb.BridgeIn)):
-        h = _k32.CreateFileMappingW(ctypes.c_void_p(-1), None, 0x04, 0, ctypes.sizeof(st), tag)
-        assert h
-        views.append((h, st.from_address(_k32.MapViewOfFile(h, 0xF001F, 0, 0, 0))))
-    return views
+    """Le due mapping come le crea l'app Lua."""
+    return [(None, create_mapping(tag, st)) for tag, st in ((cb.OUT_TAG, cb.BridgeOut), (cb.IN_TAG, cb.BridgeIn))]
 
 
+@windows_only
 def test_bridge_roundtrip_with_fake_app():
     (h1, out), (h2, inp) = _fake_lua_app()
     out.version, out.endMarker = cb.VERSION, cb.END_MARKER

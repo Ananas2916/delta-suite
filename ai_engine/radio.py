@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from hub_core import race_strategy as rs
-from hub_core.ac_shared_memory import ACFlag
+from hub_core.model import ACFlag
 from hub_core.lap_recorder import LapData
 from ai_engine.lang import LANGUAGES, Language, same_time, speak_delta, speak_lap_time, speak_number
 from ai_engine.voice import PRIO_HIGH, PRIO_LOW, PRIO_NORMAL, PRIO_URGENT

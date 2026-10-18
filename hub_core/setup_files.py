@@ -10,9 +10,10 @@ from pathlib import Path
 
 def documents_dir() -> Path:
     """Cartella Documenti vera (spesso rediretta su OneDrive), come la usa AC."""
-    buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
-    if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:   # CSIDL_PERSONAL
-        return Path(buf.value)
+    if hasattr(ctypes, "windll"):
+        buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:   # CSIDL_PERSONAL
+            return Path(buf.value)
     return Path.home() / "Documents"
 
 
