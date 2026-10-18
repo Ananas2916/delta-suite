@@ -10,13 +10,14 @@ from __future__ import annotations
 import time
 
 from hub_core.analysis import car_status as cs
-from hub_core.analysis.race_strategy import RaceProgress, fmt_ms, fuel_per_lap, race_progress_for
+from hub_core.analysis.race_strategy import RaceProgress, best_sectors, fmt_ms, fuel_per_lap, race_progress_for
 from hub_core.analysis.track_status import FlagStatus
 from hub_core.analysis.timing import fmt_gap
 from hub_core.model import ACStatus, gear_label
 from ui.theme import C
 from ui.widgets.car_status import LEVEL_COLORS
 from ui.widgets.hybrid import battery_color
+from ui.widgets.sectors import SECTOR_COLORS, fmt_sector
 from ui.widgets.view_panel import VIEW_COLORS
 
 STALE_S = 2.0          # senza fotogrammi nuovi da tanto: il video non è più in diretta
@@ -28,6 +29,13 @@ def live_state(hub):
     fpl = fuel_per_lap(laps) if laps else None
     alerts = cs.car_alerts(s, info, fpl) if s is not None and s.status == ACStatus.LIVE else []
     return s, info, fpl, alerts
+
+
+def sector_views(hub, s):
+    """Riquadri dei settori del giro in corso (o di quello appena chiuso, a inizio giro)."""
+    laps = hub.laps
+    best = best_sectors(laps, hub.live_lap.count) if laps else [None] * hub.live_lap.count
+    return hub.live_lap.views(s, laps[-1].sectors_ms if laps else None, best)
 
 
 def progress(hub, s) -> RaceProgress | None:
@@ -63,13 +71,18 @@ def view_rings(car_indexes: list[int]) -> dict[int, str]:
 
 
 def timing_rows(hub, s, rings: dict[int, str]) -> list[tuple]:
-    rows = [(r.index, str(r.pos), r.driver or f"auto {r.index}", fmt_gap(r),
+    rows = [(r.index, str(r.pos), r.driver or f"auto {r.index}", fmt_gap(r), _interval(r),
              "BOX" if r.in_pit else fmt_ms(r.last_ms), r.is_player, rings.get(r.index))
             for r in hub.standings_rows]
     if not rows and s is not None and s.status == ACStatus.LIVE:     # senza app CSP o in demo: solo tu
-        rows = [(0, str(s.position), hub.session_info.get("player") or "Tu", "-",
+        rows = [(0, str(s.position), hub.session_info.get("player") or "Tu", "-", "-",
                  fmt_ms(s.last_lap_ms), True, rings.get(0))]
     return rows
+
+
+def _interval(r) -> str:
+    """Distacco dall'auto davanti (in gara), "-" per il primo."""
+    return "-" if r.pos == 1 or r.interval_s is None else f"+{r.interval_s:.1f}"
 
 
 def gps_cars(hub, s, rings: dict[int, str]) -> list[dict]:
@@ -181,6 +194,11 @@ def main_hud(hub, s, alerts, idx: int, camera: str, car_text: str) -> dict:
                   ("TEMPO", fmt_ms(s.lap_time_ms), None), ("ULTIMO", fmt_ms(s.last_lap_ms), None),
                   ("MIGLIORE", fmt_ms(s.best_lap_ms), C["purple"])],
     }
+    delta = hub.live_lap.delta_s
+    if delta is not None:
+        hud["times"].append(("DELTA", f"{delta:+.2f}",
+                             C["red"] if delta > 0.05 else C["green"] if delta < -0.05 else None))
+    hud["sectors"] = [(v.label, fmt_sector(v.ms), SECTOR_COLORS[v.state]) for v in sector_views(hub, s)]
     h = cs.hybrid_state(s, info)
     if h is not None:
         hud["battery"], hud["battery_deploy"] = h.charge, h.deploying

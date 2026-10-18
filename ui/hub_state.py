@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 from ai_engine.agent_cli import APIAgent, CLIAgent
 from ai_engine.mcp_server import MCPServer
 from ai_engine.lang import DEFAULT_VOICE, Language, language_of
+from ai_engine.race_calls import RaceContext
 from ai_engine.radio import Msg, RadioConfig, RadioRules
 from ai_engine.stt import DEFAULT_MODEL, make_stt
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
@@ -18,6 +19,7 @@ from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState, find_ac_root
 from hub_core.ac.onboard_feed import OnboardFeed
 from hub_core.ac.track_map import find_ai_lines
 from hub_core.analysis.lap_recorder import LapData
+from hub_core.analysis.live_lap import LiveLap
 from hub_core.analysis.race_strategy import race_progress_for
 from hub_core.analysis.timing import TimingTower, neighbours
 from hub_core.analysis.track_status import TrackWatch
@@ -84,6 +86,7 @@ class HubState(QObject):
         # video onboard dall'app CSP: uno solo, lo usa la pagina visibile (Onboard o Generale)
         self.onboard_feed = OnboardFeed()
         self.track = TrackWatch()           # linea della pista e zone gialle/rosse/blu della sessione
+        self.live_lap = LiveLap()           # parziali e delta live del giro in corso
         self._ptt = False
 
         self.radio_rules = RadioRules(self.load_radio_config(), self.lang)
@@ -111,7 +114,7 @@ class HubState(QObject):
 
     def load_radio_config(self) -> RadioConfig:
         c = RadioConfig()
-        for f in ("lap_times", "fuel", "tyres", "gaps", "flags", "hybrid"):
+        for f in ("lap_times", "fuel", "tyres", "gaps", "flags", "hybrid", "positions", "rivals", "car"):
             setattr(c, f, self.setting(f"radio/{f}", True, bool))
         for f in ("tyre_temp_lo", "tyre_temp_hi", "tyre_press_lo", "tyre_press_hi"):
             setattr(c, f, self.setting(f"radio/{f}", getattr(c, f), float))
@@ -216,6 +219,7 @@ class HubState(QObject):
         self.radio_rules.reset()
         self.timing.reset()
         self.track = self._load_track(info)
+        self.live_lap.reset(info.get("sector_count") or 3)
         self.session_changed.emit(info)
 
     @staticmethod
@@ -232,22 +236,39 @@ class HubState(QObject):
             self.session_id = self.db.new_session(self.session_info)
         self.db.save_lap(self.session_id, lap)
         self.laps = self.laps + [lap]    # lista nuova: i thread MCP leggono senza lock
+        valid = [l for l in self.laps if l.valid]
+        if valid:                        # delta live sul miglior giro valido
+            self.live_lap.set_reference(min(valid, key=lambda l: l.lap_time_ms))
         self.lap_completed.emit(lap)
         self.db_changed.emit()
         if self.radio_active:
             s, b = self.last_sample, self.bridge_state
-            to_go = race_progress_for(s, b.cars if b else [], self.is_race,
-                                      self.session_info.get("extra_lap", False)).to_go if s is not None else None
-            for m in self.radio_rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race, to_go):
+            others = [c.best_lap_ms for c in (b.cars if b else []) if c.index != 0 and c.best_lap_ms > 0]
+            for m in self.radio_rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race,
+                                             self._to_go(s), s.position if s is not None else None,
+                                             min(others) if others else None):
                 self._say(m)
+
+    def _to_go(self, s) -> int | None:
+        if s is None:
+            return None
+        b = self.bridge_state
+        return race_progress_for(s, b.cars if b else [], self.is_race, self.session_info.get("extra_lap", False)).to_go
+
+    def _race_context(self, s) -> RaceContext:
+        b = self.bridge_state
+        return RaceContext(now=time.monotonic(), race=self.is_race, rows=self.standings_rows,
+                           zone_ahead=self.track.zone_ahead(s.lap_position), to_go=self._to_go(s),
+                           cars_known=bool(b and len(b.cars) > 1))
 
     def _on_sample(self, s):
         self.last_sample = s
         self.is_race = s.session_type == ACSessionType.RACE
         if s.status == ACStatus.LIVE:
             self.track.feed_position(s.lap_position, s.car_x, s.car_z)
+            self.live_lap.feed(s, self.session_info.get("track_length") or 0.0)
         if self.radio_active and s.status == ACStatus.LIVE:
-            for m in self.radio_rules.on_sample(s, self.session_info):
+            for m in self.radio_rules.on_sample(s, self.session_info, self._race_context(s)):
                 self._say(m)
         self.sample.emit(s)
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ai_engine.phrases_race import phrases_for
+
 
 @dataclass(frozen=True)
 class Language:
@@ -171,6 +173,10 @@ _PT = {
                   "setor, subesterço, sobre-esterço.",
 }
 
+# frasi della radio di gara (posizioni, avversari, gialle, fine gara...): tutte le lingue in un file a parte
+for _phrases, _code in ((_IT, "it"), (_EN, "en"), (_ES, "es"), (_FR, "fr"), (_PT, "pt")):
+    _phrases.update(phrases_for(_code))
+
 LANGUAGES = {
     "it": Language("it", "italiano", "it", _IT),
     "en-us": Language("en", "English", "en-us", _EN),
@@ -252,18 +258,24 @@ _DELTA = {
 }
 
 
-def speak_delta(delta_s: float, lang: Language) -> str:
-    (plus, minus), same, one, many, (sec1, secn), sep = _DELTA[lang.code]
-    sign = plus if delta_s > 0 else minus
-    tenths = int(round(abs(delta_s) * 10))
+def speak_amount(seconds: float, lang: Language) -> str:
+    """Un tempo senza segno: 0.3 → "3 decimi", 0.1 → "un decimo", 1.4 → "1 e 4" ("" se è sotto il decimo)."""
+    _signs, _same, one, many, (sec1, secn), sep = _DELTA[lang.code]
+    tenths = int(round(abs(seconds) * 10))
     if tenths == 0:
-        return same
+        return ""
     if tenths < 10:
-        return f"{sign} {one if tenths == 1 else many.format(n=tenths)}"
+        return one if tenths == 1 else many.format(n=tenths)
     secs, d = divmod(tenths, 10)
     if d == 0:
-        return f"{sign} {secs} {sec1 if secs == 1 else secn}"
-    return f"{sign} {secs} {sep} {d}"
+        return f"{secs} {sec1 if secs == 1 else secn}"
+    return f"{secs} {sep} {d}"
+
+
+def speak_delta(delta_s: float, lang: Language) -> str:
+    (plus, minus), same = _DELTA[lang.code][:2]
+    amount = speak_amount(delta_s, lang)
+    return f"{plus if delta_s > 0 else minus} {amount}" if amount else same
 
 
 def same_time(lang: Language) -> str:

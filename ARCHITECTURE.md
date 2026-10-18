@@ -15,7 +15,9 @@ hub_core/model.py    tipi comuni: TelemetrySample, CarEntry, stati e bandiere di
 hub_core/analysis    calcoli: giri, curve, classifica, strategia, dinamica, stato vettura
 hub_core/database.py archivio DuckDB          hub_core/demo_source.py simulatore
         ▼
-ai_engine            ingegnere (Claude Code / Codex / API), MCP, radio, voce, trascrizione
+ai_engine            ingegnere (Claude Code / Codex / API), MCP, radio, voce, trascrizione; radio senza AI in
+                     radio.py (giro, carburante, gomme, bandiere) + race_calls.py (chiamate di gara stile
+                     giochi F1, frasi in phrases_race.py)
 ui                   PyQt6: stato condiviso, thread, widget, una pagina per modulo
 ```
 
@@ -52,7 +54,8 @@ creano mapping vere sono marcati `windows_only`.
 
 `lap_recorder.py` (giri e settori), `lap_analysis.py` (curve automatiche, confronto), `timing.py`
 (classifica, gap, interval), `race_strategy.py` (carburante, pit, degrado gomme, giri mancanti),
-`vehicle_dynamics.py` (Pacejka, cinematica), `car_status.py` (danni, gomme, freni, sospensioni, batteria →
+`vehicle_dynamics.py` (Pacejka, cinematica), `live_lap.py` (parziali del giro in corso, delta live sul miglior
+giro), `car_status.py` (danni, gomme, freni, sospensioni, batteria →
 avvisi; anche per l'MCP), `track_status.py` (linea della pista per posizione sul giro, velocità tipiche, auto
 lente o ferme → tratti gialli/rossi, blu, bandiera per il pilota). `HubState.track` ne tiene una per sessione:
 la linea AI arriva a inizio sessione, le zone si aggiornano a ogni stato dell'app CSP.

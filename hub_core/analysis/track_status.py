@@ -28,6 +28,7 @@ ZONE_HOLD_S = 3.0                # la zona resta un po' dopo che l'auto è ripar
 BLUE_BEHIND = 0.02
 WARN_AHEAD_M = 800.0             # gialla per il pilota se la zona è entro questa distanza davanti
 AC_FLAG_FRESH_S = 8.0            # gialla di AC senza auto lente che la confermino: vale solo per qualche secondo
+GREEN_S = 5.0                    # dopo una gialla: bandiera verde per qualche secondo, come in TV
 
 ZONE_COLORS = ("yellow", "red", "blue")
 
@@ -142,6 +143,7 @@ class TrackWatch:
         self.zones: list[Zone] = []
         self._slow_since: dict[int, tuple[float, str, float]] = {}   # auto → (ultimo istante lenta, tipo, pos)
         self._ac_flag, self._ac_flag_t = ACFlag.NONE, -1e9
+        self._warned_t = -1e9            # ultima volta che il pilota aveva una gialla
 
     @property
     def line(self) -> TrackLine | None:
@@ -192,7 +194,15 @@ class TrackWatch:
 
     def player_flag(self, player_pos: float | None, ac_flag: int, now: float, cars_known: bool) -> FlagStatus | None:
         """Bandiera per il pilota. La gialla viene dalle zone davanti; quella di AC conta da sola solo se non ci
-        sono i dati delle altre auto, o per pochi secondi dopo che è comparsa."""
+        sono i dati delle altre auto, o per pochi secondi dopo che è comparsa. Finita la gialla, verde per poco."""
+        flag = self._player_flag(player_pos, ac_flag, now, cars_known)
+        if flag is not None and flag.kind in ("yellow", "red"):
+            self._warned_t = now
+        elif flag is None and now - self._warned_t < GREEN_S:
+            return FlagStatus("green", "BANDIERA VERDE · pista libera")
+        return flag
+
+    def _player_flag(self, player_pos: float | None, ac_flag: int, now: float, cars_known: bool) -> FlagStatus | None:
         if ac_flag != self._ac_flag:
             self._ac_flag, self._ac_flag_t = ac_flag, now
         fixed = {ACFlag.BLUE: ("blue", "BANDIERA BLU · fai passare"),

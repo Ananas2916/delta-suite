@@ -119,7 +119,8 @@ def test_player_flags():
     w.update_cars(others + [car(0, 0.0, 180.0)], now=100.0)
     f = w.player_flag(0.0, ACFlag.NONE, 100.0, cars_known=True)
     assert f.kind == "red" and "DOPPIA GIALLA" in f.text and "a 147 m" in f.text   # (0.103-0.025)*1885
-    assert w.player_flag(0.5, ACFlag.NONE, 100.0, cars_known=True) is None   # zona lontana dietro
+    green = w.player_flag(0.5, ACFlag.NONE, 100.0, cars_known=True)       # zona passata: verde per poco
+    assert green.kind == "green" and w.player_flag(0.5, ACFlag.NONE, 106.0, cars_known=True) is None
     # gialla di AC senza auto lente: vale qualche secondo, poi si spegne (era rimasta accesa in gara)
     w.update_cars([car(i, i / 10, 180.0) for i in range(10)], now=110.0)
     assert w.player_flag(0.5, ACFlag.YELLOW, 110.0, cars_known=True).kind == "yellow"

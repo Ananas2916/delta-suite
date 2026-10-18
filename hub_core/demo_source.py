@@ -285,4 +285,5 @@ class DemoSource:
             ers_power=2,
             ers_heat_charging=self._battery_kj < BATTERY_KJ * 0.6,
             ers_charging=self._harvest > 0.0,
+            tyre_compound="Medium (M)",
         )

@@ -55,8 +55,11 @@ tolto (16/10/2026): non c'entrava con la suite.
 3. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
    scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
    Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
-   propone modifiche da confermare. Radio a regole locali (giro/delta, carburante, gomme, bandiere) letta
-   da Kokoro; push-to-talk dal volante → Whisper locale → agente in modalità RADIO → risposta parlata
+   propone modifiche da confermare. Radio a regole locali (giro/delta, carburante, gomme, bandiere, e da
+   0.5.2 le chiamate stile giochi F1 di `ai_engine/race_calls.py`: primo giro, sorpassi, giro più veloce,
+   tendenza dei distacchi, auto vicine e ai box, leader all'ultimo giro, arrivo, risparmio carburante, forature,
+   danni, gomme finite, limitatore, gialle con la distanza, tempo della sessione; frasi in
+   `ai_engine/phrases_race.py`, tutte le lingue affiancate, varianti separate da "|") letta da Kokoro; push-to-talk dal volante → Whisper locale → agente in modalità RADIO → risposta parlata
    nella lingua della voce. Pagina a schede: Conversazione (chat + radio in cuffia), Riepilogo stint,
    Impostazioni (agente, MCP, voce, microfono, regole radio).
 4. **Box & Assetto**: bias/ABS/TC/freno motore in diretta, setup, proposte dell'ingegnere, pit stop e
@@ -86,17 +89,20 @@ hub_core/ac/                   # parla con AC; si importa anche fuori da Windows
   setup_files.py, win32.py     # setup .ini in Documenti (OneDrive); MappedView
 hub_core/analysis/             # calcoli, senza AC: lap_recorder, lap_analysis, timing, race_strategy
                                # (anche giri mancanti), vehicle_dynamics, car_status (avvisi per pagina
-                               # Onboard e MCP), track_status (linea della pista, auto lente/ferme, bandiere)
+                               # Onboard e MCP), track_status (linea della pista, auto lente/ferme, bandiere),
+                               # live_lap (parziali del giro in corso e delta live sul miglior giro)
 hub_core/database.py           # DuckDB / SQLite
 ai_engine/race_engineer_agent.py  # backend API (riepilogo stint)
 ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in modalità non interattiva
 ai_engine/mcp_server.py        # server MCP HTTP locale con token (7 strumenti)
 ai_engine/radio.py, voice.py   # regole radio, Kokoro/Tsukumo, coda a priorità
+ai_engine/race_calls.py        # chiamate di gara stile giochi F1 (RaceContext dalla classifica e dalle gialle)
+ai_engine/phrases_race.py      # frasi di quelle chiamate in it/en/es/fr/pt, con varianti
 ai_engine/stt.py               # trascrizione push-to-talk (Whisper locale / Tsukumo)
 ui/hub_state.py, hub_data.py   # stato hub, proposte, fornitore dati per l'MCP
 ui/workers.py                  # TelemetryWorker (thread di acquisizione) e Job
-ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table, hybrid,
-                               # onboard_hud (grafica TV), view_panel (riquadro onboard)
+ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table, hybrid, sectors
+                               # (parziali e tempo con delta), onboard_hud (grafica TV), view_panel
 ui/race_view.py                # dati per classifica/GPS/grafica TV/stato vettura (Onboard e Generale)
 ui/navigation.py               # sezioni e moduli della barra laterale
 ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
@@ -172,6 +178,8 @@ tests/                         # pytest, incluso un giro vero registrato al Red 
       onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`; build Windows ok
 - [x] Pagina Generale e dati delle ibride (18/10/2026), provata dall'utente in gara con la 499P
 - [x] 0.5.1: giri mancanti, bandiere dalle auto lente/ferme, mappa dalla linea AI (provato in demo)
+- [x] 0.5.2: parziali e delta live, colonna Int, mescola, bandiera verde; lessico dell'ingegnere stile giochi F1
+      (provato in demo; da sentire in gara vera)
 - [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)

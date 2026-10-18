@@ -94,6 +94,7 @@ def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) ->
         ers_heat_charging=bool(phy.ersHeatCharging),
         ers_charging=bool(phy.ersIsCharging),
         session_laps=gfx.numberOfLaps,
+        tyre_compound=wstr(gfx.tyreCompound),
     )
 
 

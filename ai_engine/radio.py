@@ -1,8 +1,9 @@
 """
 Radio immediata: regole locali che parlano senza modello AI (latenza < 1 s, zero token).
 
-Giro e delta, carburante, gomme fuori finestra (una volta per stint), distacchi, bandiere, batteria
-delle ibride.
+Giro e delta, carburante, gomme fuori finestra (una volta per stint), distacchi con la tendenza, bandiere,
+batteria delle ibride; le chiamate di gara stile giochi F1 (posizioni, avversari, gialle, danni, fine gara) sono in
+ai_engine.race_calls. Le frasi con più varianti ("a|b") cambiano a ogni chiamata.
 Il ragionamento vero (setup, strategia, "dove perdo tempo") lo fa l'agente, a richiesta:
 come l'ingegnere dei giochi di F1, più un'AI dove lo script non arriva.
 La lingua è quella della voce scelta (ai_engine.lang).
@@ -10,6 +11,7 @@ La lingua è quella della voce scelta (ai_engine.lang).
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 from hub_core.analysis import car_status as cs
@@ -36,6 +38,9 @@ class RadioConfig:
     gaps: bool = True
     flags: bool = True
     hybrid: bool = True
+    positions: bool = True          # primo giro, posizioni guadagnate/perse, giro veloce, arrivo
+    rivals: bool = True             # auto vicina davanti/dietro, avversari ai box
+    car: bool = True                # forature, danni, gomme finite, limitatore
     tyre_temp_lo: float = 75.0
     tyre_temp_hi: float = 100.0
     tyre_press_lo: float = 25.5     # psi a caldo
@@ -52,9 +57,12 @@ _FLAGS = {
 
 
 class RadioRules:
-    def __init__(self, cfg: RadioConfig | None = None, lang: Language | None = None):
+    def __init__(self, cfg: RadioConfig | None = None, lang: Language | None = None, seed: int | None = None):
+        from ai_engine.race_calls import RaceCalls      # qui: race_calls usa Msg di questo modulo
         self.cfg = cfg or RadioConfig()
         self.lang = lang or LANGUAGES["it"]
+        self.rng = random.Random(seed)
+        self.race = RaceCalls(self)
         self.reset()
 
     def reset(self):
@@ -64,15 +72,21 @@ class RadioRules:
         self._flag = ACFlag.NONE
         self._battery_said: set[str] = set()
         self._lap_energy_said = False
+        self.race.reset()
 
     def _p(self, key: str, **kw) -> str:
-        return self.lang.phrases[key].format(**kw)
+        """Frase nella lingua della voce; se ha varianti ("a|b|c") ne sceglie una."""
+        text = self.lang.phrases[key]
+        if "|" in text:
+            text = self.rng.choice(text.split("|"))
+        return text.format(**kw)
 
     # ------------------------------------------------------------- per giro
     def on_lap(self, lap: LapData, laps: list[LapData], neighbours=None, race: bool = False,
-               to_go: int | None = None) -> list[Msg]:
+               to_go: int | None = None, position: int | None = None, field_best_ms: int | None = None) -> list[Msg]:
         """`laps` sono i giri della sessione, con `lap` (appena completato) in fondo; `to_go` i giri che mancano
-        alla fine della gara (dal leader, compreso quello appena iniziato)."""
+        alla fine della gara (dal leader, compreso quello appena iniziato); `field_best_ms` il miglior giro degli
+        avversari, per il giro più veloce della gara."""
         out: list[Msg] = []
         c, lg = self.cfg, self.lang
         previous = laps[-2] if len(laps) >= 2 else None
@@ -86,10 +100,15 @@ class RadioRules:
             elif not older or lap.lap_time_ms < min(older):
                 delta = speak_delta((lap.lap_time_ms - min(older)) / 1000, lg) if older else same_time(lg)
                 gain = f", {delta}" if delta != same_time(lg) else ""
-                out.append(Msg(self._p("best_lap", t=t, gain=gain), PRIO_HIGH, 25, "lap"))
+                text = self._p("best_lap", t=t, gain=gain)
+                if c.positions and race and field_best_ms and lap.lap_time_ms < field_best_ms:
+                    text += " " + self._p("fastest_lap")
+                out.append(Msg(text, PRIO_HIGH, 25, "lap"))
             else:
                 delta = speak_delta((lap.lap_time_ms - min(older)) / 1000, lg)
                 out.append(Msg(self._p("lap", t=t, delta=delta), PRIO_NORMAL, 25, "lap"))
+        if c.positions and race and lap.lap_no == 1 and position:
+            out.append(self.race.lap1(position))
         if c.lap_times and race and to_go == 1:
             out.append(Msg(self._p("last_lap"), PRIO_HIGH, 30, "to_go"))
         elif c.lap_times and race and to_go in (10, 5, 3):
@@ -108,17 +127,14 @@ class RadioRules:
                             out.append(Msg(self._p("fuel_n", n=th), PRIO_HIGH, 40, "fuel"))
                             break
                 self._fuel_left_prev = left
+                if race and to_go:
+                    out += self.race.fuel(lap.fuel_end, fpl, to_go)
 
         if c.tyres:
             out += self._tyre_messages(laps)
 
         if c.gaps and race and neighbours:
-            ahead, me, behind = neighbours
-            parts = []
-            if ahead is not None and me is not None and me.interval_s is not None:
-                parts.append(self._p("ahead", g=speak_number(me.interval_s, lg)))
-            if behind is not None and behind.interval_s is not None:
-                parts.append(self._p("behind", g=speak_number(behind.interval_s, lg)))
+            parts = self.race.gap_parts(*neighbours)
             if parts:
                 out.append(Msg(self._p("gaps", parts=", ".join(parts)), PRIO_LOW, 20, "gap"))
         return out
@@ -155,13 +171,16 @@ class RadioRules:
         return out
 
     # --------------------------------------------------------- per campione
-    def on_sample(self, s, info: dict | None = None) -> list[Msg]:
-        out = self._flag_messages(s) if self.cfg.flags else []
+    def on_sample(self, s, info: dict | None = None, ctx=None) -> list[Msg]:
+        """`ctx` (RaceContext) porta classifica, gialle e giri alla fine: senza, solo bandiere e batteria."""
+        out = self._flag_messages(s, ctx) if self.cfg.flags else []
         if self.cfg.hybrid:
             out += self._hybrid_messages(s, info)
+        if ctx is not None:
+            out += self.race.on_sample(s, info, ctx)
         return out
 
-    def _flag_messages(self, s) -> list[Msg]:
+    def _flag_messages(self, s, ctx=None) -> list[Msg]:
         try:
             flag = ACFlag(s.flag)
         except ValueError:
@@ -169,6 +188,11 @@ class RadioRules:
         if flag == self._flag:
             return []
         self._flag = flag
+        if flag == ACFlag.YELLOW and ctx is not None and ctx.cars_known:
+            return []           # con le auto note la gialla la chiama race_calls, con la distanza
+        if flag == ACFlag.CHECKERED and ctx is not None and ctx.race and s.position > 0:
+            key = "finish_win" if s.position == 1 else "finish_podium" if s.position <= 3 else "finish"
+            return [Msg(self._p(key, pos=s.position), PRIO_HIGH, 15, "flag")]
         if flag in _FLAGS:
             key, prio = _FLAGS[flag]
             return [Msg(self._p(key), prio, 10, "flag")]

@@ -1,3 +1,28 @@
+## Delta Suite 0.5.2 — parziali e un ingegnere che parla di più
+
+**Parziali e delta**, come i cronometri delle dirette:
+- *Tempo giro con delta live* sul tuo miglior giro valido (+0,71 in rosso se sei più lento, verde se più veloce),
+  in Generale, in Telemetria e nella grafica TV;
+- *settori S1, S2, S3* man mano che si chiudono: viola se è il tuo migliore, giallo se più lento, bianco quello in
+  corso; a inizio giro restano per qualche secondo quelli del giro appena chiuso.
+- In classifica la colonna *Int* (distacco dall'auto davanti); nella strategia mescola montata, giri sulle gomme,
+  usura, temperatura di aria e asfalto; *bandiera verde* per qualche secondo quando la gialla finisce.
+
+**Ingegnere di pista senza AI**, sullo stile dei giochi F1, in tutte le lingue della radio e con più varianti
+per non ripetersi:
+- fine del primo giro con le posizioni guadagnate o perse dalla griglia; sorpassi fatti e subiti; giro più
+  veloce della gara;
+- distacchi con la tendenza ("davanti 1,2, recuperi 3 decimi al giro"); auto davanti o dietro sotto il
+  secondo; avversari che si fermano ai box;
+- il leader all'ultimo giro; bandiera a scacchi con il risultato (vittoria, podio, posizione);
+- carburante: "risparmia, lift and coast" quando non basta per finire, e il via libera quando torna a bastare;
+- foratura (box, box), danni per zona, gomme finite, limitatore dimenticato in corsia box;
+- gialla davanti con la distanza ("doppia gialla, auto ferma a 350 metri"), poi "pista libera";
+- in prova e qualifica: 5 minuti e ultimo minuto della sessione.
+Ogni gruppo si accende o spegne in *Ingegnere di pista → Impostazioni → Radio automatica*.
+
+---
+
 ## Delta Suite 0.5.1 — giri alla fine, bandiere vere, mappa nuova
 
 Dalla prima prova in gara con la 0.5.0:

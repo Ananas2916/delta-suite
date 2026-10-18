@@ -309,9 +309,13 @@ class EngineerPage(QWidget):
         f = QFormLayout(g)
         cfg = hub.radio_rules.cfg
         self.rule_boxes = {}
-        for key, text in (("lap_times", "Tempo sul giro, delta e giri alla fine"), ("fuel", "Carburante (5, 3, 2, 1 giri)"),
-                          ("tyres", "Gomme fuori finestra (una volta per stint)"), ("gaps", "Distacchi in gara"),
-                          ("flags", "Bandiere"), ("hybrid", "Batteria delle ibride (20%, scarica, energia del giro)")):
+        for key, text in (("lap_times", "Tempo sul giro, delta, giri alla fine e tempo della sessione"), ("fuel", "Carburante (5, 3, 2, 1 giri)"),
+                          ("tyres", "Gomme fuori finestra (una volta per stint)"), ("gaps", "Distacchi in gara, con la tendenza"),
+                          ("flags", "Bandiere, gialle davanti con la distanza, pista libera"),
+                          ("positions", "Posizioni: primo giro, sorpassi, giro più veloce, arrivo"),
+                          ("rivals", "Avversari: auto vicina davanti o dietro, soste"),
+                          ("car", "Auto: forature, danni, gomme finite, limitatore"),
+                          ("hybrid", "Batteria delle ibride (20%, scarica, energia del giro)")):
             cb = QCheckBox(text)
             cb.setChecked(getattr(cfg, key))
             cb.toggled.connect(self._save_rules)

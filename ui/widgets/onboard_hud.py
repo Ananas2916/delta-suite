@@ -111,6 +111,23 @@ class OnboardView(QWidget):
                 p.setFont(paint_font(11 * k))
                 p.drawText(QRectF(tr.left(), y, tr.width() - 12 * k, 21 * k),
                            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, value)
+            sectors = h.get("sectors") or []
+            if sectors:                     # parziali sotto i tempi: striscia del colore e tempo
+                n, gap = len(sectors), 4 * k
+                sw = (tr.width() - gap * (n - 1)) / n
+                for i, (name, text, color) in enumerate(sectors):
+                    r = QRectF(tr.left() + i * (sw + gap), tr.bottom() + 4 * k, sw, 26 * k)
+                    self._box(p, r)
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QColor(color))
+                    p.drawRect(QRectF(r.left(), r.bottom() - 3 * k, r.width(), 3 * k))
+                    p.setPen(QColor(C["dim"]))
+                    p.setFont(paint_font(7 * k, QFont.Weight.DemiBold))
+                    p.drawText(r.adjusted(6 * k, 0, 0, -3 * k), Qt.AlignmentFlag.AlignVCenter, name)
+                    p.setPen(QColor("white"))
+                    p.setFont(paint_font(8.5 * k))
+                    p.drawText(r.adjusted(0, 0, -6 * k, -3 * k),
+                               Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, text)
 
         # in basso a sinistra: velocità, marcia, giri motore
         if "speed" in h:

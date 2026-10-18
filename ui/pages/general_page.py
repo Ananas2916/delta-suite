@@ -30,6 +30,7 @@ from ui.widgets.car_status import CarStatusView
 from ui.widgets.gps import GPSView
 from ui.widgets.hybrid import HybridCard
 from ui.widgets.onboard_hud import frame_image
+from ui.widgets.sectors import LapTimeTile
 from ui.widgets.timing_table import TimingTable
 from ui.widgets.view_panel import ViewPanel
 
@@ -39,7 +40,7 @@ SESSION_NAMES = {
     ACSessionType.DRAG: "Drag",
 }
 FLAG_STYLES = {   # tipo di bandiera: (sfondo, testo scuro)
-    "yellow": (C["yellow"], True), "red": (C["red"], False), "blue": (C["blue"], False),
+    "yellow": (C["yellow"], True), "red": (C["red"], False), "blue": (C["blue"], False), "green": (C["green"], True),
     "black": ("#000000", False), "white": ("#ffffff", True), "checkered": ("#ffffff", True),
     "penalty": (C["red"], False),
 }
@@ -113,13 +114,15 @@ class GeneralPage(QWidget):
         tiles = QHBoxLayout()
         self.t_pos = ValueTile("Posizione", "-", 20)
         self.t_lap = ValueTile("Giro", "-", 20)
-        self.t_cur = ValueTile("Tempo giro", "--:--.---", 20)
+        self.t_cur = LapTimeTile()          # tempo, delta live sul migliore e parziali
         self.t_last = ValueTile("Ultimo", "--:--.---", 20)
         self.t_best = ValueTile("Migliore", "--:--.---", 20)
         self.t_fuel = ValueTile("Carburante", "-- L", 20)
         self.t_left = ValueTile("Mancano", "—", 20)
         for t in (self.t_pos, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel, self.t_left):
-            tiles.addWidget(t)
+            if t is not self.t_cur:     # stessa altezza del riquadro del tempo, che ha i parziali sotto
+                t.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            tiles.addWidget(t, 2 if t is self.t_cur else 1)
         root.addLayout(tiles)
 
         body = QHBoxLayout()
@@ -377,7 +380,7 @@ class GeneralPage(QWidget):
         self.t_pos.set(f"P{s.position}" if s.position else "-")
         total = f"/{prog.total}" if prog is not None and prog.total else ""
         self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" PIT" if s.is_in_pit else ""))
-        self.t_cur.set(rs.fmt_ms(s.lap_time_ms))
+        self.t_cur.set(s.lap_time_ms, self.hub.live_lap.delta_s, rv.sector_views(self.hub, s))
         self.t_last.set(rs.fmt_ms(s.last_lap_ms))
         self.t_best.set(rs.fmt_ms(s.best_lap_ms), C["purple"])
         laps_left = s.fuel / fpl if fpl else None
@@ -422,6 +425,8 @@ class GeneralPage(QWidget):
             avg = sum(valid) / len(valid) if valid else None
             lines.append(f"Stint: {len(stint)} {'giro' if len(stint) == 1 else 'giri'}"
                          + (f"  ·  media {rs.fmt_ms(avg)}" if avg else ""))
-        w = s.tyre_wear
-        lines.append("Usura gomme " + " / ".join(f"{x:.1f}" for x in w))
+        age = f"  ·  {len(stint)} {'giro' if len(stint) == 1 else 'giri'}" if stint else ""
+        lines.append(f"Gomme {s.tyre_compound.strip() or '—'}{age}")
+        lines.append("Usura " + " / ".join(f"{x:.1f}" for x in s.tyre_wear))
+        lines.append(f"Aria {s.air_temp:.0f}°  ·  asfalto {s.road_temp:.0f}°")
         self.strategy.setText("<br>".join(lines))

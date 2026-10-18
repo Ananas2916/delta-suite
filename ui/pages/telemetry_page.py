@@ -8,16 +8,18 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QProgressBar, QPushButton, QSpinBox,
+    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QProgressBar, QPushButton, QSizePolicy, QSpinBox,
     QVBoxLayout, QWidget,
 )
 
 from hub_core.ac.recording import recordings_dir
 from hub_core.analysis.race_strategy import best_sectors, fmt_ms
 from hub_core.model import ACStatus, gear_label
+from ui.race_view import sector_views
 from ui.theme import C
 from ui.widgets import Bar, Card, TyreGrid, ValueTile, label, make_plot, readonly_table, table_item
 from ui.widgets.hybrid import HybridCard
+from ui.widgets.sectors import LapTimeTile
 from ui.workers import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
 
 WINDOW_S = 20.0
@@ -74,12 +76,14 @@ class TelemetryPage(QWidget):
         self.rpm_bar.setRange(0, 9000)
         self.t_rpm.layout().addWidget(self.rpm_bar)
         self.t_lap = ValueTile("Giro", "-", 20)
-        self.t_cur = ValueTile("Tempo giro", "--:--.---", 20)
+        self.t_cur = LapTimeTile()
         self.t_last = ValueTile("Ultimo", "--:--.---", 20)
         self.t_best = ValueTile("Migliore", "--:--.---", 20)
         self.t_fuel = ValueTile("Carburante", "-- L", 20)
         for t in (self.t_speed, self.t_gear, self.t_rpm, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel):
-            tiles.addWidget(t)
+            if t is not self.t_cur:     # stessa altezza del riquadro del tempo, che ha i parziali sotto
+                t.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            tiles.addWidget(t, 2 if t is self.t_cur else 1)
         root.addLayout(tiles)
 
         # --- riga centrale: input pilota | grafici | gomme + G-G
@@ -211,7 +215,7 @@ class TelemetryPage(QWidget):
         self.rpm_bar.setValue(int(s.rpm))
         total = f"/{s.session_laps}" if self.hub.is_race and s.session_laps > 0 else ""
         self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" PIT" if s.is_in_pit else ""))
-        self.t_cur.set(fmt_ms(s.lap_time_ms))
+        self.t_cur.set(s.lap_time_ms, self.hub.live_lap.delta_s, sector_views(self.hub, s))
         self.t_last.set(fmt_ms(s.last_lap_ms))
         self.t_best.set(fmt_ms(s.best_lap_ms), C["purple"])
         self.t_fuel.set(f"{s.fuel:.1f} L")
