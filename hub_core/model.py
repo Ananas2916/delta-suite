@@ -94,6 +94,13 @@ class TelemetrySample:
     car_damage: tuple[float, ...] = (0.0,) * 5   # zone: anteriore, posteriore, sinistra, destra, centro
     tyre_dirt: Quad = (0.0,) * 4
     pit_limiter: bool = False
+    # ibride (solo se la pagina statica dice hasKERS/hasERS)
+    kers_input: float = 0.0     # spinta elettrica 0..1
+    kers_lap_kj: float = 0.0    # energia usata nel giro (kJ)
+    ers_recovery: int = 0       # livello di recupero
+    ers_power: int = 0          # livello di potenza (mappa di spinta)
+    ers_heat_charging: bool = False   # MGU-H verso la batteria (altrimenti verso il motore)
+    ers_charging: bool = False
 
 
 @dataclass

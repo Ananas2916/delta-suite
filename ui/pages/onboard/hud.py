@@ -10,6 +10,7 @@ from hub_core.ac.onboard_feed import Frame
 from ui.theme import C
 from ui.widgets import paint_font
 from ui.widgets.car_status import LEVEL_COLORS
+from ui.widgets.hybrid import battery_color
 
 
 def frame_image(f: Frame) -> QImage:
@@ -141,11 +142,15 @@ class OnboardView(QWidget):
                 p.drawText(QRectF(bar.left(), bar.bottom() + 1 * k, bar.width(), 14 * k), Qt.AlignmentFlag.AlignRight,
                            f"{h.get('rpm', 0)} RPM")
 
-        # in basso a destra: pedali e sterzo
+        # in basso a destra: pedali, batteria delle ibride e sterzo
         if "gas" in h:
-            br = QRectF(vr.right() - m - 150 * k, vr.bottom() - m - 92 * k, 150 * k, 92 * k)
+            bars = [("brake", C["red"]), ("gas", C["green"])]
+            if "battery" in h:
+                bars.append(("battery", battery_color(h["battery"])))
+            bw = (150 + 24 * (len(bars) - 2)) * k
+            br = QRectF(vr.right() - m - bw, vr.bottom() - m - 92 * k, bw, 92 * k)
             self._box(p, br)
-            for i, (key, color) in enumerate((("brake", C["red"]), ("gas", C["green"]))):
+            for i, (key, color) in enumerate(bars):
                 bar = QRectF(br.left() + (14 + 24 * i) * k, br.top() + 12 * k, 14 * k, br.height() - 24 * k)
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QColor(255, 255, 255, 40))
@@ -154,6 +159,11 @@ class OnboardView(QWidget):
                 p.setBrush(QColor(color))
                 p.drawRoundedRect(QRectF(bar.left(), bar.bottom() - bar.height() * v, bar.width(), bar.height() * v),
                                   3, 3)
+                if key == "battery":    # fulmine sopra la barra: verde mentre spinge
+                    p.setPen(QColor(C["green"] if h.get("battery_deploy") else C["dim"]))
+                    p.setFont(paint_font(7 * k))
+                    p.drawText(QRectF(bar.left() - 4 * k, br.top(), bar.width() + 8 * k, 12 * k),
+                               Qt.AlignmentFlag.AlignCenter, "⚡")
             c = QPointF(br.right() - 46 * k, br.center().y())
             rad = 30 * k
             p.setPen(QPen(QColor(255, 255, 255, 60), 4 * k))

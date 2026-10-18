@@ -3,7 +3,8 @@ Sorgente di telemetria simulata: permette di usare tutto l'hub senza Assetto Cor
 
 Pista sintetica chiusa con profilo di velocità calcolato da limiti di aderenza
 (curva) e di accelerazione/frenata, più modelli semplici di consumo, temperatura,
-pressione e usura gomme. Espone la stessa interfaccia di TelemetryReceiver.
+pressione e usura gomme e di un sistema ibrido (batteria, spinta, ricarica in frenata,
+limite di energia per giro). Espone la stessa interfaccia di TelemetryReceiver.
 """
 
 from __future__ import annotations
@@ -20,6 +21,9 @@ G = 9.81
 GEAR_TOP_KMH = (85.0, 125.0, 165.0, 205.0, 245.0, 290.0)
 MAX_RPM = 8200
 TANK_L = 70.0
+# ibrido: batteria da 4 MJ, spinta a 160 kW fino a 3 MJ per giro, recupero fino a 260 kW in frenata
+BATTERY_KJ, DEPLOY_KW, HARVEST_KW, LAP_LIMIT_KJ = 4000.0, 160.0, 260.0, 3000.0
+ERS_POWER_MODES = 4
 
 
 def _build_track(n: int = 2400, length_m: float = 4800.0):
@@ -59,7 +63,7 @@ def _speed_profile(seg, k, mu=1.75):
 
 
 class DemoSource:
-    """Simulatore di una GT su pista sintetica (stessa interfaccia di TelemetryReceiver)."""
+    """Simulatore di una hypercar ibrida su pista sintetica (stessa interfaccia di TelemetryReceiver)."""
 
     name = "Demo (simulatore)"
     waiting_message = "Avvio del simulatore..."
@@ -86,7 +90,7 @@ class DemoSource:
     def session_info(self) -> dict:
         return {
             "source": self.name,
-            "car": "demo_gt3",
+            "car": "demo_hypercar",
             "track": "Circuito Demo",
             "track_length": self._length,
             "max_rpm": MAX_RPM,
@@ -95,6 +99,11 @@ class DemoSource:
             "player": "Pilota Demo",
             "damage_rate": 1.0,
             "suspension_max_travel": [0.10, 0.10, 0.12, 0.12],
+            "has_kers": False,
+            "has_ers": True,
+            "kers_max_j": 0.0,
+            "ers_max_j": LAP_LIMIT_KJ * 1000,
+            "ers_power_modes": ERS_POWER_MODES,
         }
 
     def car_and_track(self) -> tuple[str, str]:
@@ -120,6 +129,10 @@ class DemoSource:
         self._pit_flag = False
         self._lap_pace = self._new_lap_pace()
         self._packet = 0
+        self._battery_kj = BATTERY_KJ * 0.8
+        self._lap_kj = 0.0
+        self._deploy = 0.0
+        self._harvest = 0.0
 
     def _new_lap_pace(self) -> float:
         # variabilità del pilota + degrado gomme + effetto peso carburante
@@ -137,6 +150,15 @@ class DemoSource:
         # consumo proporzionale al gas
         gas = self._gas(i)
         self._fuel = max(0.0, self._fuel - (0.00055 + 0.0042 * gas) * v * dt / 10.0)
+
+        # ibrido: spinta a gas pieno sopra i 120 km/h finché c'è carica ed energia del giro, ricarica in frenata
+        brake_now = self._brake(i)
+        can_deploy = self._battery_kj > 20.0 and self._lap_kj < LAP_LIMIT_KJ
+        self._deploy = 1.0 if gas >= 0.9 and v > 33.0 and can_deploy else 0.0
+        self._harvest = brake_now
+        used = DEPLOY_KW * self._deploy * dt
+        self._battery_kj = min(BATTERY_KJ, max(0.0, self._battery_kj - used + HARVEST_KW * self._harvest * dt))
+        self._lap_kj += used
 
         # temperature gomme: tendono a un target funzione di carichi laterali/frenata
         ay = v * v * self._k[i] / G
@@ -168,6 +190,7 @@ class DemoSource:
             if self._best_lap_ms == 0 or self._last_lap_ms < self._best_lap_ms:
                 self._best_lap_ms = self._last_lap_ms
             self._lap_t = 0.0
+            self._lap_kj = 0.0
             self._sector_start = 0.0
             self._sector = 0
             self._pit_flag = False
@@ -241,7 +264,7 @@ class DemoSource:
             tc=0.0,
             abs=0.0,
             drs=0.0,
-            kers_charge=0.0,
+            kers_charge=self._battery_kj / BATTERY_KJ,
             tyres_out=0,
             air_temp=24.0,
             road_temp=33.0,
@@ -256,4 +279,10 @@ class DemoSource:
             position=1,
             car_x=float(self._x[i]),
             car_z=float(self._z[i]),
+            kers_input=self._deploy,
+            kers_lap_kj=self._lap_kj,
+            ers_recovery=3,
+            ers_power=2,
+            ers_heat_charging=self._battery_kj < BATTERY_KJ * 0.6,
+            ers_charging=self._harvest > 0.0,
         )

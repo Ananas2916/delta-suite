@@ -104,7 +104,7 @@ class HubState(QObject):
 
     def load_radio_config(self) -> RadioConfig:
         c = RadioConfig()
-        for f in ("lap_times", "fuel", "tyres", "gaps", "flags"):
+        for f in ("lap_times", "fuel", "tyres", "gaps", "flags", "hybrid"):
             setattr(c, f, self.setting(f"radio/{f}", True, bool))
         for f in ("tyre_temp_lo", "tyre_temp_hi", "tyre_press_lo", "tyre_press_hi"):
             setattr(c, f, self.setting(f"radio/{f}", getattr(c, f), float))
@@ -220,7 +220,7 @@ class HubState(QObject):
         self.last_sample = s
         self.is_race = s.session_type == ACSessionType.RACE
         if self.radio_active and s.status == ACStatus.LIVE:
-            for m in self.radio_rules.on_sample(s):
+            for m in self.radio_rules.on_sample(s, self.session_info):
                 self._say(m)
         self.sample.emit(s)
 

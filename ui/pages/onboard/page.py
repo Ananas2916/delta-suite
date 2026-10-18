@@ -24,6 +24,7 @@ from ui.theme import C
 from ui.widgets import Card, label
 from ui.widgets.car_status import LEVEL_COLORS, CarStatusView
 from ui.widgets.gps import GPSView
+from ui.widgets.hybrid import battery_color
 from ui.widgets.timing_table import TimingTable
 from ui.workers import SOURCE_AC
 
@@ -364,6 +365,9 @@ class OnboardPage(QWidget):
                       ("TEMPO", fmt_ms(s.lap_time_ms), None), ("ULTIMO", fmt_ms(s.last_lap_ms), None),
                       ("MIGLIORE", fmt_ms(s.best_lap_ms), C["purple"])],
         }
+        h = cs.hybrid_state(s, info)
+        if h is not None:
+            hud["battery"], hud["battery_deploy"] = h.charge, h.deploying
         if alerts:
             hud["alert"] = (alerts[0].level, alerts[0].text)
         return hud
@@ -414,8 +418,14 @@ class OnboardPage(QWidget):
         aids = f"ABS {b.abs_mode}/{b.abs_modes}  ·  TC {b.tc_mode}/{b.tc_modes}" if b else \
             f"ABS {s.abs:.1f}  ·  TC {s.tc:.1f}"
         fuel = f"carburante {s.fuel:.1f} L" + (f" (~{s.fuel / fpl:.1f} giri)" if fpl else "")
+        h = cs.hybrid_state(s, self.hub.session_info)
+        hybrid = ""
+        if h is not None:
+            lap = f"  ·  giro {h.lap_used_kj:.0f}/{h.lap_limit_kj:.0f} kJ" if h.lap_limit_kj > 0 else ""
+            hybrid = (f"<br><span style='color:{battery_color(h.charge)}'>batteria {h.charge * 100:.0f}%</span>"
+                      f"  ·  {h.mode_text}{lap}")
         self.info.setText(
-            f"{fuel}<br>{aids}  ·  bias {s.brake_bias * 100:.1f}%  ·  freno motore {s.engine_brake}<br>"
+            f"{fuel}{hybrid}<br>{aids}  ·  bias {s.brake_bias * 100:.1f}%  ·  freno motore {s.engine_brake}<br>"
             f"altezza da terra ant. {s.ride_height[0] * 1000:.0f} mm  ·  post. {s.ride_height[1] * 1000:.0f} mm"
             + ("<br>limitatore pit inserito" if s.pit_limiter else ""))
         if not alerts:

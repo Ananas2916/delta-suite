@@ -87,6 +87,12 @@ def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) ->
         car_damage=tuple(phy.carDamage),
         tyre_dirt=_quad(phy.tyreDirtyLevel),
         pit_limiter=bool(phy.pitLimiterOn),
+        kers_input=phy.kersInput,
+        kers_lap_kj=phy.kersCurrentKJ,
+        ers_recovery=phy.ersRecoveryLevel,
+        ers_power=phy.ersPowerLevel,
+        ers_heat_charging=bool(phy.ersHeatCharging),
+        ers_charging=bool(phy.ersIsCharging),
     )
 
 
@@ -107,6 +113,11 @@ def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
         "player": f"{wstr(st.playerName)} {wstr(st.playerSurname)}".strip(),
         "damage_rate": float(st.aidMechanicalDamage),   # 0 = danni disattivati
         "suspension_max_travel": list(st.suspensionMaxTravel),
+        "has_kers": bool(st.hasKERS),
+        "has_ers": bool(st.hasERS),
+        "kers_max_j": float(st.kersMaxJ),
+        "ers_max_j": float(st.ersMaxJ),
+        "ers_power_modes": int(st.ersPowerControllerCount),
     }
 
 

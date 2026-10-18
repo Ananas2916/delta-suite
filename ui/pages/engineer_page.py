@@ -311,7 +311,7 @@ class EngineerPage(QWidget):
         self.rule_boxes = {}
         for key, text in (("lap_times", "Tempo sul giro e delta"), ("fuel", "Carburante (5, 3, 2, 1 giri)"),
                           ("tyres", "Gomme fuori finestra (una volta per stint)"), ("gaps", "Distacchi in gara"),
-                          ("flags", "Bandiere")):
+                          ("flags", "Bandiere"), ("hybrid", "Batteria delle ibride (20%, scarica, energia del giro)")):
             cb = QCheckBox(text)
             cb.setChecked(getattr(cfg, key))
             cb.toggled.connect(self._save_rules)

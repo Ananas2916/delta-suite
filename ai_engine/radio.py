@@ -1,7 +1,8 @@
 """
 Radio immediata: regole locali che parlano senza modello AI (latenza < 1 s, zero token).
 
-Giro e delta, carburante, gomme fuori finestra (una volta per stint), distacchi, bandiere.
+Giro e delta, carburante, gomme fuori finestra (una volta per stint), distacchi, bandiere, batteria
+delle ibride.
 Il ragionamento vero (setup, strategia, "dove perdo tempo") lo fa l'agente, a richiesta:
 come l'ingegnere dei giochi di F1, più un'AI dove lo script non arriva.
 La lingua è quella della voce scelta (ai_engine.lang).
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from hub_core.analysis import car_status as cs
 from hub_core.analysis import race_strategy as rs
 from hub_core.analysis.lap_recorder import LapData
 from hub_core.model import ACFlag
@@ -33,6 +35,7 @@ class RadioConfig:
     tyres: bool = True
     gaps: bool = True
     flags: bool = True
+    hybrid: bool = True
     tyre_temp_lo: float = 75.0
     tyre_temp_hi: float = 100.0
     tyre_press_lo: float = 25.5     # psi a caldo
@@ -59,6 +62,8 @@ class RadioRules:
         self._stint_first: int | None = None
         self._tyre_said: set[str] = set()
         self._flag = ACFlag.NONE
+        self._battery_said: set[str] = set()
+        self._lap_energy_lap: int | None = None
 
     def _p(self, key: str, **kw) -> str:
         return self.lang.phrases[key].format(**kw)
@@ -144,9 +149,13 @@ class RadioRules:
         return out
 
     # --------------------------------------------------------- per campione
-    def on_sample(self, s) -> list[Msg]:
-        if not self.cfg.flags:
-            return []
+    def on_sample(self, s, info: dict | None = None) -> list[Msg]:
+        out = self._flag_messages(s) if self.cfg.flags else []
+        if self.cfg.hybrid:
+            out += self._hybrid_messages(s, info)
+        return out
+
+    def _flag_messages(self, s) -> list[Msg]:
         try:
             flag = ACFlag(s.flag)
         except ValueError:
@@ -158,3 +167,22 @@ class RadioRules:
             key, prio = _FLAGS[flag]
             return [Msg(self._p(key), prio, 10, "flag")]
         return []
+
+    def _hybrid_messages(self, s, info: dict | None) -> list[Msg]:
+        """Batteria al 20%, scarica, energia del giro finita: una volta, finché non si ricarica."""
+        h = cs.hybrid_state(s, info)
+        if h is None or s.is_in_pit:
+            return []
+        out = []
+        if h.charge >= cs.BATTERY_WARN + 0.15:
+            self._battery_said.clear()          # ricaricata: si può riavvisare
+        if h.charge < cs.BATTERY_CRIT and "empty" not in self._battery_said:
+            self._battery_said.update(("empty", "low"))
+            out.append(Msg(self._p("battery_empty"), PRIO_HIGH, 15, "battery"))
+        elif h.charge < cs.BATTERY_WARN and "low" not in self._battery_said:
+            self._battery_said.add("low")
+            out.append(Msg(self._p("battery_low", n=round(h.charge * 100)), PRIO_NORMAL, 15, "battery"))
+        if h.lap_left_kj is not None and h.lap_left_kj <= 0.5 and self._lap_energy_lap != s.completed_laps:
+            self._lap_energy_lap = s.completed_laps
+            out.append(Msg(self._p("lap_energy"), PRIO_LOW, 8, "lap_energy"))
+        return out

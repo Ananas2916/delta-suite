@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget
 
 from hub_core.analysis import car_status as cs
@@ -12,6 +12,18 @@ from ui.widgets import paint_font, temp_color
 
 LEVEL_COLORS = {cs.OK: C["green"], cs.WARN: C["yellow"], cs.CRIT: C["red"]}
 DAMAGE_COLORS = ("#3a414f", "#f1c40f", "#ff9f43", "#ff4d4d")
+
+MIN_FONT_PT = 6.5
+
+
+def fit_font(p: QPainter, font: QFont, text: str, width: float) -> None:
+    """Imposta il font sul painter, più piccolo se serve perché il testo stia nella larghezza (colonna stretta
+    della pagina Onboard). Le misure vanno prese sul dispositivo del painter, non sullo schermo."""
+    p.setFont(font)
+    w = QFontMetricsF(p.font(), p.device()).horizontalAdvance(text)
+    if w > width > 0:
+        font.setPointSizeF(max(MIN_FONT_PT, font.pointSizeF() * width / w * 0.97))
+        p.setFont(font)
 
 
 class CarStatusView(QWidget):
@@ -68,11 +80,13 @@ class CarStatusView(QWidget):
         p.setBrush(QColor(C["bg"]))
         cock = QRectF(body.center().x() - bw * 0.16, body.top() + bh * 0.4, bw * 0.32, bh * 0.2)
         p.drawRoundedRect(cock, 8, 8)
-        p.setPen(QColor(C["dim"]))
-        p.setFont(paint_font(7.5, QFont.Weight.Normal))
-        p.drawText(QRectF(body.left(), body.top() + bh * 0.62, bw, 34), Qt.AlignmentFlag.AlignCenter |
-                   Qt.TextFlag.TextWordWrap, "danni\ndisattivati" if not dmg_on else "nessun danno"
-                   if s is None or not any(cs.damage_level(v) for v in s.car_damage) else "")
+        note = "danni disattivati" if not dmg_on else "nessun danno" \
+            if s is None or not any(cs.damage_level(v) for v in s.car_damage) else ""
+        if note:
+            p.setPen(QColor(C["dim"]))
+            inner = bw - bw * 0.3 - 6       # tra le gomme, che entrano di metà nella carrozzeria
+            fit_font(p, paint_font(7.5, QFont.Weight.Normal), note, inner)
+            p.drawText(QRectF(body.left(), body.top() + bh * 0.29, bw, bh * 0.1), Qt.AlignmentFlag.AlignCenter, note)
 
         # gomme ai quattro angoli
         tw, th = bw * 0.3, bh * 0.17
@@ -110,13 +124,13 @@ class CarStatusView(QWidget):
                      (f"freno {s.brake_temp[i]:.0f}°", paint_font(8.5, QFont.Weight.Normal),
                       C["red"] if s.brake_temp[i] >= cs.BRAKE_WARN else C["dim"]),
                      (f"sosp. {f * 100:.0f}%", paint_font(8, QFont.Weight.Normal), C["dim"])]
-            tx_w = (W - bw) / 2 - tw / 2 - 18
-            x = 4 if left else body.right() + tw / 2 + 14
+            tx_w = (W - bw) / 2 - tw / 2 - 14
+            x = 2 if left else body.right() + tw / 2 + 12
             y = cy - 44
             align = (Qt.AlignmentFlag.AlignRight if left else Qt.AlignmentFlag.AlignLeft) | \
                 Qt.AlignmentFlag.AlignVCenter
             for text, font, color in lines:
-                p.setFont(font)
+                fit_font(p, font, text, tx_w)
                 p.setPen(QColor(color))
                 hgt = 22 if font.pointSizeF() > 10 else 16
                 p.drawText(QRectF(x, y, tx_w, hgt), align, text)

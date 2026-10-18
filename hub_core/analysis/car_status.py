@@ -1,5 +1,5 @@
 """
-Stato della vettura per la vista onboard: danni, gomme, freni, sospensioni, carburante.
+Stato della vettura per la vista onboard: danni, gomme, freni, sospensioni, carburante, batteria delle ibride.
 
 Solo logica (niente Qt), così si prova nei test e la usa anche l'MCP.
 """
@@ -21,6 +21,7 @@ WEAR_WARN, WEAR_CRIT = 96.0, 93.0            # tyreWear di AC: 100 = gomma nuova
 BRAKE_WARN, BRAKE_CRIT = 750.0, 850.0
 DIRT_WARN = 0.5
 DEFAULT_SUSP_TRAVEL = 0.12                   # m, se la shared memory non dà la corsa massima
+BATTERY_WARN, BATTERY_CRIT = 0.20, 0.05      # carica della batteria delle ibride (0..1)
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,57 @@ def punctured(pressures) -> list[int]:
     """Ruote con pressione molto più bassa delle altre (o quasi a zero)."""
     ref = median(pressures)
     return [i for i, p in enumerate(pressures) if p < 8.0 or (ref > 5.0 and p < 0.75 * ref)]
+
+
+def is_hybrid(info: dict | None) -> bool:
+    return bool((info or {}).get("has_ers") or (info or {}).get("has_kers"))
+
+
+@dataclass(frozen=True)
+class HybridState:
+    """Batteria e ERS/KERS di un'auto ibrida, come li dà AC."""
+
+    charge: float               # 0..1
+    deploying: bool             # spinta elettrica in corso
+    charging: bool
+    lap_used_kj: float          # energia usata nel giro
+    lap_limit_kj: float         # limite per giro (0 = non noto)
+    power_mode: int
+    power_modes: int            # mappe di potenza disponibili (0 = non noto)
+    recovery: int
+    heat_to_battery: bool
+
+    @property
+    def lap_left_kj(self) -> float | None:
+        return max(0.0, self.lap_limit_kj - self.lap_used_kj) if self.lap_limit_kj > 0 else None
+
+    @property
+    def lap_used_fraction(self) -> float | None:
+        return min(1.0, self.lap_used_kj / self.lap_limit_kj) if self.lap_limit_kj > 0 else None
+
+    @property
+    def mode_text(self) -> str:
+        return "in spinta" if self.deploying else "in ricarica" if self.charging else "in attesa"
+
+
+def hybrid_state(s, info: dict | None) -> HybridState | None:
+    """None se l'auto non è ibrida. Il limite per giro è quello dell'ERS se c'è, sennò del KERS."""
+    info = info or {}
+    if not is_hybrid(info):
+        return None
+    ers_j, kers_j = info.get("ers_max_j", 0.0), info.get("kers_max_j", 0.0)
+    limit_j = (ers_j or kers_j) if info.get("has_ers") else (kers_j or ers_j)
+    return HybridState(
+        charge=max(0.0, min(1.0, s.kers_charge)),
+        deploying=s.kers_input > 0.05,
+        charging=s.ers_charging and s.kers_input <= 0.05,
+        lap_used_kj=max(0.0, s.kers_lap_kj),
+        lap_limit_kj=max(0.0, limit_j / 1000.0),
+        power_mode=s.ers_power,
+        power_modes=int(info.get("ers_power_modes", 0) or 0),
+        recovery=s.ers_recovery,
+        heat_to_battery=s.ers_heat_charging,
+    )
 
 
 def _brakes_simulated(s) -> bool:
@@ -114,6 +166,15 @@ def car_alerts(s, info: dict | None = None, fuel_per_lap: float | None = None) -
         elif laps_left < 2.0:
             out.append(Alert(WARN, f"Carburante per {laps_left:.1f} giri", "fuel"))
 
+    h = hybrid_state(s, info)
+    if h is not None:
+        if h.charge < BATTERY_CRIT:
+            out.append(Alert(CRIT, f"Batteria scarica ({h.charge * 100:.0f}%)", "battery"))
+        elif h.charge < BATTERY_WARN:
+            out.append(Alert(WARN, f"Batteria bassa ({h.charge * 100:.0f}%)", "battery"))
+        if h.lap_left_kj is not None and h.lap_left_kj <= 0.5:
+            out.append(Alert(WARN, "Energia elettrica del giro finita", "lap_energy"))
+
     if s.tyres_out >= 3:
         out.append(Alert(WARN, "Fuori pista", "off_track"))
     if s.pit_limiter and not s.is_in_pit:
@@ -132,6 +193,23 @@ def status_dict(s, info: dict | None = None, fuel_per_lap: float | None = None) 
         "sporco_gomme": [round(v, 2) for v in s.tyre_dirt],
         "corsa_sospensioni_pct": [round(f * 100, 1) for f in suspension_fraction(s, info)],
         "limitatore_pit": s.pit_limiter,
+        "ibrido": hybrid_dict(hybrid_state(s, info)),
         "avvisi": [{"livello": ("ok", "attenzione", "critico")[a.level], "testo": a.text}
                    for a in car_alerts(s, info, fuel_per_lap)],
+    }
+
+
+def hybrid_dict(h: HybridState | None) -> dict | None:
+    """Batteria ed ERS per l'MCP (None se l'auto non è ibrida)."""
+    if h is None:
+        return None
+    return {
+        "batteria_pct": round(h.charge * 100, 1),
+        "stato": h.mode_text,
+        "energia_giro_kj": round(h.lap_used_kj, 1),
+        "limite_giro_kj": round(h.lap_limit_kj, 1) or None,
+        "mappa_potenza": h.power_mode,
+        "mappe_potenza": h.power_modes or None,
+        "recupero": h.recovery,
+        "mguh_verso": "batteria" if h.heat_to_battery else "motore",
     }

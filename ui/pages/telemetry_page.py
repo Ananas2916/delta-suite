@@ -15,9 +15,10 @@ from PyQt6.QtWidgets import (
 from hub_core.ac.recording import recordings_dir
 from hub_core.analysis.race_strategy import best_sectors, fmt_ms
 from hub_core.model import ACStatus, gear_label
-from ui.workers import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
 from ui.theme import C
 from ui.widgets import Bar, Card, TyreGrid, ValueTile, label, make_plot, readonly_table, table_item
+from ui.widgets.hybrid import HybridCard
+from ui.workers import SOURCE_AC, SOURCE_DEMO, SOURCE_REPLAY
 
 WINDOW_S = 20.0
 
@@ -97,8 +98,13 @@ class TelemetryPage(QWidget):
         pl.addWidget(self.b_steer)
         self.aids = label("TC 0  ABS 0", "dim")
         pl.addWidget(self.aids)
-        pedals.setFixedWidth(200)
-        mid.addWidget(pedals)
+        left = QVBoxLayout()
+        left.addWidget(pedals, 1)
+        self.hybrid = HybridCard()           # solo per le ibride
+        left.addWidget(self.hybrid)
+        for w in (pedals, self.hybrid):
+            w.setFixedWidth(200)
+        mid.addLayout(left)
 
         plots = QVBoxLayout()
         self.p_speed = make_plot("Velocità (ultimi 20 s)", "km/h")
@@ -212,8 +218,9 @@ class TelemetryPage(QWidget):
         self.b_brake.set_value(s.brake)
         self.b_clutch.set_value(1.0 - s.clutch)
         self.b_steer.set_value(s.steer_angle)
-        self.aids.setText(f"TC {s.tc:.1f}   ABS {s.abs:.1f}   aria {s.air_temp:.0f}°  asfalto {s.road_temp:.0f}°")
+        self.aids.setText(f"TC {s.tc:.1f}   ABS {s.abs:.1f}\naria {s.air_temp:.0f}°   asfalto {s.road_temp:.0f}°")
         self.tyres.update_from(s)
+        self.hybrid.update_from(s, self.hub.session_info)
 
         if len(self._buf["t"]) > 2:
             t = np.fromiter(self._buf["t"], float)
