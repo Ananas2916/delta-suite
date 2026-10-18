@@ -8,6 +8,8 @@
 - *Stato vettura*: l'auto vista dall'alto con i danni per zona, gomme (temperatura, pressione, usura,
   sporco), freni e corsa delle sospensioni, più l'elenco degli avvisi: danni, foratura, gomme fredde o
   surriscaldate, usura, freni, sospensione a fine corsa, carburante, fuori pista, limitatore inserito.
+- Il video passa ad AC→Delta Suite come texture condivisa della scheda video: in gioco costa circa 1 ms
+  per fotogramma a ogni qualità (provato con una RTX 4060 Laptop); se non si può, passa dalla memoria.
 - Qualità da 480×270 a 1280×720 e luminosità regolabile; il video si rende solo con la pagina aperta e si
   spegne con un clic, così in pista non costa FPS quando non serve. In demo e replay resta lo stato vettura.
 - L'ingegnere AI vede lo stesso stato vettura (danni, sporco, sospensioni, avvisi) in `stato_live`.

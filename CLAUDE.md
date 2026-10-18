@@ -34,7 +34,11 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    logga una riga per ogni file). Il ponte comandi resta v1. Rende solo con la pagina aperta e il video
    acceso. Prove del 18/10 (CSP 0.2.11 b3465, PC: Iris Xe + RTX 4060 Laptop): v1 scura e abitacolo non
    reso (→ "Cofano"); v2 filmica 1.6 la più simile al gioco, AC da 180 a ~150–165 FPS col video, T-cam e
-   ruote ok, posteriore coperta dalla coda (→ v3). Prova a mano: `python tools/onboard_probe.py <cartella>`.
+   ruote ok, posteriore coperta dalla coda (→ v3); v4 texture condivisa aperta sulla GPU 1 (NVIDIA),
+   render in AC ~1 ms a ogni qualità contro 5–9 ms in memoria e 6–13 ms su file → predefinita, con
+   ritorno automatico alla memoria. `sharedHandle(true)` (crossProcess): con false è un id interno
+   agli script e OpenSharedResource dà E_INVALIDARG. Prova a mano:
+   `python tools/onboard_probe.py $env:LOCALAPPDATA\DeltaSuite\onboard_probe 6 [trasporti]`.
 3. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
    scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
    Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
@@ -122,11 +126,8 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard v4 in AC vero: texture condivisa (si apre? su che GPU? FPS) contro memoria e file, YEBIS
-   contro filmica, telecamera posteriore; poi scegliere `DEFAULT_TRANSPORT` (ora memoria). Misure a
-   1280×720 (CPU in AC): render + sviluppo 1–2 ms, encode DDS ~9 ms, save JPG 11–12 ms, YEBIS+save
-   14 ms: il costo è la lettura dalla GPU, che la texture condivisa toglie.
-   Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+4. Onboard: guardare nell'interfaccia (non solo nello script) YEBIS contro filmica 1.6 e la telecamera
+   posteriore nuova. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)
@@ -136,4 +137,5 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)
 - [ ] Push-to-talk e voce in cuffia provati in pista dall'utente
-- [ ] Onboard live (video da app CSP + stato vettura) provato con AC vero
+- [x] Onboard live: video dall'app CSP provato con AC vero (18/10, texture condivisa, 8 telecamere, 4 qualità)
+- [ ] Onboard: danni con un urto vero e pagina completa provata dall'utente

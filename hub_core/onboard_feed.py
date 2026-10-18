@@ -62,7 +62,9 @@ DEFAULT_TONEMAP = TONEMAP_FILMIC
 DEFAULT_EXPOSURE = 1.6        # provata il 18/10 al Red Bull Ring: la più simile al gioco con la filmica
 
 TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED = 0, 1, 2
-DEFAULT_TRANSPORT = TRANSPORT_MEMORY
+# provata il 18/10 (CSP 0.2.11, RTX 4060 Laptop): condivisa ~1 ms in AC a ogni qualità, memoria 5-9 ms,
+# file 6-13 ms a 1280×720; se la texture non si apre si torna da soli alla memoria
+DEFAULT_TRANSPORT = TRANSPORT_SHARED
 
 c_int, c_float, c_char = ctypes.c_int, ctypes.c_float, ctypes.c_char
 
