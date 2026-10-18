@@ -3,12 +3,13 @@
 **Nuova pagina Onboard live** (In pista, subito dopo la telemetria), come al muretto:
 - *Video onboard*: l'app CSP rende una telecamera montata sull'auto — T-cam, abitacolo, posteriore, le
   quattro ruote o inseguimento — anche sulle auto degli avversari, con sopra la grafica stile TV: velocità,
-  marcia, giri motore, pedali, sterzo, giro e tempi, e l'avviso più grave in evidenza;
+  marcia, giri motore, pedali, sterzo, giro e tempi, e l'avviso più grave in evidenza (l'abitacolo in una
+  seconda vista non viene reso: la vista del pilota diventa una telecamera sul cofano);
 - *Stato vettura*: l'auto vista dall'alto con i danni per zona, gomme (temperatura, pressione, usura,
   sporco), freni e corsa delle sospensioni, più l'elenco degli avvisi: danni, foratura, gomme fredde o
   surriscaldate, usura, freni, sospensione a fine corsa, carburante, fuori pista, limitatore inserito.
-- Qualità da 480×270 a 1280×720; il video si rende solo con la pagina aperta e si spegne con un clic,
-  così in pista non costa FPS quando non serve. In demo e replay resta lo stato vettura.
+- Qualità da 480×270 a 1280×720 e luminosità regolabile; il video si rende solo con la pagina aperta e si
+  spegne con un clic, così in pista non costa FPS quando non serve. In demo e replay resta lo stato vettura.
 - L'ingegnere AI vede lo stesso stato vettura (danni, sporco, sospensioni, avvisi) in `stato_live`.
 
 Va reinstallata l'app CSP (*Box & Assetto → Aggiorna app CSP*) e riavviata la sessione in AC.

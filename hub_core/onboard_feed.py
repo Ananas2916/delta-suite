@@ -2,13 +2,17 @@
 Video onboard dall'app Lua di CSP (ac_app/DeltaSuiteBridge).
 
 L'app rende una telecamera montata sull'auto scelta (ac.GeometryShot, una seconda vista oltre a
-quella del pilota) e salva i fotogrammi in JPG nella cartella indicata da qui, a rotazione su
-SLOTS file. Lo scambio passa da una mapping a parte, DeltaSuite_Onboard_v1, così il layout del
-ponte comandi resta invariato:
-  - Delta Suite scrive le richieste (attivo, telecamera, auto, risoluzione, fps, cartella) e hostBeat;
-  - l'app scrive frame (ultimo fotogramma salvato, nel file frame % SLOTS), dimensioni e stato.
-Si legge sempre il fotogramma precedente all'ultimo: il salvataggio del JPG può non essere ancora
-finito, mentre quello prima è chiuso e l'app non lo riscrive per altri SLOTS - 1 fotogrammi.
+quella del pilota), le applica esposizione e gamma (la seconda vista non passa dal post-processing
+del gioco e senza esce scura) e pubblica i fotogrammi JPG a rotazione su SLOTS posti: nella mapping
+stessa se la CSP sa codificare il JPG in memoria, altrimenti in file nella cartella indicata da qui
+(e CSP scrive una riga di log per ogni file). Lo scambio passa da una mapping a parte,
+DeltaSuite_Onboard_v2, così il layout del ponte comandi resta invariato:
+  - Delta Suite scrive le richieste (attivo, telecamera, auto, risoluzione, fps, esposizione, cartella)
+    e hostBeat;
+  - l'app scrive frame (ultimo fotogramma pubblicato, nel posto frame % SLOTS), dimensioni, FPS del
+    gioco e stato.
+Si legge sempre il fotogramma precedente all'ultimo: l'ultimo può essere ancora in scrittura, quello
+prima è chiuso e l'app non lo riscrive per altri SLOTS - 1 fotogrammi.
 
 Il layout deve restare identico a ONBOARD_LAYOUT in DeltaSuiteBridge.lua.
 """
@@ -20,15 +24,16 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v1"
-ONBOARD_VERSION = 1
+ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v2"
+ONBOARD_VERSION = 2
 END_MARKER = 0x44534F31   # 'DSO1'
 SLOTS = 3
+JPEG_MAX = 393216         # byte per fotogramma nella mapping (un 1280×720 provato pesa ~120 KB)
 
 # telecamere: (chiave, nome) nello stesso ordine degli indici in DeltaSuiteBridge.lua
 CAMERAS = [
     ("tcam", "T-cam (sopra il roll-bar)"),
-    ("cockpit", "Abitacolo"),
+    ("hood", "Cofano (vista pilota)"),     # l'abitacolo in una seconda vista non viene reso
     ("rear", "Posteriore"),
     ("wheel_fl", "Ruota anteriore sinistra"),
     ("wheel_fr", "Ruota anteriore destra"),
@@ -45,6 +50,11 @@ QUALITIES = [
     ("Massima · 1280×720 · 25 fps", 1280, 720, 25),
 ]
 
+# esposizione e curva applicate dall'app: 0 niente, 1 solo gamma, 2 curva filmica + gamma
+TONEMAP_NONE, TONEMAP_GAMMA, TONEMAP_FILMIC = 0, 1, 2
+DEFAULT_TONEMAP = TONEMAP_FILMIC
+DEFAULT_EXPOSURE = 1.0
+
 c_int, c_float, c_char = ctypes.c_int, ctypes.c_float, ctypes.c_char
 
 
@@ -53,10 +63,12 @@ class OnboardShared(ctypes.Structure):
         ("version", c_int),
         # scritti da Delta Suite
         ("hostBeat", c_int), ("enabled", c_int), ("camera", c_int), ("carIndex", c_int),
-        ("width", c_int), ("height", c_int), ("fps", c_int), ("folder", c_char * 260),
+        ("width", c_int), ("height", c_int), ("fps", c_int), ("exposure", c_float), ("tonemap", c_int),
+        ("folder", c_char * 260),
         # scritti dall'app
         ("frame", c_int), ("shotWidth", c_int), ("shotHeight", c_int), ("shotCar", c_int),
-        ("renderMs", c_float), ("status", c_char * 96),
+        ("renderMs", c_float), ("gameFps", c_float), ("status", c_char * 96),
+        ("jpegSize", c_int * SLOTS), ("jpeg", (c_char * JPEG_MAX) * SLOTS),
         ("endMarker", c_int),
     ]
 
@@ -82,6 +94,7 @@ class OnboardInfo:
     height: int
     car: int
     render_ms: float
+    game_fps: float
     status: str
 
 
@@ -118,7 +131,8 @@ class OnboardFeed:
             self._view = None
         self._last_read = None
 
-    def request(self, enabled: bool, camera: int, car_index: int, width: int, height: int, fps: int) -> bool:
+    def request(self, enabled: bool, camera: int, car_index: int, width: int, height: int, fps: int,
+                exposure: float = DEFAULT_EXPOSURE, tonemap: int = DEFAULT_TONEMAP) -> bool:
         """Aggiorna le richieste e il battito (va chiamata almeno una volta al secondo)."""
         if not self.connect():
             return False
@@ -128,6 +142,7 @@ class OnboardFeed:
         s.folder = str(self.folder).encode("utf-8")[:259]
         s.camera, s.carIndex = camera, car_index
         s.width, s.height, s.fps = width, height, fps
+        s.exposure, s.tonemap = exposure, tonemap
         s.enabled = 1 if enabled else 0
         s.hostBeat = (s.hostBeat + 1) & 0x7FFFFFFF
         return True
@@ -138,11 +153,11 @@ class OnboardFeed:
         s = self._view.struct
         if s.version != ONBOARD_VERSION:
             return None
-        return OnboardInfo(s.frame, s.shotWidth, s.shotHeight, s.shotCar, s.renderMs,
+        return OnboardInfo(s.frame, s.shotWidth, s.shotHeight, s.shotCar, s.renderMs, s.gameFps,
                            s.status.split(b"\0", 1)[0].decode("utf-8", errors="replace"))
 
-    def new_frame(self) -> Path | None:
-        """Percorso del fotogramma da mostrare, se ce n'è uno nuovo dall'ultima chiamata."""
+    def new_frame(self) -> bytes | None:
+        """JPG del fotogramma da mostrare, se ce n'è uno nuovo dall'ultima chiamata."""
         inf = self.info()
         if inf is None:
             return None
@@ -150,4 +165,14 @@ class OnboardFeed:
         if n is None or n == self._last_read:
             return None
         self._last_read = n
-        return frame_file(self.folder, n)
+        size = self._view.struct.jpegSize[n % SLOTS]
+        if 0 < size <= JPEG_MAX:
+            off = OnboardShared.jpeg.offset + (n % SLOTS) * JPEG_MAX
+            data = ctypes.string_at(self._view.ptr + off, size)
+        else:
+            try:
+                data = frame_file(self.folder, n).read_bytes()
+            except OSError:
+                return None
+        # se nel frattempo l'app ha pubblicato n + 2, può aver già cominciato a riscrivere questo posto
+        return data if self._view.struct.frame <= n + 1 else None

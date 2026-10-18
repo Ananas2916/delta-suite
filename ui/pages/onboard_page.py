@@ -6,11 +6,11 @@ import time
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QImage, QLinearGradient, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QSlider, QVBoxLayout, QWidget
 
 from hub_core import car_status as cs
 from hub_core.ac_shared_memory import ACStatus, gear_label
-from hub_core.onboard_feed import CAMERAS, QUALITIES, OnboardFeed
+from hub_core.onboard_feed import CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, OnboardFeed
 from hub_core.race_strategy import fmt_ms, fuel_per_lap
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
@@ -330,6 +330,13 @@ class OnboardPage(QWidget):
             self.quality.addItem(name)
         self.quality.setCurrentIndex(max(0, min(len(QUALITIES) - 1, hub.setting("onboard/quality", 1, int))))
         self.quality.setToolTip("Il video è una seconda vista resa da AC: più qualità costa più FPS in gioco")
+        self.exposure = QSlider(Qt.Orientation.Horizontal)
+        self.exposure.setRange(30, 400)
+        self.exposure.setFixedWidth(110)
+        self.exposure.setValue(round(100 * hub.setting("onboard/exposure", DEFAULT_EXPOSURE, float)))
+        self.exposure.setToolTip("Esposizione del video: la seconda vista non ha il post-processing del gioco")
+        self.exposure.valueChanged.connect(lambda v: (hub.settings.setValue("onboard/exposure", v / 100),
+                                                      self._push_request()))
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)
         self.video_btn.setChecked(hub.setting("onboard/video", True, bool))
@@ -340,10 +347,14 @@ class OnboardPage(QWidget):
                                                             self._push_request()))
         self.car.currentIndexChanged.connect(lambda _: self._push_request())
         self.video_btn.toggled.connect(self._on_video_toggled)
-        for w in (label("Auto", "dim"), self.car, label("Telecamera", "dim"), self.camera, label("Qualità", "dim"),
-                  self.quality, self.video_btn):
-            bar.addWidget(w)
+        bar.addWidget(self.video_btn)
         root.addLayout(bar)
+        controls = QHBoxLayout()
+        for w in (label("Auto", "dim"), self.car, label("Telecamera", "dim"), self.camera, label("Qualità", "dim"),
+                  self.quality, label("Luminosità", "dim"), self.exposure):
+            controls.addWidget(w)
+        controls.addStretch()
+        root.addLayout(controls)
 
         self.status = label("", "dim")
         root.addWidget(self.status)
@@ -418,7 +429,7 @@ class OnboardPage(QWidget):
         _name, w, h, fps = QUALITIES[self.quality.currentIndex()]
         self._beat_t = time.monotonic()
         return self.feed.request(self.video_btn.isChecked() and self.isVisible(), self.camera.currentIndex(),
-                                 self.car.currentData(), w, h, fps)
+                                 self.car.currentData(), w, h, fps, self.exposure.value() / 100, DEFAULT_TONEMAP)
 
     def hideEvent(self, e):
         self.feed.disconnect()          # niente rendering in AC mentre la pagina non si vede
@@ -432,9 +443,9 @@ class OnboardPage(QWidget):
         if self._ac_live and self.video_btn.isChecked():
             if now - self._beat_t > 0.5:
                 self._push_request()
-            path = self.feed.new_frame()
-            if path is not None:
-                img = QImage(str(path))
+            data = self.feed.new_frame()
+            if data is not None:
+                img = QImage.fromData(data, "JPG")
                 if not img.isNull():
                     self._img, self._frame_t = img, now
         elif self.feed.connected:
@@ -535,7 +546,7 @@ class OnboardPage(QWidget):
             inf = self.feed.info()
             if inf is not None:
                 parts.append(f"<span style='color:{C['green']}'>●</span>  Video in diretta "
-                             f"{inf.width}×{inf.height}, render in AC {inf.render_ms:.1f} ms")
+                             f"{inf.width}×{inf.height}  ·  AC a {inf.game_fps:.0f} FPS")
         elif self._ac_live and self.video_btn.isChecked() and self.feed.connected:
             parts.append(f"<span style='color:{C['yellow']}'>●</span>  Video non in diretta")
         if self.car.currentData() not in (None, -1):

@@ -1,14 +1,15 @@
 """
-Prova del video onboard senza interfaccia: con AC in pista e l'app CSP caricata, chiede ogni
-telecamera e ogni qualità all'app e salva un fotogramma per ciascuna.
+Prova del video onboard senza interfaccia: con AC in pista e l'app CSP caricata, chiede all'app
+telecamere, qualità ed esposizioni diverse e salva un fotogramma per ciascuna prova.
 
     python tools/onboard_probe.py <cartella di uscita> [secondi per prova]
 
-Stampa per ogni prova i fotogrammi al secondo ricevuti, il tempo di render dichiarato dall'app e il
-suo stato; nella cartella finiscono cam<N>_<nome>.jpg e q<N>.jpg da guardare.
+Stampa per ogni prova i fotogrammi al secondo ricevuti, gli FPS del gioco, il tempo di render
+dichiarato dall'app e il suo stato (via usata: memoria o file; texture hdr/ldr; shader). Nella
+cartella finiscono tone<curva>_<esposizione>.jpg, cam<N>_<nome>.jpg e q<N>.jpg da guardare.
+Meglio farlo girare mentre si guida: gli FPS da fermi ai box dicono poco.
 """
 
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -16,19 +17,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from hub_core.onboard_feed import CAMERAS, QUALITIES, OnboardFeed  # noqa: E402
+from hub_core.onboard_feed import (  # noqa: E402
+    CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, OnboardFeed,
+)
+
+TONE_NAMES = {0: "nessuna", 1: "gamma", 2: "filmica+gamma"}
 
 
-def run(feed: OnboardFeed, camera: int, w: int, h: int, fps: int, seconds: float):
-    t0, got, last = time.monotonic(), 0, None
+def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0, quality: int = 1,
+        exposure: float = DEFAULT_EXPOSURE, tonemap: int = DEFAULT_TONEMAP):
+    _name, w, h, fps = QUALITIES[quality]
+    t0, got, last, game_fps = time.monotonic(), 0, None, []
     while time.monotonic() - t0 < seconds:
-        feed.request(True, camera, -1, w, h, fps)
-        p = feed.new_frame()
-        if p is not None:
+        feed.request(enabled, camera, -1, w, h, fps, exposure, tonemap)
+        data = feed.new_frame()
+        if data is not None:
             got += 1
-            last = p
+            last = data
+        inf = feed.info()
+        if inf is not None and time.monotonic() - t0 > seconds / 3:   # FPS a regime
+            game_fps.append(inf.game_fps)
         time.sleep(0.02)
-    return got / seconds, last, feed.info()
+    avg_fps = sum(game_fps) / len(game_fps) if game_fps else -1
+    return got / seconds, last, feed.info(), avg_fps
+
+
+def line(label: str, rate: float, inf, game_fps: float) -> str:
+    return (f"{label:40s} {rate:5.1f} fps video  AC {game_fps:5.0f} FPS  render "
+            f"{inf.render_ms if inf else -1:5.1f} ms  stato: {inf.status if inf else '-'}")
 
 
 def main():
@@ -39,24 +55,32 @@ def main():
     t0 = time.monotonic()
     while not feed.connect():
         if time.monotonic() - t0 > 20:
-            sys.exit("Mapping DeltaSuite_Onboard_v1 assente: AC non in pista o app CSP non aggiornata/caricata")
+            sys.exit("Mapping DeltaSuite_Onboard_v2 assente: AC non in pista o app CSP non aggiornata/caricata")
         time.sleep(1)
-    print(f"collegato, fotogrammi in {feed.folder}")
+    print(f"collegato (cartella per l'eventuale via su file: {feed.folder})")
 
-    _name, w, h, fps = QUALITIES[1]
+    def save(name: str, data):
+        if data is not None:
+            (out / name).write_bytes(data)
+
+    rate, _, inf, gfps = run(feed, seconds, enabled=False)
+    print(line("video spento", rate, inf, gfps))
+
+    for tonemap in (0, 1, 2):
+        for exposure in (1.0, 1.6, 2.5):
+            rate, data, inf, gfps = run(feed, seconds, camera=0, exposure=exposure, tonemap=tonemap)
+            print(line(f"T-cam {TONE_NAMES[tonemap]} esp. {exposure}", rate, inf, gfps))
+            save(f"tone{tonemap}_{exposure}.jpg", data)
+
     for cam, (key, name) in enumerate(CAMERAS):
-        rate, last, inf = run(feed, cam, w, h, fps, seconds)
-        print(f"telecamera {cam} {key:9s} {rate:5.1f} fps  render {inf.render_ms if inf else -1:6.1f} ms  "
-              f"stato: {inf.status if inf else '-'}")
-        if last is not None and last.is_file():
-            shutil.copy(last, out / f"cam{cam}_{key}.jpg")
+        rate, data, inf, gfps = run(feed, seconds, camera=cam)
+        print(line(f"telecamera {cam} {key}", rate, inf, gfps))
+        save(f"cam{cam}_{key}.jpg", data)
 
-    for q, (name, w, h, fps) in enumerate(QUALITIES):
-        rate, last, inf = run(feed, 0, w, h, fps, seconds)
-        print(f"qualità {name:30s} {rate:5.1f} fps  render {inf.render_ms if inf else -1:6.1f} ms  "
-              f"{inf.width if inf else 0}x{inf.height if inf else 0}  stato: {inf.status if inf else '-'}")
-        if last is not None and last.is_file():
-            shutil.copy(last, out / f"q{q}.jpg")
+    for q, (name, *_rest) in enumerate(QUALITIES):
+        rate, data, inf, gfps = run(feed, seconds, quality=q)
+        print(line(f"qualità {name}", rate, inf, gfps))
+        save(f"q{q}.jpg", data)
 
     feed.disconnect()
     print(f"fatto: immagini in {out.resolve()}")

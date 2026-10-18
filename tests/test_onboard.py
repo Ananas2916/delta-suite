@@ -13,10 +13,13 @@ INFO = {"damage_rate": 1.0, "suspension_max_travel": [0.1] * 4}
 def test_onboard_layout_matches_lua_in_order():
     lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
     block = re.search(r"ONBOARD_LAYOUT = \[\[(.*?)\]\]", lua, re.S).group(1)
-    names = re.findall(r"\b(\w+)(?:\[\d+\])?;", block)
+    names = re.findall(r"\b(\w+)(?:\[\d+\])*;", block)
     assert names == [n for n, _ in ob.OnboardShared._fields_]
     assert ctypes.sizeof(ob.OnboardShared) == sum(ctypes.sizeof(t) for _, t in ob.OnboardShared._fields_)
-    assert f"ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS = {ob.ONBOARD_VERSION}, 0x{ob.END_MARKER:08X}, {ob.SLOTS}" in lua
+    assert (f"ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_JPEG_MAX = {ob.ONBOARD_VERSION}, "
+            f"0x{ob.END_MARKER:08X}, {ob.SLOTS}, {ob.JPEG_MAX}") in lua
+    assert f"'DeltaSuite_Onboard_v{ob.ONBOARD_VERSION}'" in lua and ob.ONBOARD_TAG.endswith(f"_v{ob.ONBOARD_VERSION}")
+    assert f"jpeg[{ob.SLOTS}][{ob.JPEG_MAX}]" in block
     # un'etichetta per ogni telecamera gestita in cameraFor (0 = T-cam ... 7 = inseguimento)
     assert len(ob.CAMERAS) == 8
 
@@ -44,16 +47,57 @@ def test_onboard_roundtrip_with_fake_app(tmp_path):
     app = ob.OnboardShared.from_address(k32.MapViewOfFile(h, 0xF001F, 0, 0, 0))
 
     feed = ob.OnboardFeed(tmp_path / "onboard")
-    assert feed.request(True, 3, -1, 640, 360, 15)
+    assert feed.request(True, 3, -1, 640, 360, 15, 1.5, ob.TONEMAP_GAMMA)
     assert app.enabled == 1 and app.camera == 3 and app.carIndex == -1 and app.fps == 15
+    assert app.exposure == 1.5 and app.tonemap == ob.TONEMAP_GAMMA
     assert app.folder.decode() == str(tmp_path / "onboard") and app.hostBeat == 1
     assert feed.new_frame() is None                     # nessun fotogramma ancora
-    app.frame, app.shotWidth, app.shotHeight, app.status = 7, 640, 360, b"in diretta"
-    assert feed.new_frame() == tmp_path / "onboard" / "onboard_0.jpg"     # fotogramma 6
+    # fotogramma 6 nella mapping (posto 0), 7 pubblicato per ultimo
+    jpg = b"\xff\xd8 fotogramma 6 \xff\xd9"
+    ctypes.memmove(ctypes.addressof(app) + ob.OnboardShared.jpeg.offset, jpg, len(jpg))
+    app.jpegSize[0] = len(jpg)
+    app.frame, app.shotWidth, app.shotHeight, app.status, app.gameFps = 7, 640, 360, b"in diretta", 118.5
+    assert feed.new_frame() == jpg
     assert feed.new_frame() is None
-    assert feed.info().status == "in diretta"
+    assert feed.info().status == "in diretta" and feed.info().game_fps == 118.5
+    # fotogramma 7 su file (posto 1): CSP che non sa codificare in memoria
+    (tmp_path / "onboard" / "onboard_1.jpg").write_bytes(b"da file")
+    app.jpegSize[1] = 0
+    app.frame = 8
+    assert feed.new_frame() == b"da file"
     feed.disconnect()
     assert app.enabled == 0
+
+
+class _FakeView:
+    """Vista finta: la mapping è un buffer qui, e frame avanza a ogni lettura come farebbe l'app."""
+
+    def __init__(self, frames):
+        self.buf = ctypes.create_string_buffer(ctypes.sizeof(ob.OnboardShared))
+        self.ptr = ctypes.addressof(self.buf)
+        st = ob.OnboardShared.from_address(self.ptr)
+        st.version = ob.ONBOARD_VERSION
+        frames = iter(frames)
+
+        class Struct:
+            def __getattr__(self, name):
+                return next(frames) if name == "frame" else getattr(st, name)
+        self.struct = Struct()
+        self.raw = st
+
+    def close(self):
+        pass
+
+
+def test_frame_overwritten_while_copying_is_dropped(tmp_path):
+    jpg = b"\xff\xd8 fotogramma 4 \xff\xd9"
+    feed = ob.OnboardFeed(tmp_path)
+    for frames, expected in (([5, 5], jpg), ([5, 7], None)):   # 7: l'app sta già riscrivendo il posto 4 % 3
+        view = _FakeView(frames)
+        ctypes.memmove(view.ptr + ob.OnboardShared.jpeg.offset + (4 % ob.SLOTS) * ob.JPEG_MAX, jpg, len(jpg))
+        view.raw.jpegSize[4 % ob.SLOTS] = len(jpg)
+        feed._view, feed._last_read = view, None
+        assert feed.new_frame() == expected
 
 
 def test_healthy_car_has_no_alerts(sample):

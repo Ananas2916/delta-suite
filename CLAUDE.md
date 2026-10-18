@@ -24,9 +24,14 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    ruote, inseguimento; anche sugli avversari) con grafica TV sopra, più vista dall'alto dello stato
    vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
    (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
-   FPS) e lo salva in JPG a rotazione su 3 file in `%LOCALAPPDATA%\DeltaSuite\onboard`; scambio su una
-   mapping a parte `DeltaSuite_Onboard_v1` (`hub_core/onboard_feed.py`), il ponte comandi resta v1.
-   Rende solo con la pagina aperta e il video acceso.
+   FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
+   post-processing del gioco: senza esce molto scura) e pubblica i JPG a rotazione su 3 posti nella
+   mapping a parte `DeltaSuite_Onboard_v2` (`hub_core/onboard_feed.py`); se la CSP non sa codificare in
+   memoria (`ExtraCanvas:encode`) li salva in `%LOCALAPPDATA%\DeltaSuite\onboard`, ma CSP logga una riga
+   per ogni file. Il ponte comandi resta v1. Rende solo con la pagina aperta e il video acceso.
+   Provato il 18/10 con CSP 0.2.11 b3465 (da fermo ai box): funziona, 8 telecamere e 4 qualità ok, ma
+   immagini scure (→ v2), abitacolo non reso (→ telecamera "Cofano"). Prova a mano senza interfaccia:
+   `python tools/onboard_probe.py <cartella>`.
 3. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
    scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
    Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
@@ -113,9 +118,10 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard in AC vero: verificare che `ac.GeometryShot` + `save` JPG funzionino con la CSP dell'utente,
-   inquadrature delle telecamere (posizioni stimate dalle ruote), costo in FPS per qualità, soglie dei
-   danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+4. Onboard v2 in AC vero e in movimento: esposizione/curva migliori (`DEFAULT_EXPOSURE`,
+   `DEFAULT_TONEMAP`), se `encode` in memoria esiste in 0.2.11, T-cam e ruote anteriori ritoccate, FPS
+   del gioco con video spento/acceso; soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un
+   urto vero e danni attivi.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)
