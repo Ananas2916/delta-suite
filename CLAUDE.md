@@ -14,12 +14,19 @@ Codice proprietario dell'utente, nessuna dipendenza da licenze commerciali.
 - Lingua di lavoro: italiano
 
 ## Moduli
-Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SECTIONS` in
-`ui/pages/home_page.py`). Il CAD/CFD bridge è stato tolto (16/10/2026): non c'entrava con la suite.
+Sette moduli in due gruppi in barra laterale (`SECTIONS` in `ui/navigation.py`; le descrizioni sono i
+suggerimenti delle voci), preceduti dalla pagina **Generale** (18/10/2026, al posto della vecchia Home con le
+schede dei moduli): tutto insieme come al muretto, per la squadra: sessione e bandiera, numeri chiave, onboard
+principale con grafica TV, classifica, GPS, stato vettura e avvisi, strategia, batteria delle ibride, proposte
+dell'ingegnere da confermare e registro della radio (`ui/pages/general_page.py`). Il CAD/CFD bridge è stato
+tolto (16/10/2026): non c'entrava con la suite.
 
 **In pista**
 1. **Telemetria live** (sostituisce MoTeC i2 / ATLAS / WinDARAB): acquisizione 60–100 Hz (velocità,
-   pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, KERS), registrazione e replay.
+   pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, batteria/ERS delle ibride),
+   registrazione e replay. Ibride (18/10/2026): `kersCharge`, `kersInput`, `kersCurrentKJ`, livelli ERS,
+   MGU-H dalla fisica; `hasKERS`/`hasERS`, limite per giro (`ersMaxJ`/`kersMaxJ`) e mappe dalla statica;
+   stato e avvisi in `car_status.hybrid_state`, solo se l'auto è ibrida. Il demo è una hypercar ibrida.
 2. **Onboard live** (18/10/2026): fino a 4 onboard insieme (principale + 3 secondari, come le dirette
    SRO; ▲ scambia con il principale), telecamere di Delta Suite (T-cam, cofano, posteriore, 4 ruote,
    inseguimento; anche sugli avversari) e F6 dell'auto con nomi ricavati da posizione e direzione
@@ -85,9 +92,12 @@ ai_engine/radio.py, voice.py   # regole radio, Kokoro/Tsukumo, coda a priorità
 ai_engine/stt.py               # trascrizione push-to-talk (Whisper locale / Tsukumo)
 ui/hub_state.py, hub_data.py   # stato hub, proposte, fornitore dati per l'MCP
 ui/workers.py                  # TelemetryWorker (thread di acquisizione) e Job
-ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table
+ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table, hybrid,
+                               # onboard_hud (grafica TV), view_panel (riquadro onboard)
+ui/race_view.py                # dati per classifica/GPS/grafica TV/stato vettura (Onboard e Generale)
+ui/navigation.py               # sezioni e moduli della barra laterale
 ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
-                               # (pagine per chiave: "telemetry", "engineer", "box", ...; onboard/ è un pacchetto)
+                               # (pagine per chiave: "general", "telemetry", "onboard", ...; onboard/ è un pacchetto)
 tests/                         # pytest, incluso un giro vero registrato al Red Bull Ring
 ```
 
@@ -141,22 +151,17 @@ tests/                         # pytest, incluso un giro vero registrato al Red 
    `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con la mappa di AC (verso e scala di
    map.ini) e con gli avversari. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
    Da 0.5.0 il video sta in `DeltaSuiteOnboard.lua`: verificare in AC che il `require` lo carichi.
-5. Passo interfaccia (0.6.0, chiesto dall'utente dopo il riordino del codice):
-   - pagina "Generale" da muretto/commissione di gara per il team: una Home con tutto (classifica e
-     tempi, GPS, onboard principale, stato vettura e avvisi, carburante/strategia, radio e proposte);
-     riusare `ui/widgets` (car_status, gps, timing_table);
-   - auto ibride: batteria e ERS (fisica `kersCharge`, `kersInput`, `kersCurrentKJ`, `ersRecoveryLevel`,
-     `ersPowerLevel`, `ersHeatCharging`, `ersIsCharging`; statica `hasERS`, `hasKERS`, `kersMaxJ`,
-     `ersMaxJ`, `ersPowerControllerCount`) in telemetria, stato vettura, Generale, MCP e radio, solo se
-     l'auto li ha;
-   - stato vettura a 300 px: le scritte ai lati delle gomme ("usura 99.5%") vengono tagliate.
+5. 0.5.0 da provare in AC: pagina Generale con il video (un solo collegamento `hub.onboard_feed`,
+   condiviso con la pagina Onboard: lo usa la pagina visibile), ibride con un'auto vera (significato di
+   `kersCurrentKJ` e dei limiti `ersMaxJ`/`kersMaxJ`, segno di `ersIsCharging` con le auto solo KERS).
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac/shared_memory.py`, `receiver.py`)
 - [x] Hub completo con 6 moduli (7 con l'Onboard) + simulatore demo, exe compilato e autotestato
 - [x] Riordino (16/10/2026): via il CAD/CFD, ingegnere AI e radio in un'unica pagina, barra laterale in sezioni
 - [x] Riordino del codice (18/10/2026): `hub_core/ac` e `hub_core/analysis`, app CSP in ponte + modulo
-      onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`
+      onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`; build Windows ok
+- [x] Pagina Generale e dati delle ibride (18/10/2026, demo); da provare in AC
 - [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
 - [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
 - [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)

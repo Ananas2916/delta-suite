@@ -81,29 +81,37 @@ per campo.
 ## ui
 
 - `main_dashboard.py`: finestra, barra laterale, pagine per chiave (`self.pages`, ognuna in uno
-  `QScrollArea`). Le sezioni e l'ordine dei moduli stanno in `SECTIONS` di `pages/home_page.py`.
+  `QScrollArea`). La prima voce è la pagina Generale; sezioni, ordine e descrizioni dei moduli stanno in
+  `navigation.py`.
 - `hub_state.py`: `HubState`, lo stato condiviso (sorgente attiva, giri, ponte CSP, radio, ingegnere,
   MCP) e i suoi segnali; `hub_data.py` fornisce i dati all'MCP e valida le proposte.
 - `workers.py`: `TelemetryWorker` (thread di acquisizione: AC, demo o replay → campioni, giri, stato del
   ponte ogni 0,1 s) e `Job` (lavori bloccanti fuori dal thread della UI).
 - `widgets/`: pezzi riusabili. `__init__` ha i widget di base (Card, ValueTile, grafici, tabelle);
-  `car_status.py` (schema dell'auto), `gps.py` (mappa della pista), `timing_table.py` (classifica).
-- `pages/`: una pagina per modulo; le pagine grandi sono pacchetti (`pages/onboard/`: `hud.py` grafica TV,
-  `panel.py` riquadro, `page.py` la pagina).
+  `car_status.py` (schema dell'auto), `gps.py` (mappa della pista), `timing_table.py` (classifica),
+  `hybrid.py` (batteria ed ERS), `onboard_hud.py` (grafica TV sopra il video), `view_panel.py` (riquadro
+  onboard con auto e telecamera).
+- `race_view.py`: cosa mostrano le pagine "da muretto" (classifica, auto sul GPS, grafica TV, righe dello
+  stato vettura, motivo del video assente), uguale in Onboard e Generale.
+- `pages/`: una pagina per modulo; le pagine grandi sono pacchetti (`pages/onboard/`). `general_page.py`
+  mette insieme i widget di gara.
+- Testi lunghi nelle pagine: niente `setWordWrap` sulle etichette (in una `QScrollArea` l'altezza
+  calcolata "per larghezza" allunga la pagina); righe spezzate a mano.
 
 ### Flusso dei dati
 
 ```
 TelemetryWorker (thread)  ── sample_ready / lap_completed / bridge_state ──▶ HubState ──▶ pagine
-OnboardPage (QTimer)      ── OnboardFeed: richieste e fotogrammi, direttamente sulla mapping onboard
+Onboard / Generale (QTimer) ── hub.onboard_feed: richieste e fotogrammi, direttamente sulla mapping onboard
 ```
 
-Il video non passa da `HubState`: la pagina Onboard lo chiede solo quando è aperta e il video è acceso.
+Il collegamento al video è uno solo (`hub.onboard_feed`), ma lo usa solo la pagina visibile: una pagina
+nascosta non manda richieste e alla chiusura scollega, così AC rende le viste in più solo quando servono.
 
 ### Aggiungere una pagina
 
 1. `ui/pages/<nome>_page.py` (o un pacchetto se cresce), con una classe che riceve `hub`.
-2. Registrarla in `MainWindow.pages` e in `SECTIONS` di `home_page.py`.
+2. Registrarla in `MainWindow.pages` e in `SECTIONS` di `navigation.py`.
 3. Prendere i pezzi comuni da `ui/widgets`; se un widget serve a più pagine, va lì e non in una pagina.
 
 ## Test

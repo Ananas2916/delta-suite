@@ -1,4 +1,18 @@
-## Delta Suite 0.5.0 — più onboard, GPS e riordino
+## Delta Suite 0.5.0 — Generale, ibride, più onboard e GPS
+
+**Nuova pagina Generale** (la prima, al posto della vecchia Home): tutto insieme, come al muretto.
+Sessione e bandiera; posizione, giro, tempi, carburante e tempo rimasto; l'onboard con la grafica TV
+(clic su un'auto in classifica o sul GPS per inquadrarla); classifica, GPS e stato vettura con gli avvisi;
+strategia (consumo, giri di carburante, giro ideale, stint, usura); batteria delle ibride; le proposte
+dell'ingegnere da confermare o scartare e il registro della radio. Le descrizioni dei moduli sono ora i
+suggerimenti delle voci in barra laterale.
+
+**Auto ibride**: se l'auto ha KERS o ERS, Delta Suite mostra la carica della batteria, se sta spingendo o
+ricaricando, l'energia usata nel giro rispetto al limite, mappa di potenza, recupero e dove va l'MGU-H:
+in Telemetria (riquadro Ibrido), nella grafica TV (barra accanto ai pedali), nello stato vettura e nella
+Generale. Avvisi a batteria bassa (20%) e scarica, e a energia del giro finita; la radio lo dice (una
+volta, finché non si ricarica) e si può spegnere tra le regole della radio. L'ingegnere AI vede gli stessi
+dati. Il demo ora è una hypercar ibrida.
 
 **Onboard live**
 - *Niente più tremolio*: le telecamere seguono la carrozzeria disegnata da AC, non più il centro delle
@@ -16,7 +30,8 @@
   sulle auto inquadrate; anche i riquadri piccoli mostrano distacco e ultimo giro. Lo schema dell'auto è
   nella scheda "Stato vettura", la mappa sotto è più grande.
 
-**Finestra**: su uno schermo scalato al 150% non si taglia più a destra; le pagine larghe scorrono.
+**Finestra**: su uno schermo scalato al 150% non si taglia più a destra; le pagine larghe scorrono. Nello
+stato vettura le scritte delle gomme non escono più dalla colonna stretta.
 
 **Sotto il cofano**: il codice è stato riordinato per crescere senza diventare un groviglio. Nessuna
 funzione cambia, ma:
