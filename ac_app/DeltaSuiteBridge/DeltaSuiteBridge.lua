@@ -3,7 +3,7 @@
 -- Ponte tra Assetto Corsa e Delta Suite (programma esterno), tramite due file mappati in memoria:
 --   DeltaSuite_Bridge_Out_v1  scritto qui: regolazioni attuali, setup, pit stop, avversari, tasti radio
 --   DeltaSuite_Bridge_In_v1   scritto da Delta Suite: un comando alla volta, numerato da `seq`
---   DeltaSuite_Onboard_v4     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
+--   DeltaSuite_Onboard_v5     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
 --                             una seconda vista (ac.GeometryShot), le si dà esposizione e gamma (o il
 --                             post-processing del gioco con YEBIS) e il fotogramma arriva a Delta Suite
 --                             come texture condivisa, DDS grezzo nella mapping o file JPG
@@ -101,6 +101,7 @@ local ONBOARD_LAYOUT = [[
   int shotCar;
   float renderMs;
   float gameFps;
+  int carCameras;
   unsigned int sharedHandleLo;
   unsigned int sharedHandleHi;
   char status[96];
@@ -108,13 +109,14 @@ local ONBOARD_LAYOUT = [[
   char data[3][3686656];
   int endMarker;
 ]]
-local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 4, 0x44534F31, 3, 3686656 -- 'DSO1'
+local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 5, 0x44534F31, 3, 3686656 -- 'DSO1'
+local CAR_CAMERA_BASE = 8 -- da qui in poi le telecamere F6 dell'auto (cameras.ini): 8 = la prima
 local TONEMAP_YEBIS, TRANSPORT_MEMORY, TRANSPORT_SHARED = 3, 1, 2
 
 -- Variabili a livello di modulo: restano vive finché l'app è caricata.
 local out = ac.writeMemoryMappedFile('DeltaSuite_Bridge_Out_v1', OUT_LAYOUT)
 local inp = ac.writeMemoryMappedFile('DeltaSuite_Bridge_In_v1', IN_LAYOUT)
-local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v4', ONBOARD_LAYOUT)
+local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v5', ONBOARD_LAYOUT)
 
 local btnRadio = ac.ControlButton('DeltaSuite/Radio ingegnere (tieni premuto)')
 local btnOk = ac.ControlButton('DeltaSuite/Conferma proposta')
@@ -239,6 +241,9 @@ local shotKey = nil -- richiesta con cui è stata creata la shot: si ricrea solo
 local shotHdr, shaderOk, encodeOk = false, true, true
 local onbTimer, onbBeat, onbBeatChange = 0, onb.hostBeat, -100
 local onbActive = false
+local camCountTimer = 0
+local X, Y, Z = vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1)
+local carNodes, wheelsLocal = {}, {} -- nodo carRoot e ruote nello spazio dell'auto, per indice d'auto
 local fpsAvg = 0
 
 -- La GeometryShot non passa dal post-processing del gioco: senza esposizione e gamma esce scura
@@ -265,6 +270,7 @@ local function freeShot()
   if shot then shot:dispose() end
   if shotCanvas then shotCanvas:dispose() end
   shot, shotCanvas, shotW, shotH, shotYebis, shotShared, shotKey = nil, nil, 0, 0, false, false, nil
+  carNodes, wheelsLocal = {}, {} -- ripresi alla prossima ripresa (cambio di sessione o di auto)
   onb.sharedHandleLo, onb.sharedHandleHi = 0, 0
 end
 
@@ -320,33 +326,101 @@ local function makeShot(w, h, yebis, shared, key)
   shotW, shotH, shotKey = w, h, key
 end
 
--- telecamera montata sull'auto: posizione, direzione, alto, fov (stesso ordine di CAMERAS in onboard_feed.py)
-local function cameraFor(car, kind)
-  local fwd, up = car.look, car.up
-  local side = field(car, 'side') or fwd:clone():cross(up)
-  local w = { car.wheels[0].position, car.wheels[1].position, car.wheels[2].position, car.wheels[3].position }
+-- Le telecamere si calcolano nello spazio dell'auto e si portano nel mondo con la trasformazione con cui
+-- l'auto viene disegnata (nodo carRoot): così sono solidali con la carrozzeria inquadrata. Prima si partiva
+-- dal centro delle ruote, che si muove con le sospensioni, e dallo stato fisico, che non coincide con quello
+-- disegnato nello stesso fotogramma: l'immagine tremava molto.
+
+-- ripiego se il nodo dell'auto non si trova: base dallo stato dell'auto (meno precisa)
+local function basisOf(car)
+  local side = field(car, 'side') or car.look:clone():cross(car.up)
+  return {
+    transformPoint = function (_, p) return car.position + side * p.x + car.up * p.y + car.look * p.z end,
+    transformVector = function (_, v) return side * v.x + car.up * v.y + car.look * v.z end,
+    inverse = function ()
+      return { transformPoint = function (_, p)
+        local d = p - car.position
+        return vec3(d:dot(side), d:dot(car.up), d:dot(car.look))
+      end }
+    end,
+  }
+end
+
+local function carTransform(idx, car)
+  local node = carNodes[idx]
+  if node == nil then
+    node = ac.findNodes('carRoot:' .. idx)
+    carNodes[idx] = node
+  end
+  return node:getWorldTransformationRaw() or basisOf(car)
+end
+
+-- ruote nello spazio dell'auto, prese una volta sola: la carrozzeria non segue le sospensioni
+local function wheelsOf(idx, car, m)
+  local w = wheelsLocal[idx]
+  if w then return w end
+  local inv = m:inverse()
+  w = {}
+  for i = 0, 3 do w[i + 1] = inv:transformPoint(car.wheels[i].position) end
+  wheelsLocal[idx] = w
+  return w
+end
+
+local function countCarCameras(car)
+  local n = field(car, 'carCamerasCount')
+  if n then return n end
+  if not ac.accessCarCamera then return 0 end
+  n = 0
+  while n < 16 do
+    local ok, c = pcall(ac.accessCarCamera, n)
+    if not ok or not c then break end
+    n = n + 1
+  end
+  return n
+end
+
+-- telecamera in coordinate dell'auto: posizione, direzione, alto, fov (stesso ordine di CAMERAS in onboard_feed.py)
+local function localCamera(car, w, kind)
   local front, rear = avg(w[1], w[2]), avg(w[3], w[4])
   local centre = avg(front, rear)
   if kind == 1 then -- cofano: dagli occhi del pilota, ma l'abitacolo in una seconda vista non viene reso
-    local eyes, tr = field(car, 'driverEyesPosition'), field(car, 'transform')
-    local pos = (eyes and tr) and tr:transformPoint(eyes) or (centre + up * 0.62 - fwd * 0.15)
-    return pos, fwd, up, 72
+    return field(car, 'driverEyesPosition') or (centre + Y * 0.62 - Z * 0.15), Z, Y, 72
   elseif kind == 2 then -- posteriore: sopra la coda, dietro il tetto (più in basso alettone e coda coprono metà)
-    return rear + up * 1.15 - fwd * 0.3, (fwd * -1 - up * 0.1):normalize(), up, 60
+    return rear + Y * 1.15 - Z * 0.3, (Z * -1 - Y * 0.1):normalize(), Y, 60
   elseif kind >= 3 and kind <= 6 then -- ruote
     local wp = w[kind - 2]
-    local out = side * ((wp - centre):dot(side) >= 0 and 1 or -1)
+    local out = X * (wp.x >= centre.x and 1 or -1)
     if kind <= 4 then -- anteriori: più in fuori e più in basso, sennò il parafango copre la gomma
-      local pos = wp + out * 0.36 + up * 0.16 - fwd * 0.9
-      return pos, (fwd * 1.5 + (wp - pos):normalize()):normalize(), up, 68
+      local pos = wp + out * 0.36 + Y * 0.16 - Z * 0.9
+      return pos, (Z * 1.5 + (wp - pos):normalize()):normalize(), Y, 68
     end
-    local pos = wp + out * 0.28 + up * 0.22 + fwd * 0.95 -- posteriori: guardano indietro
-    return pos, (fwd * -2 + (wp - pos):normalize()):normalize(), up, 68
+    local pos = wp + out * 0.28 + Y * 0.22 + Z * 0.95 -- posteriori: guardano indietro
+    return pos, (Z * -2 + (wp - pos):normalize()):normalize(), Y, 68
   elseif kind == 7 then -- inseguimento
-    return centre - fwd * 5.5 + up * 1.7, (fwd - up * 0.14):normalize(), up, 55
+    return centre - Z * 5.5 + Y * 1.7, (Z - Y * 0.14):normalize(), Y, 55
   end
   -- T-cam: sopra il tetto e un po' avanti, sennò il tetto copre metà inquadratura
-  return centre + up * 1.18 + fwd * 0.15, (fwd - up * 0.07):normalize(), up, 62
+  return centre + Y * 1.18 + Z * 0.15, (Z - Y * 0.07):normalize(), Y, 62
+end
+
+-- posizione, direzione, alto, fov nel mondo; il secondo valore di ritorno è una nota per lo stato
+local function cameraFor(idx, car, kind)
+  local m = carTransform(idx, car)
+  if kind >= CAR_CAMERA_BASE then
+    -- telecamere F6 dell'auto: ac.accessCarCamera vale per l'auto del giocatore; la matrice è relativa
+    -- al modello e la sua .look guarda all'indietro
+    local ok, cc = false, nil
+    if idx == 0 and ac.accessCarCamera then ok, cc = pcall(ac.accessCarCamera, kind - CAR_CAMERA_BASE) end
+    if ok and cc then
+      local t = cc.transform
+      return m:transformPoint(t.position), m:transformVector(t.look * -1):normalize(),
+        m:transformVector(t.up):normalize(), cc.fov > 1 and cc.fov or 60, nil
+    end
+    kind = 0
+  end
+  local p, l, u, fov = localCamera(car, wheelsOf(idx, car, m), kind)
+  local note = kind == 0 and onb.camera >= CAR_CAMERA_BASE and 'F6 solo per la tua auto' or nil
+  return m:transformPoint(p), m:transformVector(l):normalize(), m:transformVector(u):normalize(), fov, note
 end
 
 -- esposizione e gamma sul fotogramma reso; se lo shader non compila, solo un moltiplicatore
@@ -402,6 +476,12 @@ local function updateOnboard(dt, sim)
   onb.endMarker = ONBOARD_END
   if dt > 0 then fpsAvg = fpsAvg + (1 / dt - fpsAvg) * 0.05 end
   onb.gameFps = fpsAvg
+  camCountTimer = camCountTimer - dt
+  if camCountTimer <= 0 then
+    camCountTimer = 2
+    local player = ac.getCar(0)
+    onb.carCameras = player and countCarCameras(player) or 0
+  end
   if onb.hostBeat ~= onbBeat then onbBeat, onbBeatChange = onb.hostBeat, clock end
   onbActive = onb.enabled == 1 and clock - onbBeatChange < 2
   if not onbActive then
@@ -422,7 +502,7 @@ local function updateOnboard(dt, sim)
   if not shot or key ~= shotKey then makeShot(w, h, yebis, shared, key) end
 
   local t0 = os.clock()
-  local pos, look, up, fov = cameraFor(car, onb.camera)
+  local pos, look, up, fov, camNote = cameraFor(idx, car, onb.camera)
   shot:update(pos, look, up, fov)
   developShot()
   local n = onb.frame + 1
@@ -437,8 +517,9 @@ local function updateOnboard(dt, sim)
   onb.renderMs = (os.clock() - t0) * 1000
   onb.shotWidth, onb.shotHeight, onb.shotCar = w, h, idx
   onb.frame = n -- per ultimo: Delta Suite legge il fotogramma n - 1
-  setStr(onb.status, 96, string.format('in diretta · %s · %s%s', route,
-    shotYebis and 'yebis' or shotHdr and 'hdr' or 'ldr', shaderOk and '' or ' · senza shader'))
+  setStr(onb.status, 96, string.format('in diretta · %s · %s%s%s', route,
+    shotYebis and 'yebis' or shotHdr and 'hdr' or 'ldr', shaderOk and '' or ' · senza shader',
+    camNote and (' · ' .. camNote) or ''))
 end
 
 function script.update(dt)

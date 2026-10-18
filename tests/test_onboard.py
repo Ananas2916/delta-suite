@@ -23,17 +23,34 @@ def test_onboard_layout_matches_lua_in_order():
     assert ob.DATA_MAX >= 128 + 1280 * 720 * 4 and ob.DATA_MAX % 4 == 0
     assert f"'DeltaSuite_Onboard_v{ob.ONBOARD_VERSION}'" in lua and ob.ONBOARD_TAG.endswith(f"_v{ob.ONBOARD_VERSION}")
     assert f"data[{ob.SLOTS}][{ob.DATA_MAX}]" in block
-    # un'etichetta per ogni telecamera gestita in cameraFor (0 = T-cam ... 7 = inseguimento)
+    # un'etichetta per ogni telecamera gestita in localCamera (0 = T-cam ... 7 = inseguimento), poi le F6
     assert len(ob.CAMERAS) == 8
+    assert f"local CAR_CAMERA_BASE = {ob.CAR_CAMERA_BASE} " in lua
+    assert ob.camera_names(2)[-2:] == ["Auto F6 · 1", "Auto F6 · 2"] and len(ob.camera_names(0)) == 8
 
 
-def test_lua_local_functions_defined_before_use():
-    # una local function chiamata prima della sua definizione in Lua è una globale nil: errore solo in AC
+def _lua_names_used_before_declaration(lua: str) -> list[str]:
+    """Local di modulo (funzioni e variabili) usate più in alto di dove sono dichiarate: in Lua lì sono
+    globali nil, e l'errore salta fuori solo in AC."""
+    code = re.sub(r"\[\[.*?\]\]", "", lua, flags=re.S)                  # stringhe lunghe (layout, shader)
+    code = re.sub(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", "''", code)    # stringhe
+    code = "\n".join(line.split("--", 1)[0] for line in code.splitlines())
+    late = []
+    for m in re.finditer(r"^local (?:function (\w+)|([\w, ]+?)\s*=)", code, re.M):
+        names = [m.group(1)] if m.group(1) else [n.strip() for n in m.group(2).split(",")]
+        for name in names:
+            first = re.search(rf"(?<![\w.:]){re.escape(name)}\b", code)
+            if first.start() < m.start():
+                late.append(name)
+    return late
+
+
+def test_lua_locals_declared_before_use():
     lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
-    code = "\n".join(line.split("--", 1)[0] for line in lua.splitlines())
-    for m in re.finditer(r"^local function (\w+)", code, re.M):
-        first_use = re.search(rf"(?<![\w.:]){m.group(1)}\(", code)
-        assert first_use.start() > m.start(), f"{m.group(1)} usata prima di essere definita"
+    assert _lua_names_used_before_declaration(lua) == []
+    # il controllo trova davvero i due errori già capitati (field e carNodes)
+    bad = "local function a()\n  return field(1) + #carNodes\nend\nlocal function field(x) return x end\nlocal carNodes = {}\n"
+    assert _lua_names_used_before_declaration(bad) == ["field", "carNodes"]
 
 
 def test_shared_handle_is_cross_process():

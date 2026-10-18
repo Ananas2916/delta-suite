@@ -26,7 +26,7 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
    post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
-   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v4` (`hub_core/onboard_feed.py`)
+   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v5` (`hub_core/onboard_feed.py`)
    in tre modi: texture D3D11 condivisa (`hub_core/d3d_shared.py`, Delta Suite la apre provando tutte
    le GPU e la copia lei: niente lettura dalla GPU in AC; se non si apre si torna alla memoria), in
    memoria come DDS grezzo a rotazione su 3 posti (`ExtraCanvas:encode()` in CSP 0.2.11 dà
@@ -64,7 +64,7 @@ hub_core/telemetry_receiver.py # acquisizione dati (sample_from_pages condiviso 
 hub_core/session_recording.py  # registrazione .dsr delle pagine grezze e ReplaySource
 hub_core/csp_bridge.py         # lato Python del ponte CSP (layout = DeltaSuiteBridge.lua)
 hub_core/timing.py             # classifica, gap e interval
-hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v4)
+hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v5)
 hub_core/d3d_shared.py         # lettura della texture condivisa D3D11 (ctypes, vtable COM)
 hub_core/car_status.py         # danni, gomme, freni, sospensioni → avvisi (pagina Onboard e MCP)
 hub_core/lap_analysis.py       # curve automatiche e confronto curva per curva
@@ -126,8 +126,11 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard: guardare nell'interfaccia (non solo nello script) YEBIS contro filmica 1.6 e la telecamera
-   posteriore nuova. Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
+4. Onboard v5 (dopo la 0.4.0): telecamere calcolate nello spazio dell'auto e portate nel mondo con
+   `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (prima: centro ruote + stato fisico → forte
+   tremolio, segnalato dall'utente); telecamere F6 dell'auto da `ac.accessCarCamera(i)` (solo auto 0,
+   `.look` all'indietro) dopo le 8 di Delta Suite. Da verificare in AC: tremolio sparito, e se le F6
+   dentro l'abitacolo mostrano gli interni (la seconda vista finora non li rendeva). Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)

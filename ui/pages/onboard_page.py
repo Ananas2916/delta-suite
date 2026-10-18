@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QS
 
 from hub_core import car_status as cs
 from hub_core.ac_shared_memory import ACStatus, gear_label
-from hub_core.onboard_feed import CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, Frame, OnboardFeed
+from hub_core.onboard_feed import DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, Frame, OnboardFeed, camera_names
 from hub_core.race_strategy import fmt_ms, fuel_per_lap
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
@@ -329,9 +329,10 @@ class OnboardPage(QWidget):
         self.car.setMinimumWidth(240)
         self.car.addItem("La mia auto", -1)
         self.camera = QComboBox()
-        for _key, name in CAMERAS:
-            self.camera.addItem(name)
-        self.camera.setCurrentIndex(max(0, min(len(CAMERAS) - 1, hub.setting("onboard/camera", 0, int))))
+        # le F6 si conoscono solo con AC in pista: si ricorda quante erano per riaprire sulla stessa telecamera
+        self._car_cameras = hub.setting("onboard/car_cameras", 0, int)
+        self.camera.addItems(camera_names(self._car_cameras))
+        self.camera.setCurrentIndex(max(0, min(self.camera.count() - 1, hub.setting("onboard/camera", 0, int))))
         self.quality = QComboBox()
         for name, *_ in QUALITIES:
             self.quality.addItem(name)
@@ -478,7 +479,25 @@ class OnboardPage(QWidget):
             return "In attesa del primo fotogramma dall'app CSP…"
         return ""
 
+    def _sync_cameras(self):
+        """Aggiunge o toglie dall'elenco le telecamere F6 trovate dall'app sull'auto."""
+        inf = self.feed.info()
+        if inf is None or inf.car_cameras == self._car_cameras:
+            return
+        self._car_cameras = inf.car_cameras
+        self.hub.settings.setValue("onboard/car_cameras", inf.car_cameras)
+        current = self.camera.currentIndex()
+        self.camera.blockSignals(True)
+        self.camera.clear()
+        self.camera.addItems(camera_names(inf.car_cameras))
+        self.camera.setCurrentIndex(min(current, self.camera.count() - 1))
+        self.camera.blockSignals(False)
+        if self.camera.currentIndex() != current:
+            self.hub.settings.setValue("onboard/camera", self.camera.currentIndex())
+            self._push_request()
+
     def _refresh(self):
+        self._sync_cameras()
         live_video = self._img is not None and time.monotonic() - self._frame_t < STALE_S
         if not self._ac_live:
             self._img = None
@@ -496,7 +515,7 @@ class OnboardPage(QWidget):
 
     def _hud(self, s, alerts) -> dict:
         idx = self.car.currentData()
-        cam = CAMERAS[self.camera.currentIndex()][1]
+        cam = self.camera.currentText()
         if idx is not None and idx >= 0:
             b = self.hub.bridge_state
             entry = next((c for c in (b.cars if b else []) if c.index == idx), None)

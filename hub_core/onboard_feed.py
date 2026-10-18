@@ -11,7 +11,7 @@ fotogrammi in uno di tre modi:
     (in CSP 0.2.11 encode non comprime e non prende il formato), niente file né log;
   - file: un JPG nella cartella indicata da qui; CSP scrive una riga di log per ogni file.
 Se la texture condivisa non si apre si torna alla memoria. Lo scambio passa da una mapping a parte,
-DeltaSuite_Onboard_v4, così il layout del ponte comandi resta invariato:
+DeltaSuite_Onboard_v5, così il layout del ponte comandi resta invariato:
   - Delta Suite scrive le richieste (attivo, telecamera, auto, risoluzione, fps, esposizione, curva,
     trasporto, cartella) e hostBeat;
   - l'app scrive frame (ultimo fotogramma pubblicato, nel posto frame % SLOTS), dimensioni, FPS del
@@ -29,8 +29,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v4"
-ONBOARD_VERSION = 4
+ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v5"
+ONBOARD_VERSION = 5
 END_MARKER = 0x44534F31   # 'DSO1'
 SLOTS = 3
 DATA_MAX = 3686656        # byte per fotogramma nella mapping: DDS 1280×720 a 8 bit per canale + intestazione
@@ -46,6 +46,13 @@ CAMERAS = [
     ("wheel_rr", "Ruota posteriore destra"),
     ("chase", "Inseguimento"),
 ]
+# dopo queste, le telecamere F6 della tua auto (cameras.ini, quelle di CSP "Car"): indice CAR_CAMERA_BASE + i
+CAR_CAMERA_BASE = len(CAMERAS)
+
+
+def camera_names(car_cameras: int) -> list[str]:
+    """Nomi per l'elenco: telecamere di Delta Suite, poi quelle F6 che l'app ha trovato sull'auto."""
+    return [name for _key, name in CAMERAS] + [f"Auto F6 · {i + 1}" for i in range(max(0, car_cameras))]
 
 # qualità: (nome, larghezza, altezza, fps)
 QUALITIES = [
@@ -78,7 +85,7 @@ class OnboardShared(ctypes.Structure):
         ("transport", c_int), ("folder", c_char * 260),
         # scritti dall'app
         ("frame", c_int), ("shotWidth", c_int), ("shotHeight", c_int), ("shotCar", c_int),
-        ("renderMs", c_float), ("gameFps", c_float), ("sharedHandleLo", ctypes.c_uint),
+        ("renderMs", c_float), ("gameFps", c_float), ("carCameras", c_int), ("sharedHandleLo", ctypes.c_uint),
         ("sharedHandleHi", ctypes.c_uint), ("status", c_char * 96),
         ("dataSize", c_int * SLOTS), ("data", (c_char * DATA_MAX) * SLOTS),
         ("endMarker", c_int),
@@ -146,6 +153,7 @@ class OnboardInfo:
     render_ms: float
     game_fps: float
     status: str
+    car_cameras: int = 0
 
 
 class OnboardFeed:
@@ -212,7 +220,7 @@ class OnboardFeed:
         if s.version != ONBOARD_VERSION:
             return None
         return OnboardInfo(s.frame, s.shotWidth, s.shotHeight, s.shotCar, s.renderMs, s.gameFps,
-                           s.status.split(b"\0", 1)[0].decode("utf-8", errors="replace"))
+                           s.status.split(b"\0", 1)[0].decode("utf-8", errors="replace"), s.carCameras)
 
     def new_frame(self) -> Frame | None:
         """Fotogramma da mostrare, se ce n'è uno nuovo dall'ultima chiamata."""

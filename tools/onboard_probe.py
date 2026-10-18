@@ -97,7 +97,10 @@ def main():
             elif transport == TRANSPORT_SHARED and feed._shared is not None:
                 print(f"  texture condivisa aperta sulla GPU {feed._shared.adapter_index}")
 
-    for cam, (key, _name) in enumerate([] if only_transports else CAMERAS):
+    f6 = feed.info().car_cameras if feed.info() else 0      # l'app le conta ogni 2 s, anche a video spento
+    names = [key for key, _name in CAMERAS] + [f"f6_{i + 1}" for i in range(f6)]
+    print(f"telecamere F6 trovate sull'auto: {f6}")
+    for cam, key in enumerate([] if only_transports else names):
         rate, frame, inf, gfps, kb = run(feed, seconds, camera=cam)
         print(line(f"telecamera {cam} {key}", rate, inf, gfps, kb))
         save(out, f"cam{cam}_{key}", frame)
