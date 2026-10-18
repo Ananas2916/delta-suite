@@ -8,8 +8,8 @@ import sys
 from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QScrollArea,
+    QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from hub_core import csp_bridge
@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
+        self._areas: dict[str, QScrollArea] = {}
         self.home = HomePage(self.hub)
         self.telemetry = TelemetryPage(self.hub)
         self.engineer = EngineerPage(self.hub)
@@ -98,8 +99,8 @@ class MainWindow(QMainWindow):
             self.nav.addItem(head)
             for key, name, _desc, _replaces in modules:
                 self._add_nav(key, name)
-        for page in self.pages.values():
-            self.stack.addWidget(page)
+        for key, page in self.pages.items():
+            self.stack.addWidget(self._scrollable(key, page))
         self.nav.currentItemChanged.connect(self._on_nav)
         self.open_page("home")
 
@@ -115,6 +116,16 @@ class MainWindow(QMainWindow):
         self.hub.lap_completed.connect(
             lambda lap: self.statusBar().showMessage(f"Giro {lap.lap_no} salvato in archivio", 4000))
 
+    def _scrollable(self, key: str, page: QWidget) -> QScrollArea:
+        """Pagina in un'area scorrevole: su uno schermo stretto (o scalato al 150%) la finestra non chiede più
+        larghezza dello schermo, al massimo compare una barra di scorrimento."""
+        area = QScrollArea()
+        area.setWidget(page)
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        self._areas[key] = area
+        return area
+
     def _add_nav(self, key: str, name: str):
         it = QListWidgetItem(name)
         it.setData(Qt.ItemDataRole.UserRole, key)
@@ -123,7 +134,7 @@ class MainWindow(QMainWindow):
 
     def _on_nav(self, item, _previous):
         if item is not None:
-            self.stack.setCurrentWidget(self.pages[item.data(Qt.ItemDataRole.UserRole)])
+            self.stack.setCurrentWidget(self._areas[item.data(Qt.ItemDataRole.UserRole)])
 
     def open_page(self, key: str):
         for row in range(self.nav.count()):

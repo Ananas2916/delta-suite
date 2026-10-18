@@ -35,9 +35,8 @@ class TelemetryPage(QWidget):
 
         # --- barra controlli
         bar = QHBoxLayout()
-        title = label("Telemetria live", "h1")
-        bar.addWidget(title)
-        bar.addStretch()
+        # titolo su una riga sua: con lo schermo scalato al 150% titolo + comandi non stavano in larghezza
+        root.addWidget(label("Telemetria live", "h1"))
         self.source = QComboBox()
         self.source.addItem("Assetto Corsa (shared memory)", SOURCE_AC)
         self.source.addItem("Demo (simulatore)", SOURCE_DEMO)
@@ -59,6 +58,7 @@ class TelemetryPage(QWidget):
         for w in (label("Sorgente", "dim"), self.source, self.record, self.hz, label("Velocità demo/replay", "dim"),
                   self.demo_speed, self.start_btn):
             bar.addWidget(w)
+        bar.addStretch()
         root.addLayout(bar)
 
         self.status = label("Acquisizione ferma", "dim")

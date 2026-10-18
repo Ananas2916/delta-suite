@@ -76,6 +76,7 @@ class HomePage(QWidget):
                 d = label(desc)
                 d.setWordWrap(True)
                 r = label(f"Al posto di: {replaces}", "dim")
+                r.setWordWrap(True)
                 btn = QPushButton("Apri")
                 btn.clicked.connect(lambda _=False, key=key: self.open_module.emit(key))
                 cl.addWidget(t)

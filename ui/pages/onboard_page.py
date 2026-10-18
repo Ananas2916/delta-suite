@@ -44,7 +44,7 @@ class OnboardView(QWidget):
         self.live = False
         self.placeholder = ""
         self.hud: dict = {}
-        self.setMinimumSize(480, 270)
+        self.setMinimumSize(420, 236)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_frame(self, img: QImage | None, live: bool):
@@ -206,7 +206,7 @@ class CarStatusView(QWidget):
         super().__init__()
         self.s = None
         self.info: dict = {}
-        self.setMinimumSize(340, 400)
+        self.setMinimumSize(320, 400)
 
     def set_sample(self, s, info: dict):
         self.s, self.info = s, info or {}
@@ -326,7 +326,6 @@ class OnboardPage(QWidget):
         bar.addWidget(label("Onboard live", "h1"))
         bar.addStretch()
         self.car = QComboBox()
-        self.car.setMinimumWidth(240)
         self.car.addItem("La mia auto", -1)
         self.camera = QComboBox()
         # le F6 si conoscono solo con AC in pista: si ricorda quante erano per riaprire sulla stessa telecamera
@@ -358,6 +357,10 @@ class OnboardPage(QWidget):
         bar.addWidget(self.video_btn)
         root.addLayout(bar)
         controls = QHBoxLayout()
+        for combo in (self.car, self.camera, self.quality):   # stringibili: nomi lunghi non allargano la pagina
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(14)
+        self.quality.setMinimumContentsLength(24)
         for w in (label("Auto", "dim"), self.car, label("Telecamera", "dim"), self.camera, label("Qualità", "dim"),
                   self.quality, label("Luminosità", "dim"), self.exposure):
             controls.addWidget(w)
@@ -372,7 +375,7 @@ class OnboardPage(QWidget):
         self.view = OnboardView()
         mid.addWidget(self.view, 1)
         side = Card()
-        side.setFixedWidth(380)
+        side.setFixedWidth(360)
         sl = QVBoxLayout(side)
         sl.setContentsMargins(12, 10, 12, 12)
         sl.addWidget(label("STATO VETTURA", "dim"))
