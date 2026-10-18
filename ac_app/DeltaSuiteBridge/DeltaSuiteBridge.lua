@@ -3,10 +3,10 @@
 -- Ponte tra Assetto Corsa e Delta Suite (programma esterno), tramite due file mappati in memoria:
 --   DeltaSuite_Bridge_Out_v1  scritto qui: regolazioni attuali, setup, pit stop, avversari, tasti radio
 --   DeltaSuite_Bridge_In_v1   scritto da Delta Suite: un comando alla volta, numerato da `seq`
---   DeltaSuite_Onboard_v3     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
+--   DeltaSuite_Onboard_v4     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
 --                             una seconda vista (ac.GeometryShot), le si dà esposizione e gamma (o il
---                             post-processing del gioco con YEBIS) e il fotogramma va nella mapping
---                             come DDS grezzo oppure in un file JPG
+--                             post-processing del gioco con YEBIS) e il fotogramma arriva a Delta Suite
+--                             come texture condivisa, DDS grezzo nella mapping o file JPG
 -- I layout devono restare identici a quelli in hub_core/csp_bridge.py (solo int/float a 4 byte e
 -- array di char, così l'allineamento è lo stesso in LuaJIT e in ctypes).
 
@@ -101,18 +101,20 @@ local ONBOARD_LAYOUT = [[
   int shotCar;
   float renderMs;
   float gameFps;
+  unsigned int sharedHandleLo;
+  unsigned int sharedHandleHi;
   char status[96];
   int dataSize[3];
   char data[3][3686656];
   int endMarker;
 ]]
-local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 3, 0x44534F31, 3, 3686656 -- 'DSO1'
-local TONEMAP_YEBIS, TRANSPORT_MEMORY = 3, 1
+local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 4, 0x44534F31, 3, 3686656 -- 'DSO1'
+local TONEMAP_YEBIS, TRANSPORT_MEMORY, TRANSPORT_SHARED = 3, 1, 2
 
 -- Variabili a livello di modulo: restano vive finché l'app è caricata.
 local out = ac.writeMemoryMappedFile('DeltaSuite_Bridge_Out_v1', OUT_LAYOUT)
 local inp = ac.writeMemoryMappedFile('DeltaSuite_Bridge_In_v1', IN_LAYOUT)
-local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v3', ONBOARD_LAYOUT)
+local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v4', ONBOARD_LAYOUT)
 
 local btnRadio = ac.ControlButton('DeltaSuite/Radio ingegnere (tieni premuto)')
 local btnOk = ac.ControlButton('DeltaSuite/Conferma proposta')
@@ -232,7 +234,8 @@ end
 
 -- ------------------------------------------------------------------ onboard
 
-local shot, shotCanvas, shotW, shotH, shotYebis = nil, nil, 0, 0, false
+local shot, shotCanvas, shotW, shotH, shotYebis, shotShared = nil, nil, 0, 0, false, false
+local shotKey = nil -- richiesta con cui è stata creata la shot: si ricrea solo se cambia
 local shotHdr, shaderOk, encodeOk = false, true, true
 local onbTimer, onbBeat, onbBeatChange = 0, onb.hostBeat, -100
 local onbActive = false
@@ -252,10 +255,36 @@ float4 main(PS_IN pin) {
 local function freeShot()
   if shot then shot:dispose() end
   if shotCanvas then shotCanvas:dispose() end
-  shot, shotCanvas, shotW, shotH, shotYebis = nil, nil, 0, 0, false
+  shot, shotCanvas, shotW, shotH, shotYebis, shotShared, shotKey = nil, nil, 0, 0, false, false, nil
+  onb.sharedHandleLo, onb.sharedHandleHi = 0, 0
 end
 
-local function makeShot(w, h, yebis)
+-- Canvas con texture condivisa: Delta Suite la apre con OpenSharedResource e la copia sulla propria
+-- GPU, così in AC non c'è nessuna lettura dalla GPU (encode o save costano 9-12 ms a 1280×720).
+local function makeSharedCanvas(w, h)
+  if not (render.TextureFlags and render.TextureFlags.Shared) then return nil, 'TextureFlags.Shared assente' end
+  local fmt = render.TextureFormat and render.TextureFormat.R8G8B8A8 and render.TextureFormat.R8G8B8A8.UNorm
+  local aa = render.AntialiasingMode and render.AntialiasingMode.None
+  local ok, c = pcall(ui.ExtraCanvas, vec2(w, h), 1, aa, fmt, render.TextureFlags.Shared)
+  if not ok or not c then return nil, tostring(c) end
+  local fn = field(c, 'sharedHandle')
+  local hok, hnd = false, nil
+  if fn then
+    hok, hnd = pcall(fn, c, false) -- handle "legacy": si apre da un altro processo senza duplicarlo
+    if not hok then hok, hnd = pcall(fn, c) end
+  end
+  hnd = hok and tonumber(hnd) or nil
+  if not hnd or hnd == 0 then
+    c:dispose()
+    return nil, 'sharedHandle: ' .. tostring(hnd)
+  end
+  onb.sharedHandleLo, onb.sharedHandleHi = hnd % 4294967296, math.floor(hnd / 4294967296)
+  return c
+end
+
+local sharedError = nil
+
+local function makeShot(w, h, yebis, shared, key)
   freeShot()
   local root = ac.findNodes('sceneRoot:yes')
   local ok, s = false, nil
@@ -274,8 +303,13 @@ local function makeShot(w, h, yebis)
   if shot.setBestSceneShotQuality then pcall(shot.setBestSceneShotQuality, shot)
   elseif render.ShadersType then pcall(shot.setShadersType, shot, render.ShadersType.Main) end
   pcall(shot.setClippingPlanes, shot, 0.05, 4000)
-  shotCanvas = ui.ExtraCanvas(vec2(w, h))
-  shotW, shotH = w, h
+  if shared then
+    shotCanvas, sharedError = makeSharedCanvas(w, h)
+    shotShared = shotCanvas ~= nil
+    if sharedError then ac.log('DeltaSuite onboard: texture condivisa non disponibile: ' .. sharedError) end
+  end
+  shotCanvas = shotCanvas or ui.ExtraCanvas(vec2(w, h))
+  shotW, shotH, shotKey = w, h, key
 end
 
 local function avg(a, b) return (a + b) * 0.5 end
@@ -384,15 +418,23 @@ local function updateOnboard(dt, sim)
   if not car then setStr(onb.status, 96, 'auto ' .. idx .. ' non trovata'); return end
   local w = math.max(160, math.min(1920, onb.width))
   local h = math.max(90, math.min(1080, onb.height))
-  local yebis = onb.tonemap == TONEMAP_YEBIS
-  if not shot or w ~= shotW or h ~= shotH or yebis ~= (shotYebis or false) then makeShot(w, h, yebis) end
+  local yebis, shared = onb.tonemap == TONEMAP_YEBIS, onb.transport == TRANSPORT_SHARED
+  local key = string.format('%dx%d %s %s', w, h, tostring(yebis), tostring(shared))
+  if not shot or key ~= shotKey then makeShot(w, h, yebis, shared, key) end
 
   local t0 = os.clock()
   local pos, look, up, fov = cameraFor(car, onb.camera)
   shot:update(pos, look, up, fov)
   developShot()
   local n = onb.frame + 1
-  local route = publishFrame(n, ffi.string(onb.folder), onb.transport)
+  local route
+  if shotShared then
+    onb.dataSize[n % ONBOARD_SLOTS] = 0
+    route = 'condivisa'
+  else
+    route = publishFrame(n, ffi.string(onb.folder), shared and TRANSPORT_MEMORY or onb.transport)
+    if shared then route = route .. ' (condivisa non va)' end
+  end
   onb.renderMs = (os.clock() - t0) * 1000
   onb.shotWidth, onb.shotHeight, onb.shotCar = w, h, idx
   onb.frame = n -- per ultimo: Delta Suite legge il fotogramma n - 1

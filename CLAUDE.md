@@ -26,8 +26,10 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
    post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
-   e pubblica i fotogrammi a rotazione su 3 posti nella mapping a parte `DeltaSuite_Onboard_v3`
-   (`hub_core/onboard_feed.py`): in memoria come DDS grezzo (`ExtraCanvas:encode()` in CSP 0.2.11 dà
+   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v4` (`hub_core/onboard_feed.py`)
+   in tre modi: texture D3D11 condivisa (`hub_core/d3d_shared.py`, Delta Suite la apre provando tutte
+   le GPU e la copia lei: niente lettura dalla GPU in AC; se non si apre si torna alla memoria), in
+   memoria come DDS grezzo a rotazione su 3 posti (`ExtraCanvas:encode()` in CSP 0.2.11 dà
    solo DDS non compresso, ~0,9 MB a 640×360) oppure JPG in `%LOCALAPPDATA%\DeltaSuite\onboard` (CSP
    logga una riga per ogni file). Il ponte comandi resta v1. Rende solo con la pagina aperta e il video
    acceso. Prove del 18/10 (CSP 0.2.11 b3465, PC: Iris Xe + RTX 4060 Laptop): v1 scura e abitacolo non
@@ -58,7 +60,8 @@ hub_core/telemetry_receiver.py # acquisizione dati (sample_from_pages condiviso 
 hub_core/session_recording.py  # registrazione .dsr delle pagine grezze e ReplaySource
 hub_core/csp_bridge.py         # lato Python del ponte CSP (layout = DeltaSuiteBridge.lua)
 hub_core/timing.py             # classifica, gap e interval
-hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v3)
+hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v4)
+hub_core/d3d_shared.py         # lettura della texture condivisa D3D11 (ctypes, vtable COM)
 hub_core/car_status.py         # danni, gomme, freni, sospensioni → avvisi (pagina Onboard e MCP)
 hub_core/lap_analysis.py       # curve automatiche e confronto curva per curva
 hub_core/setup_files.py        # setup .ini in Documenti (rediretti su OneDrive)
@@ -119,10 +122,10 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard v3 in AC vero: memoria (DDS) contro file per FPS, YEBIS contro filmica, telecamera
-   posteriore. Misure a 1280×720 (CPU in AC): render + sviluppo 1–2 ms, encode DDS ~9 ms, save JPG
-   11–12 ms, YEBIS+save 14 ms: il costo è la lettura dalla GPU. Se serve, texture condivisa D3D11 (`render.TextureFlags.Shared` + `sharedHandle`) per
-   togliere la lettura dalla GPU in AC (portatile con due GPU: provare tutti gli adattatori DXGI).
+4. Onboard v4 in AC vero: texture condivisa (si apre? su che GPU? FPS) contro memoria e file, YEBIS
+   contro filmica, telecamera posteriore; poi scegliere `DEFAULT_TRANSPORT` (ora memoria). Misure a
+   1280×720 (CPU in AC): render + sviluppo 1–2 ms, encode DDS ~9 ms, save JPG 11–12 ms, YEBIS+save
+   14 ms: il costo è la lettura dalla GPU, che la texture condivisa toglie.
    Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
 ## Stato

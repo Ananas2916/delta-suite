@@ -5,7 +5,7 @@ curve di colore, trasporti, qualità e telecamere diverse e salva un fotogramma 
     python tools/onboard_probe.py <cartella di uscita> [secondi per prova]
 
 Stampa per ogni prova i fotogrammi al secondo ricevuti, gli FPS del gioco, il tempo di render
-dichiarato dall'app, il peso del fotogramma e lo stato dell'app (via usata: memoria o file;
+dichiarato dall'app, il peso del fotogramma e lo stato dell'app (via usata: condivisa, memoria o file;
 texture yebis/hdr/ldr; shader). Le immagini finiscono nella cartella come PNG.
 Meglio farlo girare mentre si guida: gli FPS da fermi ai box dicono poco.
 """
@@ -19,11 +19,11 @@ sys.path.insert(0, str(ROOT))
 
 from hub_core.onboard_feed import (  # noqa: E402
     CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, DEFAULT_TRANSPORT, QUALITIES, TONEMAP_FILMIC, TONEMAP_GAMMA,
-    TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, OnboardFeed,
+    TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, OnboardFeed,
 )
 
 TONE_NAMES = {0: "nessuna", 1: "gamma", 2: "filmica+gamma", 3: "yebis"}
-TRANSPORT_NAMES = {TRANSPORT_FILE: "file", TRANSPORT_MEMORY: "memoria"}
+TRANSPORT_NAMES = {TRANSPORT_FILE: "file", TRANSPORT_MEMORY: "memoria", TRANSPORT_SHARED: "condivisa"}
 
 
 def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0, quality: int = 1,
@@ -69,7 +69,7 @@ def main():
     t0 = time.monotonic()
     while not feed.connect():
         if time.monotonic() - t0 > 20:
-            sys.exit("Mapping DeltaSuite_Onboard_v3 assente: AC non in pista o app CSP non aggiornata/caricata")
+            sys.exit("Mapping DeltaSuite_Onboard_v4 assente: AC non in pista o app CSP non aggiornata/caricata")
         time.sleep(1)
     print(f"collegato (cartella per la via su file: {feed.folder})")
 
@@ -83,10 +83,14 @@ def main():
         save(out, f"tone{tonemap}_{exposure}", frame)
 
     for q, (name, *_rest) in enumerate(QUALITIES):
-        for transport in (TRANSPORT_MEMORY, TRANSPORT_FILE):
+        for transport in (TRANSPORT_SHARED, TRANSPORT_MEMORY, TRANSPORT_FILE):
             rate, frame, inf, gfps, kb = run(feed, seconds, quality=q, transport=transport)
             print(line(f"{name} {TRANSPORT_NAMES[transport]}", rate, inf, gfps, kb))
             save(out, f"q{q}_{TRANSPORT_NAMES[transport]}", frame)
+            if transport == TRANSPORT_SHARED and feed.shared_error:
+                print(f"  texture condivisa non usabile: {feed.shared_error}")
+            elif transport == TRANSPORT_SHARED and feed._shared is not None:
+                print(f"  texture condivisa aperta sulla GPU {feed._shared.adapter_index}")
 
     for cam, (key, _name) in enumerate(CAMERAS):
         rate, frame, inf, gfps, kb = run(feed, seconds, camera=cam)

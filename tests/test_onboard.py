@@ -18,7 +18,8 @@ def test_onboard_layout_matches_lua_in_order():
     assert ctypes.sizeof(ob.OnboardShared) == sum(ctypes.sizeof(t) for _, t in ob.OnboardShared._fields_)
     assert (f"ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = {ob.ONBOARD_VERSION}, "
             f"0x{ob.END_MARKER:08X}, {ob.SLOTS}, {ob.DATA_MAX}") in lua
-    assert f"TONEMAP_YEBIS, TRANSPORT_MEMORY = {ob.TONEMAP_YEBIS}, {ob.TRANSPORT_MEMORY}" in lua
+    assert (f"TONEMAP_YEBIS, TRANSPORT_MEMORY, TRANSPORT_SHARED = {ob.TONEMAP_YEBIS}, {ob.TRANSPORT_MEMORY}, "
+            f"{ob.TRANSPORT_SHARED}") in lua
     assert ob.DATA_MAX >= 128 + 1280 * 720 * 4 and ob.DATA_MAX % 4 == 0
     assert f"'DeltaSuite_Onboard_v{ob.ONBOARD_VERSION}'" in lua and ob.ONBOARD_TAG.endswith(f"_v{ob.ONBOARD_VERSION}")
     assert f"data[{ob.SLOTS}][{ob.DATA_MAX}]" in block
@@ -85,6 +86,9 @@ class _FakeView:
         class Struct:
             def __getattr__(self, name):
                 return next(frames) if name == "frame" else getattr(st, name)
+
+            def __setattr__(self, name, value):
+                setattr(st, name, value)
         self.struct = Struct()
         self.raw = st
 
@@ -130,6 +134,26 @@ def test_frame_overwritten_while_copying_is_dropped(tmp_path):
         feed._view, feed._last_read = view, None
         f = feed.new_frame()
         assert (f is not None and f.data == b"\x10\x20\x30\xff") if ok else f is None
+
+
+def test_shared_texture_failure_falls_back_to_memory(tmp_path, monkeypatch):
+    feed = ob.OnboardFeed(tmp_path)
+    view = _FakeView([3, 3, 3])
+    view.raw.sharedHandleLo = 0x1234
+    feed._view = view
+
+    class Broken:
+        handle = 0
+
+        def open(self, handle):
+            raise OSError("OpenSharedResource non riuscita")
+
+        def close(self):
+            pass
+    feed._shared = Broken()
+    assert feed.new_frame() is None and "OpenSharedResource" in feed.shared_error
+    feed.request(True, 0, -1, 640, 360, 15, transport=ob.TRANSPORT_SHARED)
+    assert view.raw.transport == ob.TRANSPORT_MEMORY
 
 
 def test_healthy_car_has_no_alerts(sample):

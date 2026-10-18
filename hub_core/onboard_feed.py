@@ -4,12 +4,14 @@ Video onboard dall'app Lua di CSP (ac_app/DeltaSuiteBridge).
 L'app rende una telecamera montata sull'auto scelta (ac.GeometryShot, una seconda vista oltre a
 quella del pilota), le applica esposizione e gamma (la seconda vista non passa dal post-processing
 del gioco e senza esce scura; in alternativa YEBIS usa il post-processing del gioco) e pubblica i
-fotogrammi a rotazione su SLOTS posti, in uno dei due modi:
-  - memoria: il DDS grezzo di ExtraCanvas:encode() nella mapping stessa (in CSP 0.2.11 encode non
-    comprime e non prende il formato), niente file né log;
+fotogrammi in uno di tre modi:
+  - condivisa: il canvas è una texture D3D11 condivisa, Delta Suite la apre e la copia sulla propria
+    GPU (hub_core/d3d_shared.py); in AC nessuna lettura dalla GPU, che a 1280×720 costa 9-12 ms;
+  - memoria: il DDS grezzo di ExtraCanvas:encode() nella mapping stessa, a rotazione su SLOTS posti
+    (in CSP 0.2.11 encode non comprime e non prende il formato), niente file né log;
   - file: un JPG nella cartella indicata da qui; CSP scrive una riga di log per ogni file.
-Lo scambio passa da una mapping a parte, DeltaSuite_Onboard_v3, così il layout del ponte comandi
-resta invariato:
+Se la texture condivisa non si apre si torna alla memoria. Lo scambio passa da una mapping a parte,
+DeltaSuite_Onboard_v4, così il layout del ponte comandi resta invariato:
   - Delta Suite scrive le richieste (attivo, telecamera, auto, risoluzione, fps, esposizione, curva,
     trasporto, cartella) e hostBeat;
   - l'app scrive frame (ultimo fotogramma pubblicato, nel posto frame % SLOTS), dimensioni, FPS del
@@ -27,8 +29,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v3"
-ONBOARD_VERSION = 3
+ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v4"
+ONBOARD_VERSION = 4
 END_MARKER = 0x44534F31   # 'DSO1'
 SLOTS = 3
 DATA_MAX = 3686656        # byte per fotogramma nella mapping: DDS 1280×720 a 8 bit per canale + intestazione
@@ -59,7 +61,7 @@ TONEMAP_NONE, TONEMAP_GAMMA, TONEMAP_FILMIC, TONEMAP_YEBIS = 0, 1, 2, 3
 DEFAULT_TONEMAP = TONEMAP_FILMIC
 DEFAULT_EXPOSURE = 1.6        # provata il 18/10 al Red Bull Ring: la più simile al gioco con la filmica
 
-TRANSPORT_FILE, TRANSPORT_MEMORY = 0, 1
+TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED = 0, 1, 2
 DEFAULT_TRANSPORT = TRANSPORT_MEMORY
 
 c_int, c_float, c_char = ctypes.c_int, ctypes.c_float, ctypes.c_char
@@ -74,7 +76,8 @@ class OnboardShared(ctypes.Structure):
         ("transport", c_int), ("folder", c_char * 260),
         # scritti dall'app
         ("frame", c_int), ("shotWidth", c_int), ("shotHeight", c_int), ("shotCar", c_int),
-        ("renderMs", c_float), ("gameFps", c_float), ("status", c_char * 96),
+        ("renderMs", c_float), ("gameFps", c_float), ("sharedHandleLo", ctypes.c_uint),
+        ("sharedHandleHi", ctypes.c_uint), ("status", c_char * 96),
         ("dataSize", c_int * SLOTS), ("data", (c_char * DATA_MAX) * SLOTS),
         ("endMarker", c_int),
     ]
@@ -150,6 +153,8 @@ class OnboardFeed:
         self.folder = folder or onboard_dir()
         self._view = None
         self._last_read = None
+        self._shared = None              # SharedTextureReader aperto sull'handle attuale
+        self.shared_error: str | None = None   # perché la texture condivisa non va (si usa la memoria)
 
     @property
     def connected(self) -> bool:
@@ -175,6 +180,9 @@ class OnboardFeed:
             self._view.close()
             self._view = None
         self._last_read = None
+        if self._shared is not None:
+            self._shared.close()
+            self._shared = None
 
     def request(self, enabled: bool, camera: int, car_index: int, width: int, height: int, fps: int,
                 exposure: float = DEFAULT_EXPOSURE, tonemap: int = DEFAULT_TONEMAP,
@@ -188,6 +196,8 @@ class OnboardFeed:
         s.folder = str(self.folder).encode("utf-8")[:259]
         s.camera, s.carIndex = camera, car_index
         s.width, s.height, s.fps = width, height, fps
+        if transport == TRANSPORT_SHARED and self.shared_error:
+            transport = TRANSPORT_MEMORY
         s.exposure, s.tonemap, s.transport = exposure, tonemap, transport
         s.enabled = 1 if enabled else 0
         s.hostBeat = (s.hostBeat + 1) & 0x7FFFFFFF
@@ -211,6 +221,9 @@ class OnboardFeed:
         if n is None or n == self._last_read:
             return None
         self._last_read = n
+        handle = self._view.struct.sharedHandleLo | (self._view.struct.sharedHandleHi << 32)
+        if handle:
+            return self._read_shared(handle)
         size = self._view.struct.dataSize[n % SLOTS]
         in_memory = 0 < size <= DATA_MAX
         if in_memory:
@@ -230,3 +243,19 @@ class OnboardFeed:
             return decode_dds(data)
         except ValueError:
             return None
+
+    def _read_shared(self, handle: int) -> Frame | None:
+        """Contenuto attuale della texture condivisa; al primo errore si torna alla memoria."""
+        try:
+            if self._shared is None:
+                from hub_core.d3d_shared import SharedTextureReader
+                self._shared = SharedTextureReader()
+            if self._shared.handle != handle:
+                self._shared.open(handle)
+            data, pitch = self._shared.read()
+        except OSError as exc:
+            self.shared_error = str(exc)
+            if self._shared is not None:
+                self._shared.close()
+            return None
+        return Frame(self._shared.kind, data, self._shared.width, self._shared.height, pitch)
