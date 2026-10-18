@@ -8,7 +8,8 @@ from collections import deque
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
-    QComboBox, QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QSlider, QSplitter, QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QGridLayout, QHBoxLayout, QHeaderView, QPushButton, QSizePolicy, QSlider,
+    QSplitter, QTableWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from hub_core import car_status as cs
@@ -19,10 +20,11 @@ from hub_core.onboard_feed import (
     camera_menu,
 )
 from hub_core.race_strategy import fmt_ms, fuel_per_lap
+from hub_core.timing import fmt_gap
 from hub_core.track_map import TrackMap, find_track_map
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
-from ui.widgets import Card, label, temp_color
+from ui.widgets import Card, label, table_item, temp_color
 
 STALE_S = 2.0          # senza fotogrammi nuovi da tanto: il video non è più in diretta
 LEVEL_COLORS = {cs.OK: C["green"], cs.WARN: C["yellow"], cs.CRIT: C["red"]}
@@ -428,6 +430,45 @@ class GPSView(QWidget):
             self.car_clicked.emit(near[0])
 
 
+class TimingTable(QTableWidget):
+    """Classifica compatta come le torri dei tempi in TV: posizione, pilota, distacco, ultimo giro.
+    Un segno colorato a sinistra indica le auto nei riquadri; clic su una riga → riquadro principale."""
+
+    car_clicked = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__(0, 4)
+        self.setHorizontalHeaderLabels(["P", "Pilota", "Distacco", "Ultimo"])
+        self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(22)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.setShowGrid(False)
+        self.setStyleSheet("QTableWidget { font-size: 9pt; }")
+        hh = self.horizontalHeader()
+        for col, mode in enumerate((QHeaderView.ResizeMode.ResizeToContents, QHeaderView.ResizeMode.Stretch,
+                                    QHeaderView.ResizeMode.ResizeToContents,
+                                    QHeaderView.ResizeMode.ResizeToContents)):
+            hh.setSectionResizeMode(col, mode)
+        self._indices: list[int] = []
+        self.cellClicked.connect(lambda row, _col: self.car_clicked.emit(self._indices[row])
+                                 if row < len(self._indices) else None)
+
+    def fill(self, rows: list[tuple[int, str, str, str, str, bool, str | None]]):
+        """rows: (indice auto, posizione, pilota, distacco, ultimo, sei tu, colore del riquadro o None)."""
+        self._indices = [r[0] for r in rows]
+        self.setRowCount(len(rows))
+        for i, (_idx, pos, driver, gap, last, me, ring) in enumerate(rows):
+            cells = [table_item(pos, bold=True), table_item(driver, C["accent"] if me else None, me),
+                     table_item(gap), table_item(last)]
+            cells[1].setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            if ring:
+                cells[0].setBackground(QColor(ring))
+                cells[0].setForeground(QColor("#111111"))
+            for col, cell in enumerate(cells):
+                self.setItem(i, col, cell)
+
+
 class ViewPanel(QWidget):
     """Un riquadro onboard: scelta di auto e telecamera sopra, video con grafica sotto."""
 
@@ -580,19 +621,15 @@ class OnboardPage(QWidget):
         side = QSplitter(Qt.Orientation.Vertical)
         side.setFixedWidth(300)
         side.setChildrenCollapsible(False)
-        gps_card = Card()
-        gl = QVBoxLayout(gps_card)
-        gl.setContentsMargins(12, 10, 12, 12)
-        gl.addWidget(label("GPS · POSIZIONE IN PISTA", "dim"))
-        self.gps = GPSView()
-        self.gps.setToolTip("Clic su un'auto per vederla nel riquadro principale")
-        self.gps.car_clicked.connect(self._on_gps_click)
-        gl.addWidget(self.gps, 1)
-        side.addWidget(gps_card)
-        status_card = Card()
-        sl = QVBoxLayout(status_card)
-        sl.setContentsMargins(12, 10, 12, 12)
-        sl.addWidget(label("STATO VETTURA", "dim"))
+        # sopra: classifica e stato vettura in schede; sotto: la mappa, grande
+        self.side_tabs = QTabWidget()
+        self.timing = TimingTable()
+        self.timing.setToolTip("Clic su un'auto per vederla nel riquadro principale")
+        self.timing.car_clicked.connect(self._on_gps_click)
+        self.side_tabs.addTab(self.timing, "Classifica")
+        status_page = QWidget()
+        sl = QVBoxLayout(status_page)
+        sl.setContentsMargins(8, 8, 8, 8)
         self.car_view = CarStatusView()
         sl.addWidget(self.car_view, 1)
         self.info = label("", "dim")
@@ -603,8 +640,20 @@ class OnboardPage(QWidget):
         self.alerts.setTextFormat(Qt.TextFormat.RichText)
         self.alerts.setAlignment(Qt.AlignmentFlag.AlignTop)
         sl.addWidget(self.alerts)
-        side.addWidget(status_card)
-        side.setSizes([260, 520])
+        self.side_tabs.addTab(status_page, "Stato vettura")
+        self.side_tabs.setCurrentIndex(max(0, min(1, hub.setting("onboard/side_tab", 0, int))))
+        self.side_tabs.currentChanged.connect(lambda i: hub.settings.setValue("onboard/side_tab", i))
+        side.addWidget(self.side_tabs)
+        gps_card = Card()
+        gl = QVBoxLayout(gps_card)
+        gl.setContentsMargins(12, 10, 12, 12)
+        gl.addWidget(label("GPS · POSIZIONE IN PISTA", "dim"))
+        self.gps = GPSView()
+        self.gps.setToolTip("Clic su un'auto per vederla nel riquadro principale")
+        self.gps.car_clicked.connect(self._on_gps_click)
+        gl.addWidget(self.gps, 1)
+        side.addWidget(gps_card)
+        side.setSizes([400, 380])
         body.addWidget(side)
         root.addLayout(body, 1)
 
@@ -782,6 +831,7 @@ class OnboardPage(QWidget):
         self.car_view.set_sample(s, info)
         self._fill_side(s, alerts, fpl)
         self._fill_gps(s)
+        self._fill_timing(s)
         self._fill_status(live_any)
 
     def _entry(self, idx: int):
@@ -791,11 +841,21 @@ class OnboardPage(QWidget):
     def _hud(self, k: int, s, alerts) -> dict:
         panel = self.panels[k]
         idx, cam = panel.car_index(), panel.camera.currentText()
-        if k > 0:       # riquadri piccoli: solo chi e quale telecamera, come "ONBOARD #93" nelle dirette
-            entry = self._entry(idx) if idx >= 0 else None
-            who = (f"P{entry.race_pos}  {entry.driver or 'auto ' + str(idx)}" if entry else
-                   panel.car.currentText() if idx >= 0 else (self.hub.session_info.get("player") or "La mia auto"))
-            return {"title": who, "camera": cam}
+        if k > 0:       # riquadri piccoli: chi, quale telecamera, distacco e ultimo giro
+            if idx < 0:
+                who = self.hub.session_info.get("player") or "La mia auto"
+                row = next((r for r in self.hub.standings_rows if r.is_player), None)
+                if s is not None:
+                    who = f"P{s.position}  {who}"
+                last = s.last_lap_ms if s is not None else 0
+            else:
+                entry = self._entry(idx)
+                row = next((r for r in self.hub.standings_rows if r.index == idx), None)
+                who = f"P{entry.race_pos}  {entry.driver or 'auto ' + str(idx)}" if entry else panel.car.currentText()
+                last = entry.last_lap_ms if entry else 0
+            times = [("DISTACCO", fmt_gap(row), None)] if row is not None else []
+            times.append(("ULTIMO", fmt_ms(last), None))
+            return {"title": who, "camera": cam, "times": times}
         if idx >= 0:
             entry = self._entry(idx)
             row = next((r for r in self.hub.standings_rows if r.index == idx), None)
@@ -826,13 +886,28 @@ class OnboardPage(QWidget):
             hud["alert"] = (alerts[0].level, alerts[0].text)
         return hud
 
-    def _fill_gps(self, s):
-        if s is not None and s.status == ACStatus.LIVE:
-            self.gps.add_trail(s.car_x, s.car_z)
+    def _view_rings(self) -> dict[int, str]:
+        """Colore del riquadro per ogni auto inquadrata (0 = la tua)."""
         rings = {}
         for k in range(self._n_views):
             idx = self.panels[k].car_index()
             rings.setdefault(0 if idx < 0 else idx, VIEW_COLORS[k])
+        return rings
+
+    def _fill_timing(self, s):
+        rings = self._view_rings()
+        rows = [(r.index, str(r.pos), r.driver or f"auto {r.index}", fmt_gap(r),
+                 "BOX" if r.in_pit else fmt_ms(r.last_ms), r.is_player, rings.get(r.index))
+                for r in self.hub.standings_rows]
+        if not rows and s is not None and s.status == ACStatus.LIVE:     # senza app CSP o in demo: solo tu
+            rows = [(0, str(s.position), self.hub.session_info.get("player") or "Tu", "-",
+                     fmt_ms(s.last_lap_ms), True, rings.get(0))]
+        self.timing.fill(rows)
+
+    def _fill_gps(self, s):
+        if s is not None and s.status == ACStatus.LIVE:
+            self.gps.add_trail(s.car_x, s.car_z)
+        rings = self._view_rings()
         positions = self.feed.car_positions() if self._ac_live and self.feed.connected else {}
         if not positions and s is not None and s.status == ACStatus.LIVE:
             positions = {0: (s.car_x, s.car_z)}

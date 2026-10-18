@@ -41,6 +41,13 @@ class StandingRow:
                 "giri_di_distacco": self.laps_down, "ai_box": self.in_pit, "sei_tu": self.is_player}
 
 
+def fmt_gap(r: StandingRow) -> str:
+    """Distacco come in TV: giri di ritardo, altrimenti secondi; il primo non ne ha."""
+    if r.laps_down >= 1:
+        return f"+{r.laps_down} {'giro' if r.laps_down == 1 else 'giri'}"
+    return "-" if not r.gap_s else f"+{r.gap_s:.1f}"
+
+
 class TimingTower:
     def __init__(self):
         self._hist: dict[int, deque] = {}

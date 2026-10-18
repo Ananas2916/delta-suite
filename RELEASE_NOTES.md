@@ -12,6 +12,9 @@
 - *GPS*: la pista con tutte le auto e la loro posizione, presa dalla mappa di AC del tracciato (o
   disegnata dal percorso dell'auto in demo e replay); i riquadri aperti hanno un cerchio del loro colore
   sull'auto inquadrata, e un clic su un'auto la mette nel riquadro principale.
+- *Classifica accanto agli onboard*: posizione, pilota, distacco e ultimo giro, con il colore del riquadro
+  sulle auto inquadrate; anche i riquadri piccoli mostrano distacco e ultimo giro. Lo schema dell'auto è
+  nella scheda "Stato vettura", la mappa sotto è più grande.
 
 **Finestra**: su uno schermo scalato al 150% non si taglia più a destra; le pagine larghe scorrono.
 

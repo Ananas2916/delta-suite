@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from hub_core import csp_bridge
 from hub_core.csp_bridge import CMD_ABS, CMD_BRAKE_BIAS, CMD_ENGINE_BRAKE, CMD_TC
 from hub_core.race_strategy import fmt_ms
+from hub_core.timing import fmt_gap
 from ui.theme import C
 from ui.widgets import Card, label, readonly_table, table_item
 
@@ -245,8 +246,7 @@ class BoxPage(QWidget):
         self.standings.setRowCount(len(rows))
         for i, r in enumerate(rows):
             col = C["accent"] if r.is_player else None
-            gap = (f"+{r.laps_down} giri" if r.laps_down >= 1 else
-                   "-" if r.gap_s is None else f"+{r.gap_s:.1f}")
+            gap = fmt_gap(r)
             vals = [str(r.pos), r.driver, r.model, str(r.laps), fmt_ms(r.last_ms), fmt_ms(r.best_ms), gap,
                     "-" if r.interval_s is None else f"+{r.interval_s:.1f}", "BOX" if r.in_pit else ""]
             for c, v in enumerate(vals):
