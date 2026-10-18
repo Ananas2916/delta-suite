@@ -120,7 +120,8 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
 4. Onboard v3 in AC vero: memoria (DDS) contro file per FPS, YEBIS contro filmica, telecamera
-   posteriore; se serve, texture condivisa D3D11 (`render.TextureFlags.Shared` + `sharedHandle`) per
+   posteriore. Misure a 1280×720 (CPU in AC): render + sviluppo 1–2 ms, encode DDS ~9 ms, save JPG
+   11–12 ms, YEBIS+save 14 ms: il costo è la lettura dalla GPU. Se serve, texture condivisa D3D11 (`render.TextureFlags.Shared` + `sharedHandle`) per
    togliere la lettura dalla GPU in AC (portatile con due GPU: provare tutti gli adattatori DXGI).
    Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
