@@ -3,9 +3,10 @@
 -- Ponte tra Assetto Corsa e Delta Suite (programma esterno), tramite due file mappati in memoria:
 --   DeltaSuite_Bridge_Out_v1  scritto qui: regolazioni attuali, setup, pit stop, avversari, tasti radio
 --   DeltaSuite_Bridge_In_v1   scritto da Delta Suite: un comando alla volta, numerato da `seq`
---   DeltaSuite_Onboard_v2     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
---                             una seconda vista (ac.GeometryShot), le si dà esposizione e gamma e il
---                             JPG va nella mapping (o in un file, se questa CSP non sa codificarlo)
+--   DeltaSuite_Onboard_v3     video onboard: Delta Suite chiede telecamera/auto/qualità, qui si rende
+--                             una seconda vista (ac.GeometryShot), le si dà esposizione e gamma (o il
+--                             post-processing del gioco con YEBIS) e il fotogramma va nella mapping
+--                             come DDS grezzo oppure in un file JPG
 -- I layout devono restare identici a quelli in hub_core/csp_bridge.py (solo int/float a 4 byte e
 -- array di char, così l'allineamento è lo stesso in LuaJIT e in ctypes).
 
@@ -92,6 +93,7 @@ local ONBOARD_LAYOUT = [[
   int fps;
   float exposure;
   int tonemap;
+  int transport;
   char folder[260];
   int frame;
   int shotWidth;
@@ -100,16 +102,17 @@ local ONBOARD_LAYOUT = [[
   float renderMs;
   float gameFps;
   char status[96];
-  int jpegSize[3];
-  char jpeg[3][393216];
+  int dataSize[3];
+  char data[3][3686656];
   int endMarker;
 ]]
-local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_JPEG_MAX = 2, 0x44534F31, 3, 393216 -- 'DSO1'
+local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 3, 0x44534F31, 3, 3686656 -- 'DSO1'
+local TONEMAP_YEBIS, TRANSPORT_MEMORY = 3, 1
 
 -- Variabili a livello di modulo: restano vive finché l'app è caricata.
 local out = ac.writeMemoryMappedFile('DeltaSuite_Bridge_Out_v1', OUT_LAYOUT)
 local inp = ac.writeMemoryMappedFile('DeltaSuite_Bridge_In_v1', IN_LAYOUT)
-local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v2', ONBOARD_LAYOUT)
+local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v3', ONBOARD_LAYOUT)
 
 local btnRadio = ac.ControlButton('DeltaSuite/Radio ingegnere (tieni premuto)')
 local btnOk = ac.ControlButton('DeltaSuite/Conferma proposta')
@@ -229,14 +232,15 @@ end
 
 -- ------------------------------------------------------------------ onboard
 
-local shot, shotCanvas, shotW, shotH = nil, nil, 0, 0
-local shotHdr, shaderOk = false, true
+local shot, shotCanvas, shotW, shotH, shotYebis = nil, nil, 0, 0, false
+local shotHdr, shaderOk, encodeOk = false, true, true
 local onbTimer, onbBeat, onbBeatChange = 0, onb.hostBeat, -100
 local onbActive = false
 local fpsAvg = 0
 
 -- La GeometryShot non passa dal post-processing del gioco: senza esposizione e gamma esce scura
--- (provato con CSP 0.2.11). gMode: 0 niente, 1 solo gamma, 2 curva filmica (ACES) + gamma.
+-- (provato con CSP 0.2.11). gMode: 0 niente, 1 solo gamma, 2 curva filmica (ACES) + gamma; con YEBIS
+-- (tonemap 3) il post-processing lo fa la GeometryShot stessa e qui si copia e basta.
 local TONEMAP_SHADER = [[
 float4 main(PS_IN pin) {
   float3 c = txIn.Sample(samLinear, pin.Tex).rgb * gExposure;
@@ -248,18 +252,25 @@ float4 main(PS_IN pin) {
 local function freeShot()
   if shot then shot:dispose() end
   if shotCanvas then shotCanvas:dispose() end
-  shot, shotCanvas, shotW, shotH = nil, nil, 0, 0
+  shot, shotCanvas, shotW, shotH, shotYebis = nil, nil, 0, 0, false
 end
 
-local function makeShot(w, h)
+local function makeShot(w, h, yebis)
   freeShot()
   local root = ac.findNodes('sceneRoot:yes')
-  -- texture HDR se disponibile: l'esposizione poi non schiaccia le ombre su pochi livelli
-  local fmt = render.TextureFormat and render.TextureFormat.R16G16B16A16 and render.TextureFormat.R16G16B16A16.Float
   local ok, s = false, nil
-  if fmt then ok, s = pcall(ac.GeometryShot, root, vec2(w, h), 1, true, nil, fmt) end
-  shotHdr = ok and s ~= nil
-  shot = shotHdr and s or ac.GeometryShot(root, vec2(w, h), 1, true)
+  if yebis and render.AntialiasingMode and render.AntialiasingMode.YEBIS then
+    -- antialiasing e conversione HDR→LDR con le impostazioni di post-processing del gioco
+    ok, s = pcall(ac.GeometryShot, root, vec2(w, h), 1, true, render.AntialiasingMode.YEBIS)
+    shotYebis, shotHdr = ok and s ~= nil, false
+  end
+  if not shotYebis then
+    -- texture HDR se disponibile: l'esposizione poi non schiaccia le ombre su pochi livelli
+    local fmt = render.TextureFormat and render.TextureFormat.R16G16B16A16 and render.TextureFormat.R16G16B16A16.Float
+    if fmt then ok, s = pcall(ac.GeometryShot, root, vec2(w, h), 1, true, nil, fmt) end
+    shotHdr = ok and s ~= nil
+  end
+  shot = (shotYebis or shotHdr) and s or ac.GeometryShot(root, vec2(w, h), 1, true)
   if shot.setBestSceneShotQuality then pcall(shot.setBestSceneShotQuality, shot)
   elseif render.ShadersType then pcall(shot.setShadersType, shot, render.ShadersType.Main) end
   pcall(shot.setClippingPlanes, shot, 0.05, 4000)
@@ -287,8 +298,8 @@ local function cameraFor(car, kind)
     local eyes, tr = field(car, 'driverEyesPosition'), field(car, 'transform')
     local pos = (eyes and tr) and tr:transformPoint(eyes) or (centre + up * 0.62 - fwd * 0.15)
     return pos, fwd, up, 72
-  elseif kind == 2 then -- posteriore
-    return centre + up * 0.95 - fwd * 0.6, (fwd * -1 - up * 0.08):normalize(), up, 60
+  elseif kind == 2 then -- posteriore: sopra la coda, dietro il tetto (più in basso alettone e coda coprono metà)
+    return rear + up * 1.15 - fwd * 0.3, (fwd * -1 - up * 0.1):normalize(), up, 60
   elseif kind >= 3 and kind <= 6 then -- ruote
     local wp = w[kind - 2]
     local out = side * ((wp - centre):dot(side) >= 0 and 1 or -1)
@@ -310,6 +321,10 @@ local function developShot()
   local size = vec2(shotW, shotH)
   local exposure = onb.exposure > 0 and onb.exposure or 1
   local mode = onb.tonemap
+  if shotYebis then
+    if exposure ~= 1 and shot.setExposure then pcall(shot.setExposure, shot, exposure) end
+    exposure, mode = 1, 0
+  end
   shotCanvas:update(function ()
     if shaderOk then
       local ok, err = pcall(ui.renderShader, {
@@ -325,24 +340,28 @@ local function developShot()
   end)
 end
 
--- JPG nella mapping se la CSP sa codificarlo in memoria (niente file né righe nel log a ogni fotogramma),
--- altrimenti su file; ritorna la via usata, che finisce nello stato
-local function publishFrame(n, folder)
+-- In memoria va il DDS grezzo di ExtraCanvas:encode() (in CSP 0.2.11 non prende il formato e non
+-- comprime): niente file e niente riga di log a ogni fotogramma. Su file va un JPG. Una sola lettura
+-- dalla GPU per fotogramma; se encode non dà un risultato utilizzabile non lo si chiama più.
+local function publishFrame(n, folder, transport)
   local slot = n % ONBOARD_SLOTS
-  local enc, encFn = nil, field(shotCanvas, 'encode')
-  if encFn then
-    local ok, r = pcall(encFn, shotCanvas, ac.ImageFormat.JPG)
-    if ok then enc = r end
+  if transport == TRANSPORT_MEMORY and encodeOk then
+    local encFn = field(shotCanvas, 'encode')
+    local ok, enc = false, nil
+    if encFn then ok, enc = pcall(encFn, shotCanvas) end
+    if ok and type(enc) == 'string' and #enc > 128 and #enc <= ONBOARD_DATA_MAX then
+      ffi.copy(onb.data[slot], enc, #enc)
+      onb.dataSize[slot] = #enc
+      return 'memoria'
+    end
+    encodeOk = false
+    ac.log('DeltaSuite onboard: encode inutilizzabile (' .. type(enc) .. (type(enc) == 'string' and
+      (', ' .. #enc .. ' byte') or '') .. '), si passa ai file')
   end
-  if type(enc) == 'string' and #enc > 0 and #enc <= ONBOARD_JPEG_MAX then
-    ffi.copy(onb.jpeg[slot], enc, #enc)
-    onb.jpegSize[slot] = #enc
-    return 'memoria'
-  end
-  onb.jpegSize[slot] = 0
+  onb.dataSize[slot] = 0
   if folder == '' then error('cartella dei fotogrammi non indicata') end
   shotCanvas:save(string.format('%s\\onboard_%d.jpg', folder, slot), ac.ImageFormat.JPG)
-  return 'file, encode ' .. type(enc)
+  return transport == TRANSPORT_MEMORY and 'file (encode non va)' or 'file'
 end
 
 local function updateOnboard(dt, sim)
@@ -365,19 +384,20 @@ local function updateOnboard(dt, sim)
   if not car then setStr(onb.status, 96, 'auto ' .. idx .. ' non trovata'); return end
   local w = math.max(160, math.min(1920, onb.width))
   local h = math.max(90, math.min(1080, onb.height))
-  if not shot or w ~= shotW or h ~= shotH then makeShot(w, h) end
+  local yebis = onb.tonemap == TONEMAP_YEBIS
+  if not shot or w ~= shotW or h ~= shotH or yebis ~= (shotYebis or false) then makeShot(w, h, yebis) end
 
   local t0 = os.clock()
   local pos, look, up, fov = cameraFor(car, onb.camera)
   shot:update(pos, look, up, fov)
   developShot()
   local n = onb.frame + 1
-  local route = publishFrame(n, ffi.string(onb.folder))
+  local route = publishFrame(n, ffi.string(onb.folder), onb.transport)
   onb.renderMs = (os.clock() - t0) * 1000
   onb.shotWidth, onb.shotHeight, onb.shotCar = w, h, idx
   onb.frame = n -- per ultimo: Delta Suite legge il fotogramma n - 1
-  setStr(onb.status, 96, string.format('in diretta · %s · %s%s', route, shotHdr and 'hdr' or 'ldr',
-    shaderOk and '' or ' · senza shader'))
+  setStr(onb.status, 96, string.format('in diretta · %s · %s%s', route,
+    shotYebis and 'yebis' or shotHdr and 'hdr' or 'ldr', shaderOk and '' or ' · senza shader'))
 end
 
 function script.update(dt)

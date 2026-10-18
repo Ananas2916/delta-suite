@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QS
 
 from hub_core import car_status as cs
 from hub_core.ac_shared_memory import ACStatus, gear_label
-from hub_core.onboard_feed import CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, OnboardFeed
+from hub_core.onboard_feed import CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, Frame, OnboardFeed
 from hub_core.race_strategy import fmt_ms, fuel_per_lap
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
@@ -19,6 +19,13 @@ from ui.widgets import Card, label, temp_color
 STALE_S = 2.0          # senza fotogrammi nuovi da tanto: il video non è più in diretta
 LEVEL_COLORS = {cs.OK: C["green"], cs.WARN: C["yellow"], cs.CRIT: C["red"]}
 DAMAGE_COLORS = ("#3a414f", "#f1c40f", "#ff9f43", "#ff4d4d")
+
+
+def frame_image(f: Frame) -> QImage:
+    if f.kind == "jpg":
+        return QImage.fromData(f.data, "JPG")
+    fmt = QImage.Format.Format_RGBX8888 if f.kind == "rgba" else QImage.Format.Format_RGB32
+    return QImage(f.data, f.width, f.height, f.stride, fmt).copy()   # copia: i byte non restano vivi
 
 
 def _font(size: float, weight=QFont.Weight.Bold) -> QFont:
@@ -443,9 +450,9 @@ class OnboardPage(QWidget):
         if self._ac_live and self.video_btn.isChecked():
             if now - self._beat_t > 0.5:
                 self._push_request()
-            data = self.feed.new_frame()
-            if data is not None:
-                img = QImage.fromData(data, "JPG")
+            frame = self.feed.new_frame()
+            if frame is not None:
+                img = frame_image(frame)
                 if not img.isNull():
                     self._img, self._frame_t = img, now
         elif self.feed.connected:

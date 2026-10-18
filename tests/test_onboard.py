@@ -16,10 +16,12 @@ def test_onboard_layout_matches_lua_in_order():
     names = re.findall(r"\b(\w+)(?:\[\d+\])*;", block)
     assert names == [n for n, _ in ob.OnboardShared._fields_]
     assert ctypes.sizeof(ob.OnboardShared) == sum(ctypes.sizeof(t) for _, t in ob.OnboardShared._fields_)
-    assert (f"ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_JPEG_MAX = {ob.ONBOARD_VERSION}, "
-            f"0x{ob.END_MARKER:08X}, {ob.SLOTS}, {ob.JPEG_MAX}") in lua
+    assert (f"ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = {ob.ONBOARD_VERSION}, "
+            f"0x{ob.END_MARKER:08X}, {ob.SLOTS}, {ob.DATA_MAX}") in lua
+    assert f"TONEMAP_YEBIS, TRANSPORT_MEMORY = {ob.TONEMAP_YEBIS}, {ob.TRANSPORT_MEMORY}" in lua
+    assert ob.DATA_MAX >= 128 + 1280 * 720 * 4 and ob.DATA_MAX % 4 == 0
     assert f"'DeltaSuite_Onboard_v{ob.ONBOARD_VERSION}'" in lua and ob.ONBOARD_TAG.endswith(f"_v{ob.ONBOARD_VERSION}")
-    assert f"jpeg[{ob.SLOTS}][{ob.JPEG_MAX}]" in block
+    assert f"data[{ob.SLOTS}][{ob.DATA_MAX}]" in block
     # un'etichetta per ogni telecamera gestita in cameraFor (0 = T-cam ... 7 = inseguimento)
     assert len(ob.CAMERAS) == 8
 
@@ -47,24 +49,25 @@ def test_onboard_roundtrip_with_fake_app(tmp_path):
     app = ob.OnboardShared.from_address(k32.MapViewOfFile(h, 0xF001F, 0, 0, 0))
 
     feed = ob.OnboardFeed(tmp_path / "onboard")
-    assert feed.request(True, 3, -1, 640, 360, 15, 1.5, ob.TONEMAP_GAMMA)
+    assert feed.request(True, 3, -1, 640, 360, 15, 1.5, ob.TONEMAP_GAMMA, ob.TRANSPORT_MEMORY)
     assert app.enabled == 1 and app.camera == 3 and app.carIndex == -1 and app.fps == 15
-    assert app.exposure == 1.5 and app.tonemap == ob.TONEMAP_GAMMA
+    assert app.exposure == 1.5 and app.tonemap == ob.TONEMAP_GAMMA and app.transport == ob.TRANSPORT_MEMORY
     assert app.folder.decode() == str(tmp_path / "onboard") and app.hostBeat == 1
     assert feed.new_frame() is None                     # nessun fotogramma ancora
-    # fotogramma 6 nella mapping (posto 0), 7 pubblicato per ultimo
-    jpg = b"\xff\xd8 fotogramma 6 \xff\xd9"
-    ctypes.memmove(ctypes.addressof(app) + ob.OnboardShared.jpeg.offset, jpg, len(jpg))
-    app.jpegSize[0] = len(jpg)
+    # fotogramma 6 nella mapping (posto 0) come DDS, 7 pubblicato per ultimo
+    dds = _dds(2, 1, 0x000000FF, b"\x01\x02\x03\xff\x04\x05\x06\xff")
+    ctypes.memmove(ctypes.addressof(app) + ob.OnboardShared.data.offset, dds, len(dds))
+    app.dataSize[0] = len(dds)
     app.frame, app.shotWidth, app.shotHeight, app.status, app.gameFps = 7, 640, 360, b"in diretta", 118.5
-    assert feed.new_frame() == jpg
+    f = feed.new_frame()
+    assert (f.kind, f.width, f.height, f.data) == ("rgba", 2, 1, b"\x01\x02\x03\xff\x04\x05\x06\xff")
     assert feed.new_frame() is None
     assert feed.info().status == "in diretta" and feed.info().game_fps == 118.5
     # fotogramma 7 su file (posto 1): CSP che non sa codificare in memoria
     (tmp_path / "onboard" / "onboard_1.jpg").write_bytes(b"da file")
-    app.jpegSize[1] = 0
+    app.dataSize[1] = 0
     app.frame = 8
-    assert feed.new_frame() == b"da file"
+    assert feed.new_frame() == ob.Frame("jpg", b"da file")
     feed.disconnect()
     assert app.enabled == 0
 
@@ -89,15 +92,44 @@ class _FakeView:
         pass
 
 
+def _dds(width, height, rmask, pixels, dx10=None):
+    """DDS non compresso a 32 bit come quello di ExtraCanvas:encode()."""
+    h = bytearray(128)
+    h[:4] = b"DDS "
+    for off, v in ((4, 124), (8, 0x100F), (12, height), (16, width), (20, width * 4), (76, 32), (80, 0x41),
+                   (88, 32), (92, rmask), (96, 0x0000FF00), (100, 0x00FF0000 if rmask == 0xFF else 0xFF),
+                   (104, 0xFF000000)):
+        h[off:off + 4] = v.to_bytes(4, "little")
+    if dx10 is not None:
+        h[84:88] = b"DX10"
+        h += dx10.to_bytes(4, "little") + bytes(16)
+    return bytes(h) + pixels
+
+
+def test_decode_dds_byte_orders():
+    px = bytes(range(16))
+    assert ob.decode_dds(_dds(2, 2, 0x000000FF, px)) == ob.Frame("rgba", px, 2, 2, 8)
+    assert ob.decode_dds(_dds(2, 2, 0x00FF0000, px)).kind == "bgra"
+    assert ob.decode_dds(_dds(2, 2, 0, px, dx10=28)).kind == "rgba"
+    assert ob.decode_dds(_dds(2, 2, 0, px, dx10=87)).kind == "bgra"
+    for bad in (b"JPEG" + bytes(200), _dds(2, 2, 0x000000FF, px[:8]), _dds(2, 2, 0, px, dx10=10)):
+        try:
+            ob.decode_dds(bad)
+            raise AssertionError("doveva fallire")
+        except ValueError:
+            pass
+
+
 def test_frame_overwritten_while_copying_is_dropped(tmp_path):
-    jpg = b"\xff\xd8 fotogramma 4 \xff\xd9"
+    dds = _dds(1, 1, 0x000000FF, b"\x10\x20\x30\xff")
     feed = ob.OnboardFeed(tmp_path)
-    for frames, expected in (([5, 5], jpg), ([5, 7], None)):   # 7: l'app sta già riscrivendo il posto 4 % 3
+    for frames, ok in (([5, 5], True), ([5, 7], False)):   # 7: l'app sta già riscrivendo il posto 4 % 3
         view = _FakeView(frames)
-        ctypes.memmove(view.ptr + ob.OnboardShared.jpeg.offset + (4 % ob.SLOTS) * ob.JPEG_MAX, jpg, len(jpg))
-        view.raw.jpegSize[4 % ob.SLOTS] = len(jpg)
+        ctypes.memmove(view.ptr + ob.OnboardShared.data.offset + (4 % ob.SLOTS) * ob.DATA_MAX, dds, len(dds))
+        view.raw.dataSize[4 % ob.SLOTS] = len(dds)
         feed._view, feed._last_read = view, None
-        assert feed.new_frame() == expected
+        f = feed.new_frame()
+        assert (f is not None and f.data == b"\x10\x20\x30\xff") if ok else f is None
 
 
 def test_healthy_car_has_no_alerts(sample):

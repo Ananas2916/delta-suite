@@ -25,13 +25,14 @@ Sette moduli in due gruppi, nello stesso ordine in barra laterale e in Home (`SE
    vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
    (`hub_core/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
    FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
-   post-processing del gioco: senza esce molto scura) e pubblica i JPG a rotazione su 3 posti nella
-   mapping a parte `DeltaSuite_Onboard_v2` (`hub_core/onboard_feed.py`); se la CSP non sa codificare in
-   memoria (`ExtraCanvas:encode`) li salva in `%LOCALAPPDATA%\DeltaSuite\onboard`, ma CSP logga una riga
-   per ogni file. Il ponte comandi resta v1. Rende solo con la pagina aperta e il video acceso.
-   Provato il 18/10 con CSP 0.2.11 b3465 (da fermo ai box): funziona, 8 telecamere e 4 qualità ok, ma
-   immagini scure (→ v2), abitacolo non reso (→ telecamera "Cofano"). Prova a mano senza interfaccia:
-   `python tools/onboard_probe.py <cartella>`.
+   post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
+   e pubblica i fotogrammi a rotazione su 3 posti nella mapping a parte `DeltaSuite_Onboard_v3`
+   (`hub_core/onboard_feed.py`): in memoria come DDS grezzo (`ExtraCanvas:encode()` in CSP 0.2.11 dà
+   solo DDS non compresso, ~0,9 MB a 640×360) oppure JPG in `%LOCALAPPDATA%\DeltaSuite\onboard` (CSP
+   logga una riga per ogni file). Il ponte comandi resta v1. Rende solo con la pagina aperta e il video
+   acceso. Prove del 18/10 (CSP 0.2.11 b3465, PC: Iris Xe + RTX 4060 Laptop): v1 scura e abitacolo non
+   reso (→ "Cofano"); v2 filmica 1.6 la più simile al gioco, AC da 180 a ~150–165 FPS col video, T-cam e
+   ruote ok, posteriore coperta dalla coda (→ v3). Prova a mano: `python tools/onboard_probe.py <cartella>`.
 3. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
    scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
    Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
@@ -57,7 +58,7 @@ hub_core/telemetry_receiver.py # acquisizione dati (sample_from_pages condiviso 
 hub_core/session_recording.py  # registrazione .dsr delle pagine grezze e ReplaySource
 hub_core/csp_bridge.py         # lato Python del ponte CSP (layout = DeltaSuiteBridge.lua)
 hub_core/timing.py             # classifica, gap e interval
-hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v1 + JPG)
+hub_core/onboard_feed.py       # video onboard dall'app CSP (mapping DeltaSuite_Onboard_v3)
 hub_core/car_status.py         # danni, gomme, freni, sospensioni → avvisi (pagina Onboard e MCP)
 hub_core/lap_analysis.py       # curve automatiche e confronto curva per curva
 hub_core/setup_files.py        # setup .ini in Documenti (rediretti su OneDrive)
@@ -118,10 +119,10 @@ ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/
    conferma proposte dal volante.
 2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
 3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard v2 in AC vero e in movimento: esposizione/curva migliori (`DEFAULT_EXPOSURE`,
-   `DEFAULT_TONEMAP`), se `encode` in memoria esiste in 0.2.11, T-cam e ruote anteriori ritoccate, FPS
-   del gioco con video spento/acceso; soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un
-   urto vero e danni attivi.
+4. Onboard v3 in AC vero: memoria (DDS) contro file per FPS, YEBIS contro filmica, telecamera
+   posteriore; se serve, texture condivisa D3D11 (`render.TextureFlags.Shared` + `sharedHandle`) per
+   togliere la lettura dalla GPU in AC (portatile con due GPU: provare tutti gli adattatori DXGI).
+   Soglie dei danni (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
 
 ## Stato
 - [x] Lettore shared memory (`hub_core/ac_shared_memory.py`, `telemetry_receiver.py`)
