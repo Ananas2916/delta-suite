@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QSlider, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from hub_core import vehicle_dynamics as vd
+from hub_core.analysis import vehicle_dynamics as vd
 from ui.theme import C, LAP_COLORS
 from ui.widgets import ValueTile, dspin, label, make_plot
 

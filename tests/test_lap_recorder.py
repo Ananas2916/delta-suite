@@ -2,8 +2,8 @@
 
 import pytest
 
-from hub_core.lap_recorder import LapRecorder
-from hub_core.session_recording import read_samples
+from hub_core.ac.recording import read_samples
+from hub_core.analysis.lap_recorder import LapRecorder
 from tests.conftest import REAL_LAP, make_sample
 
 L = 4000.0

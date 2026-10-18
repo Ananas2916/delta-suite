@@ -5,7 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
-from hub_core.race_strategy import fmt_ms
+from hub_core.analysis.race_strategy import fmt_ms
 from ui.theme import C
 from ui.widgets import Card, label
 

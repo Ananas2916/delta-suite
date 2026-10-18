@@ -1,10 +1,10 @@
 import ctypes
 import re
 
-from hub_core import car_status as cs
-from hub_core import csp_bridge as cb
-from hub_core import onboard_feed as ob
-from hub_core.session_recording import read_samples
+from hub_core.ac import csp_bridge as cb
+from hub_core.ac import onboard_feed as ob
+from hub_core.ac.recording import read_samples
+from hub_core.analysis import car_status as cs
 from tests.conftest import REAL_LAP, create_mapping, windows_only
 
 INFO = {"damage_rate": 1.0, "suspension_max_travel": [0.1] * 4}
@@ -263,7 +263,7 @@ def test_real_lap_reads_new_fields():
 
 
 def test_track_map_from_ac_folder(tmp_path):
-    from hub_core.track_map import find_track_map, parse_map_ini
+    from hub_core.ac.track_map import find_track_map, parse_map_ini
     ini = "[PARAMETERS]\nWIDTH=1210\nHEIGHT=700\nMARGIN=20\nSCALE_FACTOR=2 ; metri per pixel\nX_OFFSET=600\nZ_OFFSET=350\n"
     assert parse_map_ini(ini)["SCALE_FACTOR"] == 2.0
     layout = tmp_path / "content" / "tracks" / "ks_red_bull_ring" / "layout_gp"

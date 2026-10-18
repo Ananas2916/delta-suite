@@ -9,7 +9,7 @@ from pathlib import Path
 import duckdb
 import numpy as np
 
-from hub_core.lap_recorder import CHANNELS, LapData
+from hub_core.analysis.lap_recorder import CHANNELS, LapData
 
 
 def default_db_path() -> Path:

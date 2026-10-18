@@ -2,9 +2,9 @@ import time
 
 import pytest
 
-from hub_core.ac_shared_memory import SPageFileGraphic, SPageFilePhysics, SPageFileStatic, put_wstr
+from hub_core.ac.recording import ReplaySource, SessionRecorder, read_samples
+from hub_core.ac.shared_memory import SPageFileGraphic, SPageFilePhysics, SPageFileStatic, put_wstr
 from hub_core.model import ACStatus
-from hub_core.session_recording import ReplaySource, SessionRecorder, read_samples
 
 
 def _pages(i):

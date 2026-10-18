@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from hub_core import csp_bridge
+from hub_core.ac import csp_bridge
 from ui import theme
 from ui.hub_state import MODES, HubState
 from ui.pages.analysis_page import AnalysisPage

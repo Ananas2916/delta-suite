@@ -12,16 +12,16 @@ from PyQt6.QtWidgets import (
     QSplitter, QTableWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from hub_core import car_status as cs
-from hub_core.model import ACStatus, gear_label
-from hub_core.csp_bridge import find_ac_root
-from hub_core.onboard_feed import (
+from hub_core.ac.csp_bridge import find_ac_root
+from hub_core.ac.onboard_feed import (
     DEFAULT_EXPOSURE, DEFAULT_TONEMAP, QUALITIES, SECONDARY_QUALITY, VIEWS, Frame, OnboardFeed, ViewRequest,
     camera_menu,
 )
-from hub_core.race_strategy import fmt_ms, fuel_per_lap
-from hub_core.timing import fmt_gap
-from hub_core.track_map import TrackMap, find_track_map
+from hub_core.ac.track_map import TrackMap, find_track_map
+from hub_core.analysis import car_status as cs
+from hub_core.analysis.race_strategy import fmt_ms, fuel_per_lap
+from hub_core.analysis.timing import fmt_gap
+from hub_core.model import ACStatus, gear_label
 from ui.hub_state import SOURCE_AC
 from ui.theme import C
 from ui.widgets import Card, label, table_item, temp_color

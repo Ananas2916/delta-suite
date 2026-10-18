@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QSpinBox, QVBoxLayout, QWidget,
 )
 
-from hub_core import race_strategy as rs
+from hub_core.analysis import race_strategy as rs
 from ui.theme import C
 from ui.widgets import SessionPicker, ValueTile, dspin, label, make_plot, readonly_table, table_item
 

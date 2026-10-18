@@ -29,7 +29,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from hub_core.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+from hub_core.ac.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
 
 ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v6"
 ONBOARD_VERSION = 6
@@ -360,7 +360,7 @@ class OnboardFeed:
         reader = self._shared[view]
         try:
             if reader is None:
-                from hub_core.d3d_shared import SharedTextureReader
+                from hub_core.ac.d3d_shared import SharedTextureReader
                 reader = self._shared[view] = SharedTextureReader()
             if reader.handle != handle:
                 reader.open(handle)

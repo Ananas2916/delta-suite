@@ -3,9 +3,10 @@ import ctypes
 import numpy as np
 import pytest
 
-from hub_core import csp_bridge as cb
-from hub_core.lap_analysis import compare_laps, find_corners
-from hub_core.timing import TimingTower
+from hub_core.ac import csp_bridge as cb
+from hub_core.analysis.lap_analysis import compare_laps, find_corners
+from hub_core.analysis.timing import TimingTower
+from hub_core.model import CarEntry
 from tests.conftest import create_mapping, windows_only
 from ui.hub_data import validate_proposal
 
@@ -60,7 +61,7 @@ def test_bridge_roundtrip_with_fake_app():
 
 
 def _car(i, progress, best=0, pos=0):
-    return cb.CarEntry(i, True, pos, int(progress), progress % 1, 0, 0, best, False, False, 150.0, True,
+    return CarEntry(i, True, pos, int(progress), progress % 1, 0, 0, best, False, False, 150.0, True,
                        f"P{i}", "gt3")
 
 

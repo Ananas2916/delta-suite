@@ -20,9 +20,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from hub_core.ac_shared_memory import SPageFileGraphic, SPageFilePhysics, SPageFileStatic
+from hub_core.ac.receiver import sample_from_pages, session_info_from_static
+from hub_core.ac.shared_memory import SPageFileGraphic, SPageFilePhysics, SPageFileStatic
 from hub_core.model import ACStatus, TelemetrySample
-from hub_core.telemetry_receiver import sample_from_pages, session_info_from_static
 
 MAGIC = b"DSR1"
 _HEADER = struct.Struct("<4sIII")

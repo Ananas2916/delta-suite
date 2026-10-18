@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from hub_core.onboard_feed import (  # noqa: E402
+from hub_core.ac.onboard_feed import (  # noqa: E402
     CAMERAS, DEFAULT_EXPOSURE, DEFAULT_TONEMAP, DEFAULT_TRANSPORT, QUALITIES, TONEMAP_FILMIC, TONEMAP_GAMMA,
     SECONDARY_QUALITY, TONEMAP_YEBIS, TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED, VIEWS, OnboardFeed,
     ViewRequest, onboard_dir,

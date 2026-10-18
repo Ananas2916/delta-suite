@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hub_core.csp_bridge import CarEntry
+from hub_core.model import CarEntry
 
 HISTORY_S = 400.0      # abbastanza per un doppiaggio su piste lunghe
 

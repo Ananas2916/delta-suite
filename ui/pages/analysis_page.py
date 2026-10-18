@@ -10,8 +10,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from hub_core.lap_analysis import clean_lap
-from hub_core.race_strategy import fmt_ms
+from hub_core.analysis.lap_analysis import clean_lap
+from hub_core.analysis.race_strategy import fmt_ms
 from ui.theme import C, LAP_COLORS
 from ui.widgets import Card, SessionPicker, label, make_plot
 

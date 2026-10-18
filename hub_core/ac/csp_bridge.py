@@ -18,7 +18,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hub_core.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+from hub_core.ac.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+from hub_core.model import CarEntry
 
 try:
     import winreg
@@ -103,28 +104,6 @@ class PitItem:
     min: int
     max: int
     read_only: bool
-
-
-@dataclass
-class CarEntry:
-    index: int
-    connected: bool
-    race_pos: int
-    lap_count: int
-    spline: float
-    lap_time_ms: int
-    last_lap_ms: int
-    best_lap_ms: int
-    in_pitlane: bool
-    in_pit: bool
-    speed_kmh: float
-    last_lap_valid: bool
-    driver: str
-    model: str
-
-    @property
-    def progress(self) -> float:
-        return self.lap_count + self.spline
 
 
 @dataclass
@@ -248,7 +227,7 @@ APP_NAME = "DeltaSuiteBridge"
 
 
 def bundled_app_dir() -> Path:
-    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     return base / "ac_app" / APP_NAME
 
 

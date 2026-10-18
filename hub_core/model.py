@@ -96,6 +96,29 @@ class TelemetrySample:
     pit_limiter: bool = False
 
 
+@dataclass
+class CarEntry:
+    """Un'auto in pista come la descrive l'app CSP (classifica e gap)."""
+    index: int
+    connected: bool
+    race_pos: int
+    lap_count: int
+    spline: float
+    lap_time_ms: int
+    last_lap_ms: int
+    best_lap_ms: int
+    in_pitlane: bool
+    in_pit: bool
+    speed_kmh: float
+    last_lap_valid: bool
+    driver: str
+    model: str
+
+    @property
+    def progress(self) -> float:
+        return self.lap_count + self.spline
+
+
 def gear_label(gear: int) -> str:
     """Converte la marcia di AC (0=R, 1=N, 2=1a...) in etichetta leggibile."""
     if gear == 0:

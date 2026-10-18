@@ -11,8 +11,8 @@ from collections.abc import Callable
 
 import anthropic
 
-from hub_core import race_strategy as rs
-from hub_core.lap_recorder import LapData
+from hub_core.analysis import race_strategy as rs
+from hub_core.analysis.lap_recorder import LapData
 
 MODEL = "claude-opus-5-5"
 

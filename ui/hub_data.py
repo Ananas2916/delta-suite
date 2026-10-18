@@ -7,14 +7,14 @@ import threading
 import time
 from dataclasses import dataclass
 
-from hub_core import race_strategy as rs
-from hub_core.car_status import status_dict
-from hub_core.csp_bridge import (
+from hub_core.ac.csp_bridge import (
     CMD_ABS, CMD_BRAKE_BIAS, CMD_ENGINE_BRAKE, CMD_SETUP, CMD_TC, BridgeState,
 )
-from hub_core.lap_analysis import compare_laps
-from hub_core.lap_recorder import LapData
-from hub_core.setup_files import latest_setup, read_setup
+from hub_core.ac.setup_files import latest_setup, read_setup
+from hub_core.analysis import race_strategy as rs
+from hub_core.analysis.car_status import status_dict
+from hub_core.analysis.lap_analysis import compare_laps
+from hub_core.analysis.lap_recorder import LapData
 from ai_engine.lang import Language, speak_number
 
 KIND_LABELS = {"bias_freni": "Bias freni", "abs": "ABS", "tc": "TC", "freno_motore": "Freno motore",

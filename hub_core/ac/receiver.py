@@ -2,8 +2,8 @@
 Acquisizione telemetria live da Assetto Corsa via shared memory.
 
 Avvio da terminale (dalla cartella del progetto):
-    python -m hub_core.telemetry_receiver            # 60 Hz
-    python -m hub_core.telemetry_receiver --hz 100
+    python -m hub_core.ac.receiver            # 60 Hz
+    python -m hub_core.ac.receiver --hz 100
 
 Stampa in tempo reale velocità, RPM, marcia e pedali. Si riaggancia da solo se AC
 viene avviato dopo lo script o se si torna ai menu.
@@ -15,7 +15,7 @@ import argparse
 import sys
 import time
 
-from hub_core.ac_shared_memory import (
+from hub_core.ac.shared_memory import (
     ACSharedMemory,
     SharedMemoryNotAvailable,
     SPageFileGraphic,

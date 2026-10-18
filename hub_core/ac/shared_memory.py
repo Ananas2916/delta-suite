@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import ctypes
 
-from hub_core.win32 import FILE_MAP_READ, MappedView
+from hub_core.ac.win32 import FILE_MAP_READ, MappedView
 
 c_float = ctypes.c_float
 c_int = ctypes.c_int

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hub_core.lap_recorder import LapData
+from hub_core.analysis.lap_recorder import LapData
 
 
 def fmt_ms(ms: float | None) -> str:

@@ -7,10 +7,10 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget,
 )
 
-from hub_core import csp_bridge
-from hub_core.csp_bridge import CMD_ABS, CMD_BRAKE_BIAS, CMD_ENGINE_BRAKE, CMD_TC
-from hub_core.race_strategy import fmt_ms
-from hub_core.timing import fmt_gap
+from hub_core.ac import csp_bridge
+from hub_core.ac.csp_bridge import CMD_ABS, CMD_BRAKE_BIAS, CMD_ENGINE_BRAKE, CMD_TC
+from hub_core.analysis.race_strategy import fmt_ms
+from hub_core.analysis.timing import fmt_gap
 from ui.theme import C
 from ui.widgets import Card, label, readonly_table, table_item
 
