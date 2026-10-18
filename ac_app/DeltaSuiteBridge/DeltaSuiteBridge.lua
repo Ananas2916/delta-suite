@@ -278,10 +278,9 @@ local function makeSharedCanvas(w, h)
   if not ok or not c then return nil, tostring(c) end
   local fn = field(c, 'sharedHandle')
   local hok, hnd = false, nil
-  if fn then
-    hok, hnd = pcall(fn, c, false) -- handle "legacy": si apre da un altro processo senza duplicarlo
-    if not hok then hok, hnd = pcall(fn, c) end
-  end
+  -- crossProcess = true: handle D3D11 "legacy" apribile da un altro processo con OpenSharedResource
+  -- (con false è un identificativo valido solo per gli script dentro AC: E_INVALIDARG fuori)
+  if fn then hok, hnd = pcall(fn, c, true) end
   hnd = hok and tonumber(hnd) or nil
   if not hnd or hnd == 0 then
     c:dispose()

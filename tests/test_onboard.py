@@ -36,6 +36,12 @@ def test_lua_local_functions_defined_before_use():
         assert first_use.start() > m.start(), f"{m.group(1)} usata prima di essere definita"
 
 
+def test_shared_handle_is_cross_process():
+    # sharedHandle(false) è un id interno agli script di AC; per Delta Suite serve crossProcess = true
+    lua = (cb.bundled_app_dir() / "DeltaSuiteBridge.lua").read_text(encoding="utf-8")
+    assert "pcall(fn, c, true)" in lua and "pcall(fn, c, false)" not in lua
+
+
 def test_reads_the_frame_before_the_latest():
     assert ob.readable_frame(0) is None and ob.readable_frame(1) is None
     assert ob.readable_frame(5) == 4
