@@ -12,6 +12,7 @@ from ai_engine.agent_cli import APIAgent, CLIAgent
 from ai_engine.mcp_server import MCPServer
 from ai_engine.lang import DEFAULT_VOICE, Language, language_of
 from ai_engine.race_calls import RaceContext
+from ai_engine.race_chatter import AI_COMMENT_PROMPT
 from ai_engine.radio import Msg, RadioConfig, RadioRules
 from ai_engine.stt import DEFAULT_MODEL, make_stt
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
@@ -107,9 +108,13 @@ class HubState(QObject):
         self.agent = None
         self._job: Job | None = None
         self._job_mode = "ANALYSIS"
+        self._job_auto = False
         self._stt_job: Job | None = None
 
         self.proposal_requested.connect(self._add_proposal)
+        # remote access from another device (web page on the local network, off by default)
+        from ui.remote_data import RemoteAccess      # here: it reads HubState's signals and provider
+        self.remote = RemoteAccess(self)
 
     # ----------------------------------------------------------- settings
     def setting(self, key: str, default, typ=str):
@@ -121,6 +126,8 @@ class HubState(QObject):
             setattr(c, f, self.setting(f"radio/{f}", True, bool))
         for f in ("tyre_temp_lo", "tyre_temp_hi", "tyre_press_lo", "tyre_press_hi"):
             setattr(c, f, self.setting(f"radio/{f}", getattr(c, f), float))
+        for f in ("chatter", "ai_comment_laps"):
+            setattr(c, f, self.setting(f"radio/{f}", getattr(c, f), int))
         return c
 
     def save_radio_config(self, c: RadioConfig):
@@ -251,8 +258,15 @@ class HubState(QObject):
             others = [c.best_lap_ms for c in (b.cars if b else []) if c.index != 0 and c.best_lap_ms > 0]
             for m in self.radio_rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race,
                                              self._to_go(s), s.position if s is not None else None,
-                                             min(others) if others else None):
+                                             min(others) if others else None, rows=self.standings_rows):
                 self._say(m)
+            self._maybe_ai_comment(lap)
+
+    def _maybe_ai_comment(self, lap: LapData):
+        """Every N race laps the AI engineer says one thing on its own (where the local phrases cannot reach)."""
+        n = self.radio_rules.cfg.ai_comment_laps
+        if n and self.is_race and lap.lap_no >= 2 and lap.lap_no % n == 0 and not self.engineer_busy:
+            self.ask_engineer(AI_COMMENT_PROMPT, "RADIO", auto=True)
 
     def _to_go(self, s) -> int | None:
         if s is None:
@@ -264,7 +278,8 @@ class HubState(QObject):
         b = self.bridge_state
         return RaceContext(now=time.monotonic(), race=self.is_race, rows=self.standings_rows,
                            zone_ahead=self.track.zone_ahead(s.lap_position), to_go=self._to_go(s),
-                           cars_known=bool(b and len(b.cars) > 1))
+                           cars_known=bool(b and len(b.cars) > 1),
+                           slow_cars={z.car for z in self.track.zones if z.kind in ("yellow", "red") and z.car > 0})
 
     def _on_sample(self, s):
         self.last_sample = s
@@ -404,7 +419,8 @@ class HubState(QObject):
     def engineer_busy(self) -> bool:
         return self._job is not None and self._job.isRunning()
 
-    def ask_engineer(self, question: str, mode: str = "ANALYSIS") -> bool:
+    def ask_engineer(self, question: str, mode: str = "ANALYSIS", auto: bool = False) -> bool:
+        """`auto`: comment the engineer makes on its own (not asked by the driver): fails silently."""
         question = question.strip()
         if not question or self.engineer_busy:
             return False
@@ -423,7 +439,8 @@ class HubState(QObject):
         self._job.done.connect(lambda ans, m=mode: self._on_engineer_done(ans, m))
         self._job.failed.connect(self._on_engineer_failed)
         self._job_mode = mode
-        self.engineer_started.emit(question, mode)
+        self._job_auto = auto
+        self.engineer_started.emit("(spontaneous radio update)" if auto else question, mode)
         self._job.start()
         return True
 
@@ -435,7 +452,7 @@ class HubState(QObject):
     def _on_engineer_failed(self, err: str):
         self.engineer_failed.emit(err)
         self.radio_log.emit("system", f"Engineer: {err}")
-        if self._job_mode == "RADIO":
+        if self._job_mode == "RADIO" and not self._job_auto:
             self.say(self.phrase("agent_error"), PRIO_NORMAL, 15)
 
     def new_conversation(self):
@@ -481,4 +498,5 @@ class HubState(QObject):
             self.agent.cancel()
         self.voice.shutdown()
         self.mcp.stop()
+        self.remote.shutdown()
         self.db.close()

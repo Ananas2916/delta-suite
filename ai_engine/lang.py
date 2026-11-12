@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ai_engine.phrases_chatter import chatter_phrases_for
 from ai_engine.phrases_race import phrases_for
 
 
@@ -173,9 +174,11 @@ _PT = {
                   "setor, subesterço, sobre-esterço.",
 }
 
-# race radio phrases (positions, rivals, yellows, race end...): all languages in a separate file
+# race radio phrases (positions, rivals, yellows, race end...) and the chatty engineer's ones: all languages in
+# separate files
 for _phrases, _code in ((_IT, "it"), (_EN, "en"), (_ES, "es"), (_FR, "fr"), (_PT, "pt")):
     _phrases.update(phrases_for(_code))
+    _phrases.update(chatter_phrases_for(_code))
 
 LANGUAGES = {
     "it": Language("it", "italiano", "it", _IT),

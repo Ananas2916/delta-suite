@@ -321,6 +321,28 @@ class EngineerPage(QWidget):
             cb.toggled.connect(self._save_rules)
             self.rule_boxes[key] = cb
             f.addRow(cb)
+        self.chatter = QComboBox()
+        for level, text in ((0, "Essential"), (1, "Normal"), (2, "Chatty, like F1 radio")):
+            self.chatter.addItem(text, level)
+        self.chatter.setCurrentIndex(max(0, self.chatter.findData(cfg.chatter)))
+        self.chatter.setToolTip("How much the engineer talks between the important calls. All local phrases: "
+                                "instant and free.\nEssential: only the calls above.\nNormal: + start, "
+                                "overtakes by name, rivals' pit stops (undercut/overcut), your stop, purple "
+                                "sectors, pace, half distance, timesheet in practice.\nChatty: + every purple "
+                                "sector, rivals' lap times, praise, battery to attack or defend, updates when "
+                                "the radio is quiet.")
+        self.chatter.currentIndexChanged.connect(self._save_rules)
+        f.addRow("Engineer", compact(self.chatter, 24))
+        self.ai_laps = QSpinBox()
+        self.ai_laps.setRange(0, 20)
+        self.ai_laps.setValue(cfg.ai_comment_laps)
+        self.ai_laps.setSpecialValueText("never")
+        self.ai_laps.setSuffix(" laps")
+        self.ai_laps.setToolTip("In a race, every N laps the AI engineer (Claude Code...) looks at the data and says "
+                                "one thing on its own: strategy, pace against the rivals, tyres. Uses the agent: "
+                                "a few seconds late and it counts against your subscription.")
+        self.ai_laps.valueChanged.connect(self._save_rules)
+        f.addRow("AI comment every", self.ai_laps)
         self.t_lo = dspin(40, 120, cfg.tyre_temp_lo, 1, 0, "°C")
         self.t_hi = dspin(40, 140, cfg.tyre_temp_hi, 1, 0, "°C")
         self.p_lo = dspin(10, 40, cfg.tyre_press_lo, 0.1, 1, "psi")
@@ -456,7 +478,8 @@ class EngineerPage(QWidget):
     def _save_rules(self):
         c = RadioConfig(**{k: cb.isChecked() for k, cb in self.rule_boxes.items()},
                         tyre_temp_lo=self.t_lo.value(), tyre_temp_hi=self.t_hi.value(),
-                        tyre_press_lo=self.p_lo.value(), tyre_press_hi=self.p_hi.value())
+                        tyre_press_lo=self.p_lo.value(), tyre_press_hi=self.p_hi.value(),
+                        chatter=int(self.chatter.currentData()), ai_comment_laps=self.ai_laps.value())
         self.hub.save_radio_config(c)
 
     def _save_always(self, on: bool):

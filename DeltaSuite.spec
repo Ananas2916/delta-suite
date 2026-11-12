@@ -6,7 +6,8 @@ from PyInstaller.utils.hooks import collect_all
 # voice: kokoro-onnx + espeak-ng (pronunciation data) + phonemizer; transcription: faster-whisper
 # (CTranslate2, silero VAD). The models are NOT bundled: Kokoro uses Tsukumo's (or a folder you pick),
 # Whisper the Hugging Face cache (downloaded on first use if missing).
-datas, binaries, hidden = [("ac_app/DeltaSuiteBridge", "ac_app/DeltaSuiteBridge")], [], []
+datas, binaries, hidden = [("ac_app/DeltaSuiteBridge", "ac_app/DeltaSuiteBridge"),
+                           ("hub_core/remote/web", "hub_core/remote/web")], [], []
 for pkg in ("kokoro_onnx", "espeakng_loader", "phonemizer", "onnxruntime", "language_tags", "segments", "csvw",
             "faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"):
     try:

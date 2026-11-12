@@ -1,0 +1,162 @@
+"""Remote access window: turn it on, the code that changes every 10 seconds, the address to open, paired devices."""
+
+from __future__ import annotations
+
+import time
+
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtWidgets import (
+    QCheckBox, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QProgressBar, QPushButton, QVBoxLayout,
+)
+
+from ui import theme
+
+
+def _ago(t: float) -> str:
+    if not t:
+        return "not seen since the restart"
+    s = time.time() - t
+    if s < 10:
+        return "online now"
+    if s < 3600:
+        return f"seen {int(s // 60)} min ago"
+    return time.strftime("seen %d/%m %H:%M", time.localtime(t))
+
+
+class RemoteDialog(QDialog):
+    def __init__(self, hub, parent=None):
+        super().__init__(parent)
+        self.hub = hub
+        self.remote = hub.remote
+        self.setWindowTitle("Remote access")
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(10)
+
+        intro = QLabel("Follow the session from another PC, a tablet or a phone on the same network: live data, "
+                       "standings, laps and radio, and act as the engineer (confirm proposals, talk to the driver, "
+                       "ask the AI engineer). Nothing to install there: just a browser.")
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {theme.C['dim']};")
+        lay.addWidget(intro)
+
+        self.enable = QCheckBox("Enable remote access")
+        self.enable.setChecked(self.remote.enabled)
+        self.enable.toggled.connect(self._toggle)
+        lay.addWidget(self.enable)
+
+        self.url = QLabel()
+        self.url.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.url.setWordWrap(True)
+        lay.addWidget(self.url)
+        self.copy = QPushButton("Copy address")
+        self.copy.clicked.connect(self._copy)
+        lay.addWidget(self.copy, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.code = QLabel("––– –––")
+        self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # size in the style sheet: the global one (font-size 10pt) would win over setFont
+        self.code.setStyleSheet(f"background: {theme.C['panel']}; border-radius: 10px; padding: 14px; "
+                                f"font-family: Consolas, monospace; font-size: 34pt; font-weight: 800; "
+                                f"letter-spacing: 6px; color: {theme.C['text']};")
+        lay.addWidget(self.code)
+        self.countdown = QProgressBar()
+        self.countdown.setRange(0, 1000)
+        self.countdown.setTextVisible(False)
+        self.countdown.setFixedHeight(6)
+        lay.addWidget(self.countdown)
+        self.code_hint = QLabel("Type this code on the other device: it changes every 10 seconds and works once.")
+        self.code_hint.setWordWrap(True)
+        self.code_hint.setStyleSheet(f"color: {theme.C['dim']};")
+        lay.addWidget(self.code_hint)
+
+        lay.addWidget(QLabel("Paired devices"))
+        self.devices = QListWidget()
+        self.devices.setMinimumHeight(110)
+        lay.addWidget(self.devices)
+        row = QHBoxLayout()
+        self.revoke = QPushButton("Revoke selected")
+        self.revoke.clicked.connect(self._revoke)
+        self.revoke_all = QPushButton("Revoke all")
+        self.revoke_all.clicked.connect(self._revoke_all)
+        row.addWidget(self.revoke)
+        row.addWidget(self.revoke_all)
+        row.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(self.accept)
+        row.addWidget(close)
+        lay.addLayout(row)
+
+        note = QLabel("Home network only (plain HTTP). From outside, use a VPN such as Tailscale: do not open the "
+                      "port on the router. Windows may ask to allow Delta Suite through the firewall: allow it on "
+                      "private networks.")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {theme.C['dim']}; font-size: 8pt;")
+        lay.addWidget(note)
+
+        self.remote.changed.connect(self._refresh)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(100)
+        self._refresh()
+
+    def _toggle(self, on: bool):
+        if not self.remote.set_enabled(on):
+            self.enable.blockSignals(True)
+            self.enable.setChecked(False)
+            self.enable.blockSignals(False)
+            self.url.setText(f"Could not start the server: {self.remote.server.error}")
+        self._refresh()
+
+    def _refresh(self):
+        on = self.remote.enabled
+        for w in (self.code, self.countdown, self.code_hint, self.copy):
+            w.setVisible(on)
+        if on:
+            urls = self.remote.server.urls()
+            self.url.setText("On the other device open:  " + "   ·   ".join(f"<b>{u}</b>" for u in urls))
+        elif not self.url.text().startswith("Could not"):
+            self.url.setText("Off: nobody can connect.")
+        self.devices.clear()
+        for d in self.remote.pairing.device_list():
+            item = QListWidgetItem(f"{d.name}   ·   {d.address or '—'}   ·   {_ago(d.last_seen)}")
+            item.setData(Qt.ItemDataRole.UserRole, d.id)
+            self.devices.addItem(item)
+        if not self.devices.count():
+            self.devices.addItem("No device paired yet")
+        self.revoke.setEnabled(bool(self.remote.pairing.device_list()))
+        self.revoke_all.setEnabled(self.revoke.isEnabled())
+        self._tick()
+
+    def _tick(self):
+        if not self.remote.enabled:
+            return
+        code, left = self.remote.pairing.current_code()
+        text = f"{code[:3]} {code[3:]}"
+        if self.code.text() != text:
+            self.code.setText(text)
+        step = self.remote.pairing.step_s
+        self.countdown.setValue(int(1000 * left / step))
+
+    def _copy(self):
+        urls = self.remote.server.urls()
+        if urls:
+            QGuiApplication.clipboard().setText(urls[0])
+
+    def _revoke(self):
+        item = self.devices.currentItem()
+        did = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if did:
+            self.remote.pairing.revoke(did)
+
+    def _revoke_all(self):
+        self.remote.pairing.revoke_all()
+
+    def done(self, r):
+        self._timer.stop()
+        try:
+            self.remote.changed.disconnect(self._refresh)
+        except TypeError:
+            pass
+        super().done(r)
