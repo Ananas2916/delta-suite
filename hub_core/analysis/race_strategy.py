@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from hub_core.analysis.lap_recorder import LapData
+from hub_core.i18n import tr
 
 
 def fmt_ms(ms: float | None) -> str:
@@ -69,10 +70,10 @@ class RaceProgress:
         if self.to_go is None:
             return "—"
         if self.to_go == 0:
-            return "FINISHED"
+            return tr("FINISHED")
         if self.to_go == 1:
-            return "FINAL LAP"
-        return f"{'~' if self.estimated else ''}{self.to_go} laps"
+            return tr("FINAL LAP")
+        return ("~" if self.estimated else "") + tr("{n} laps", n=self.to_go)
 
 
 def race_progress(race_laps: int, leader_done: int, time_left_ms: float | None, lap_s: float | None,

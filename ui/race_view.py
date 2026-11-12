@@ -19,6 +19,7 @@ from ui.widgets.car_status import LEVEL_COLORS
 from ui.widgets.hybrid import battery_color
 from ui.widgets.sectors import SECTOR_COLORS, fmt_sector
 from ui.widgets.view_panel import VIEW_COLORS
+from hub_core.i18n import tr
 
 STALE_S = 2.0          # no new frames for this long: the video is no longer live
 
@@ -71,11 +72,11 @@ def view_rings(car_indexes: list[int]) -> dict[int, str]:
 
 
 def timing_rows(hub, s, rings: dict[int, str]) -> list[tuple]:
-    rows = [(r.index, str(r.pos), r.driver or f"car {r.index}", fmt_gap(r), _interval(r),
-             "PIT" if r.in_pit else fmt_ms(r.last_ms), r.is_player, rings.get(r.index))
+    rows = [(r.index, str(r.pos), r.driver or tr("car {n}", n=r.index), fmt_gap(r), _interval(r),
+             tr("PIT") if r.in_pit else fmt_ms(r.last_ms), r.is_player, rings.get(r.index))
             for r in hub.standings_rows]
     if not rows and s is not None and s.status == ACStatus.LIVE:     # without the CSP app or in demo: just you
-        rows = [(0, str(s.position), hub.session_info.get("player") or "You", "-", "-",
+        rows = [(0, str(s.position), hub.session_info.get("player") or tr("You"), "-", "-",
                  fmt_ms(s.last_lap_ms), True, rings.get(0))]
     return rows
 
@@ -123,34 +124,39 @@ def update_gps(hub, gps, s, rings: dict[int, str]) -> None:
 def car_info_html(hub, s, fpl) -> str:
     """Fuel, battery, aids, bias, ride heights: the lines below the car diagram."""
     if s is None:
-        return "No data: start the acquisition."
+        return tr("No data: start the acquisition.")
     b = hub.bridge_state
     aids = f"ABS {b.abs_mode}/{b.abs_modes}  ·  TC {b.tc_mode}/{b.tc_modes}" if b else \
         f"ABS {s.abs:.1f}  ·  TC {s.tc:.1f}"
-    fuel = f"fuel {s.fuel:.1f} L" + (f" (~{s.fuel / fpl:.1f} laps)" if fpl else "")
+    fuel = tr("fuel {fuel} L", fuel=f"{s.fuel:.1f}") + (" (~" + tr("{n} laps", n=f"{s.fuel / fpl:.1f}") + ")"
+                                                        if fpl else "")
     h = cs.hybrid_state(s, hub.session_info)
     hybrid = ""
     if h is not None:
-        lap = f"  ·  lap {h.lap_used_kj:.0f}/{h.lap_limit_kj:.0f} kJ" if h.lap_limit_kj > 0 else ""
-        hybrid = (f"<br><span style='color:{battery_color(h.charge)}'>battery {h.charge * 100:.0f}%</span>"
-                  f"  ·  {h.mode_text}{lap}")
-    return (f"{fuel}{hybrid}<br>{aids}  ·  bias {s.brake_bias * 100:.1f}%  ·  engine brake {s.engine_brake}<br>"
-            f"ride height front {s.ride_height[0] * 1000:.0f} mm  ·  rear {s.ride_height[1] * 1000:.0f} mm"
-            + ("<br>pit limiter on" if s.pit_limiter else ""))
+        lap = "  ·  " + tr("lap {used}/{limit} kJ", used=f"{h.lap_used_kj:.0f}", limit=f"{h.lap_limit_kj:.0f}") \
+            if h.lap_limit_kj > 0 else ""
+        hybrid = (f"<br><span style='color:{battery_color(h.charge)}'>"
+                  + tr("battery {pct}%", pct=f"{h.charge * 100:.0f}") + f"</span>  ·  {h.mode_text}{lap}")
+    return (f"{fuel}{hybrid}<br>{aids}  ·  "
+            + tr("bias {pct}%", pct=f"{s.brake_bias * 100:.1f}") + "  ·  "
+            + tr("engine brake {n}", n=s.engine_brake) + "<br>"
+            + tr("ride height front {f} mm  ·  rear {r} mm", f=f"{s.ride_height[0] * 1000:.0f}",
+                 r=f"{s.ride_height[1] * 1000:.0f}")
+            + ("<br>" + tr("pit limiter on") if s.pit_limiter else ""))
 
 
 def alerts_html(s, alerts, limit: int = 6) -> str:
     if s is None:
         return ""
     if not alerts:
-        return f"<span style='color:{C['green']}'>●</span>  All good"
+        return f"<span style='color:{C['green']}'>●</span>  " + tr("All good")
     return "<br>".join(f"<span style='color:{LEVEL_COLORS[a.level]}'>●</span>  {a.text}" for a in alerts[:limit])
 
 
 def small_hud(hub, s, idx: int, camera: str, car_text: str) -> dict:
     """Secondary views: who, which camera, gap and last lap."""
     if idx < 0:
-        who = hub.session_info.get("player") or "My car"
+        who = hub.session_info.get("player") or tr("My car")
         row = next((r for r in hub.standings_rows if r.is_player), None)
         if s is not None:
             who = f"P{s.position}  {who}"
@@ -158,10 +164,10 @@ def small_hud(hub, s, idx: int, camera: str, car_text: str) -> dict:
     else:
         entry = car_entry(hub, idx)
         row = next((r for r in hub.standings_rows if r.index == idx), None)
-        who = f"P{entry.race_pos}  {entry.driver or 'car ' + str(idx)}" if entry else car_text
+        who = f"P{entry.race_pos}  {entry.driver or tr('car {n}', n=idx)}" if entry else car_text
         last = entry.last_lap_ms if entry else 0
-    times = [("GAP", fmt_gap(row), None)] if row is not None else []
-    times.append(("LAST", fmt_ms(last), None))
+    times = [(tr("GAP"), fmt_gap(row), None)] if row is not None else []
+    times.append((tr("LAST"), fmt_ms(last), None))
     return {"title": who, "camera": camera, "times": times}
 
 
@@ -172,27 +178,27 @@ def main_hud(hub, s, alerts, idx: int, camera: str, car_text: str) -> dict:
         row = next((r for r in hub.standings_rows if r.index == idx), None)
         if entry is None:
             return {"title": car_text, "camera": camera}
-        times = [("POSITION", f"P{entry.race_pos}", None), ("LAP", str(entry.lap_count + 1), None),
-                 ("TIME", fmt_ms(entry.lap_time_ms), None), ("LAST", fmt_ms(entry.last_lap_ms), None),
-                 ("BEST", fmt_ms(entry.best_lap_ms), C["purple"])]
+        times = [(tr("POSITION"), f"P{entry.race_pos}", None), (tr("LAP"), str(entry.lap_count + 1), None),
+                 (tr("TIME"), fmt_ms(entry.lap_time_ms), None), (tr("LAST"), fmt_ms(entry.last_lap_ms), None),
+                 (tr("BEST"), fmt_ms(entry.best_lap_ms), C["purple"])]
         if row is not None and row.interval_s is not None:
-            times.append(("INTERVAL", f"+{row.interval_s:.1f}", None))
-        return {"title": f"{entry.driver or 'Car ' + str(idx)}  ·  {entry.model}", "camera": camera,
+            times.append((tr("INTERVAL"), f"+{row.interval_s:.1f}", None))
+        return {"title": f"{entry.driver or tr('Car {n}', n=idx)}  ·  {entry.model}", "camera": camera,
                 "speed": entry.speed_kmh, "times": times}
     if s is None:
         return {}
     info = hub.session_info
     max_rpm = max(1000, int(info.get("max_rpm") or 9000))
-    player = info.get("player") or "You"
+    player = info.get("player") or tr("You")
     total = f"/{s.session_laps}" if hub.is_race and s.session_laps > 0 else ""
     hud = {
         "title": f"{player}  ·  {info.get('car', '')}", "camera": camera,
         "speed": s.speed_kmh, "gear": gear_label(s.gear), "rpm": s.rpm, "rpm_frac": s.rpm / max_rpm,
         "shift": s.rpm > 0.95 * max_rpm, "gas": s.gas, "brake": s.brake, "steer": s.steer_angle,
-        "times": [("POSITION", f"P{s.position}", None), ("LAP", f"{s.completed_laps + 1}{total}"
-                                                        + ("  PIT" if s.is_in_pit else ""), None),
-                  ("TIME", fmt_ms(s.lap_time_ms), None), ("LAST", fmt_ms(s.last_lap_ms), None),
-                  ("BEST", fmt_ms(s.best_lap_ms), C["purple"])],
+        "times": [(tr("POSITION"), f"P{s.position}", None), (tr("LAP"), f"{s.completed_laps + 1}{total}"
+                                                            + ("  " + tr("PIT") if s.is_in_pit else ""), None),
+                  (tr("TIME"), fmt_ms(s.lap_time_ms), None), (tr("LAST"), fmt_ms(s.last_lap_ms), None),
+                  (tr("BEST"), fmt_ms(s.best_lap_ms), C["purple"])],
     }
     delta = hub.live_lap.delta_s
     if delta is not None:
@@ -210,19 +216,19 @@ def main_hud(hub, s, alerts, idx: int, camera: str, car_text: str) -> dict:
 def video_placeholder(hub, main: bool, has_image: bool, video_on: bool, view: int = 0) -> str:
     """Why a view has no video (empty if there is video)."""
     if not hub.running:
-        return "Acquisition stopped: start telemetry from Assetto Corsa." if main else ""
+        return tr("Acquisition stopped: start telemetry from Assetto Corsa.") if main else ""
     if not hub.ac_live:
-        return ("Onboard video only comes from Assetto Corsa. In demo and replay you still get graphics, GPS and "
-                "car status." if main else "Assetto Corsa only")
+        return (tr("Onboard video only comes from Assetto Corsa. In demo and replay you still get graphics, GPS "
+                   "and car status.") if main else tr("Assetto Corsa only"))
     if not video_on:
-        return "Video off: AC renders no extra views (more FPS in game)."
+        return tr("Video off: AC renders no extra views (more FPS in game).")
     feed = hub.onboard_feed
     if not feed.connected:
-        return ("Delta Suite Bridge CSP app not connected or outdated: update it from Pit & Setup."
-                if main else "CSP app not connected")
+        return (tr("Delta Suite Bridge CSP app not connected or outdated: update it from Pit & Setup.")
+                if main else tr("CSP app not connected"))
     inf = feed.info(view)
     if inf is not None and inf.status.startswith("error"):
-        return f"The CSP app cannot render the onboard: {inf.status}"
+        return tr("The CSP app cannot render the onboard: {status}", status=inf.status)
     if not has_image:
-        return "Waiting for the first frame…"
+        return tr("Waiting for the first frame…")
     return ""

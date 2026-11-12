@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QWidget
 from hub_core.analysis.track_status import TrackLine, Zone
 from ui.theme import C
 from ui.widgets import paint_font
+from hub_core.i18n import tr
 
 TRACK_EDGE, TRACK_FILL, PIT_LANE = "#e6e9ef", "#2f3540", "#6b7280"
 ZONE_FILL = {"yellow": "#f5c518", "red": "#ff3b3b", "blue": "#3d9bff"}
@@ -111,7 +112,7 @@ class GPSView(QWidget):
         if to_px is None:
             p.setPen(QColor(C["dim"]))
             p.setFont(paint_font(9, QFont.Weight.Normal))
-            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "The track appears here\nas soon as the car moves")
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, tr("The track appears here\nas soon as the car moves"))
             p.end()
             return
 

@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hub_core.ac.win32 import FILE_MAP_READ, FILE_MAP_WRITE, MappedView
+from hub_core.i18n import tr
 
 ONBOARD_TAG = "Local\\DeltaSuite_Onboard_v6"
 ONBOARD_VERSION = 6
@@ -124,31 +125,31 @@ def _f6_name(pos: Vec, look: Vec, wheels: list[Vec]) -> str:
     left_sign = 1.0 if fl[0] >= cx else -1.0           # which side is left in car space
     x, y, z = pos[0] - cx, pos[1] - cy, pos[2] - cz
     dx, _dy, dz = look
-    side = "left" if x * left_sign > 0 else "right"
+    side = tr("left") if x * left_sign > 0 else tr("right")
     inside = abs(x) < 0.8 * half_track and rear_z < pos[2] < front_z and y < 0.95
     if inside:
         if abs(dx) > abs(dz):
-            return "Cockpit · side"
+            return tr("Cockpit · side")
         if dz < 0:
-            return "Cockpit · rear-facing"
+            return tr("Cockpit · rear-facing")
         if z > 0.35:
-            return "Dashboard"
-        return "Cockpit · behind the driver" if z < -0.35 else "Cockpit · driver view"
+            return tr("Dashboard")
+        return tr("Cockpit · behind the driver") if z < -0.35 else tr("Cockpit · driver view")
     if y >= 0.95:
-        return "Roof · rear-facing" if dz < -0.5 else "Roof"
+        return tr("Roof · rear-facing") if dz < -0.5 else tr("Roof")
     if pos[2] > front_z + 0.3:
-        return "Nose · facing the car" if dz < -0.5 else "Nose"
+        return tr("Nose · facing the car") if dz < -0.5 else tr("Nose")
     if pos[2] < rear_z - 0.3:
-        return "Tail · facing the car" if dz > 0.5 else "Tail"
-    direction = " · forward" if dz > 0.5 else " · rear-facing" if dz < -0.5 else ""
-    return f"Side {side}{direction}"
+        return tr("Tail · facing the car") if dz > 0.5 else tr("Tail")
+    direction = tr(" · forward") if dz > 0.5 else tr(" · rear-facing") if dz < -0.5 else ""
+    return tr("Side {side}", side=side) + direction
 
 
 def f6_names(cams: list[tuple[Vec, Vec]], wheels: list[Vec] | None) -> list[str]:
     """F6 camera names, numbered when repeated ("Dashboard", "Dashboard 2")."""
     names = []
     for i, (pos, look) in enumerate(cams):
-        base = _f6_name(pos, look, wheels) if wheels and any(any(w) for w in wheels) else f"Camera {i + 1}"
+        base = _f6_name(pos, look, wheels) if wheels and any(any(w) for w in wheels) else tr("Camera {n}", n=i + 1)
         n = sum(1 for prev in names if prev == base or prev.startswith(base + " "))
         names.append(base if n == 0 else f"{base} {n + 1}")
     return names
@@ -158,10 +159,10 @@ def camera_menu(f6: list[str]) -> list[tuple[str | None, int | None]]:
     """Camera list entries: (text, index to request from the app); index None = header."""
     items: list[tuple[str | None, int | None]] = []
     for group, indices in CAMERA_GROUPS:
-        items.append((group, None))
-        items += [(CAMERAS[i][1], i) for i in indices]
+        items.append((tr(group), None))
+        items += [(tr(CAMERAS[i][1]), i) for i in indices]
     if f6:
-        items.append(("Car (F6)", None))
+        items.append((tr("Car (F6)"), None))
         items += [(name, CAR_CAMERA_BASE + i) for i, name in enumerate(f6)]
     return items
 

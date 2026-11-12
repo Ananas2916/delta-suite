@@ -12,6 +12,7 @@ from hub_core.ac.recording import ReplaySource, SessionRecorder, recording_path
 from hub_core.analysis.lap_recorder import LapRecorder
 from hub_core.demo_source import DemoSource
 from hub_core.model import ACStatus
+from hub_core.i18n import tr
 
 SOURCE_AC = "ac"
 SOURCE_DEMO = "demo"
@@ -54,11 +55,11 @@ class TelemetryWorker(QThread):
             try:
                 connected = src.connect()
             except (OSError, ValueError) as exc:
-                self.status.emit(f"Source not available: {exc}", False)
+                self.status.emit(tr("Source not available: {err}", err=exc), False)
                 break
             if not connected:
                 if not waiting:
-                    self.status.emit(src.waiting_message, False)
+                    self.status.emit(tr(src.waiting_message), False)
                     waiting = True
                 self.msleep(1000)
                 continue
@@ -80,8 +81,8 @@ class TelemetryWorker(QThread):
                     last_packet, stale_since = s.packet_id, s.t
                 elif s.t - stale_since > 5.0 and s.status == ACStatus.OFF:
                     src.disconnect()
-                    self.status.emit("Replay finished" if src.finished else
-                                     "AC is no longer updating the data, reattaching...", False)
+                    self.status.emit(tr("Replay finished") if src.finished else
+                                     tr("AC is no longer updating the data, reattaching..."), False)
                     break
                 if recorder is not None and src.last_pages is not None and s.status != ACStatus.OFF:
                     recorder.write(*src.last_pages, s.t)
@@ -92,7 +93,7 @@ class TelemetryWorker(QThread):
                     self.lap_completed.emit(lap)
                 self.sample_ready.emit(s)
                 if src.finished:
-                    self.status.emit("Replay finished", False)
+                    self.status.emit(tr("Replay finished"), False)
                     break
 
                 now = time.perf_counter()
@@ -123,7 +124,7 @@ class TelemetryWorker(QThread):
         if self.bridge is not None or hasattr(src, "bridge_state"):
             self.bridge_state.emit(None)
         if not src.finished:
-            self.status.emit("Acquisition stopped", False)
+            self.status.emit(tr("Acquisition stopped"), False)
 
 
 class Job(QThread):

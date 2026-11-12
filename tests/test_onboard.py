@@ -257,7 +257,7 @@ def test_alerts_for_damage_puncture_and_fuel(sample):
     texts = [a.text for a in alerts]
     assert alerts[0].level == cs.CRIT
     assert "Moderate front damage" in texts and "Minor right damage" in texts
-    assert any(t.startswith("Puncture? Front right tyre") for t in texts)
+    assert any(t.startswith("Puncture? front right tyre") for t in texts)
     assert "Fuel for 1.2 laps" in texts
     assert "Dirty tyres: rear left" in texts
     # with damage disabled on the server/offline, carDamage does not count

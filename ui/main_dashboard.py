@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
-from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from hub_core.ac import csp_bridge
+from hub_core.i18n import LANGUAGES, language, set_language, tr
 from ui import theme
 from ui.hub_state import MODES, HubState
 from ui.navigation import GENERAL, SECTIONS
@@ -58,12 +59,21 @@ class MainWindow(QMainWindow):
         mode_box.setStyleSheet(f"background: {theme.C['panel']};")
         ml = QVBoxLayout(mode_box)
         ml.setContentsMargins(12, 6, 12, 8)
-        ml.addWidget(QLabel("MODE"))
+        ml.addWidget(QLabel(tr("MODE")))
         self.mode = QComboBox()
         for k, v in MODES.items():
-            self.mode.addItem(v, k)
-        self.mode.setToolTip("Driver: radio and voice on · Engineer: adjustments and setup · Analysis: archive")
+            self.mode.addItem(tr(v), k)
+        self.mode.setToolTip(tr("Driver: radio and voice on · Engineer: adjustments and setup · Analysis: archive"))
         ml.addWidget(self.mode)
+        ml.addWidget(QLabel(tr("LANGUAGE")))
+        self.language = QComboBox()
+        for code, name in LANGUAGES.items():
+            self.language.addItem(name, code)
+        self.language.setCurrentIndex(max(0, self.language.findData(language())))
+        self.language.setToolTip(tr("Interface language (applied at the next start). The radio speaks the "
+                                    "language of the chosen voice."))
+        self.language.currentIndexChanged.connect(self._on_language)
+        ml.addWidget(self.language)
         sl.addWidget(mode_box)
         self.nav = QListWidget()
         self.nav.setObjectName("sidebar")
@@ -88,9 +98,9 @@ class MainWindow(QMainWindow):
             "strategy": StrategyPage(self.hub),
             "dynamics": DynamicsPage(self.hub),
         }
-        self._add_nav(GENERAL[0], GENERAL[1], GENERAL[2])
+        self._add_nav(GENERAL[0], tr(GENERAL[1]), tr(GENERAL[2]))
         for section, modules in SECTIONS:
-            head = QListWidgetItem(section.upper())
+            head = QListWidgetItem(tr(section).upper())
             head.setFlags(Qt.ItemFlag.NoItemFlags)
             head.setSizeHint(QSize(200, 34))
             f = head.font()
@@ -100,7 +110,7 @@ class MainWindow(QMainWindow):
             head.setForeground(QColor(theme.C["dim"]))
             self.nav.addItem(head)
             for key, name, desc, replaces in modules:
-                self._add_nav(key, name, f"{desc}\nReplaces: {replaces}")
+                self._add_nav(key, tr(name), tr(desc) + "\n" + tr("Replaces: {what}", what=tr(replaces)))
         for key, page in self.pages.items():
             self.stack.addWidget(self._scrollable(key, page))
         self.nav.currentItemChanged.connect(self._on_nav)
@@ -113,11 +123,11 @@ class MainWindow(QMainWindow):
         self.general.start_demo.connect(self.telemetry.start_demo)     # the demo starts while staying on the Overview
         self.general.checklist_action.connect(self._on_checklist)
 
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(tr("Ready"))
         self.statusBar().addWidget(self.status_label, 1)
         self.hub.status.connect(lambda text, ok: self.status_label.setText(text))
         self.hub.lap_completed.connect(
-            lambda lap: self.statusBar().showMessage(f"Lap {lap.lap_no} saved to the archive", 4000))
+            lambda lap: self.statusBar().showMessage(tr("Lap {n} saved to the archive", n=lap.lap_no), 4000))
 
     def _scrollable(self, key: str, page: QWidget) -> QScrollArea:
         """Page in a scroll area: on a narrow screen (or scaled to 150%) the window never asks for more
@@ -153,7 +163,15 @@ class MainWindow(QMainWindow):
         tips = {"driver": "Driver mode: radio and engineer voice on",
                 "engineer": "Engineer mode: live adjustments and setup from the Pit & Setup page",
                 "analysis": "Analysis mode: lap comparison and archive, radio off"}
-        self.statusBar().showMessage(tips[mode], 5000)
+        self.statusBar().showMessage(tr(tips[mode]), 5000)
+
+    def _on_language(self):
+        code = self.language.currentData()
+        if code == self.hub.setting("ui/language", "en"):
+            return
+        self.hub.settings.setValue("ui/language", code)
+        QMessageBox.information(self, "Delta Suite", tr("The new language is applied the next time you start "
+                                                        "Delta Suite."))
 
     def _on_checklist(self, key: str):
         """Buttons of the get-started list on the Overview."""
@@ -161,12 +179,12 @@ class MainWindow(QMainWindow):
             try:
                 path = csp_bridge.install_app()
             except Exception as exc:
-                QMessageBox.warning(self, "Installation", f"Installation failed:\n{exc}")
+                QMessageBox.warning(self, tr("Installation"), tr("Installation failed:\n{err}", err=exc))
             else:
                 QMessageBox.information(
-                    self, "CSP app installed",
-                    f"App copied to:\n{path}\n\nRestart the AC session to load it. In game, open 'Delta Suite "
-                    "Bridge' from the app bar to bind the wheel buttons (radio, confirm, discard).")
+                    self, tr("CSP app installed"),
+                    tr("App copied to:\n{path}\n\nRestart the AC session to load it. In game, open 'Delta Suite "
+                       "Bridge' from the app bar to bind the wheel buttons (radio, confirm, discard).", path=path))
         elif key == "open_telemetry":
             self.open_page("telemetry")
         elif key in ("open_engineer", "download_voice"):
@@ -246,6 +264,9 @@ def main():
     app.setOrganizationName("DeltaSuite")
     app.setWindowIcon(theme.app_icon())
     theme.apply(app)
+    # interface language: chosen once at startup (the self-test always runs in English)
+    if not os.environ.get("DELTA_SELFTEST"):
+        set_language(os.environ.get("DELTA_LANG") or QSettings("DeltaSuite", "DeltaSuite").value("ui/language", "en"))
     win = MainWindow()
     win.show()
     if os.environ.get("DELTA_SELFTEST"):

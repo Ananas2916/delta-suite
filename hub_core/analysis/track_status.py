@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from hub_core.model import ACFlag
+from hub_core.i18n import tr
 
 BINS = 500                       # line points and typical-speed cells, at a constant step along the lap
 STOPPED_KMH = 8.0
@@ -199,27 +200,27 @@ class TrackWatch:
         if flag is not None and flag.kind in ("yellow", "red"):
             self._warned_t = now
         elif flag is None and now - self._warned_t < GREEN_S:
-            return FlagStatus("green", "GREEN FLAG · track clear")
+            return FlagStatus("green", tr("GREEN FLAG · track clear"))
         return flag
 
     def _player_flag(self, player_pos: float | None, ac_flag: int, now: float, cars_known: bool) -> FlagStatus | None:
         if ac_flag != self._ac_flag:
             self._ac_flag, self._ac_flag_t = ac_flag, now
-        fixed = {ACFlag.BLUE: ("blue", "BLUE FLAG · let them by"),
-                 ACFlag.CHECKERED: ("checkered", "CHEQUERED FLAG"),
-                 ACFlag.BLACK: ("black", "BLACK FLAG"), ACFlag.PENALTY: ("penalty", "PENALTY"),
-                 ACFlag.WHITE: ("white", "WHITE FLAG")}
+        fixed = {ACFlag.BLUE: ("blue", tr("BLUE FLAG · let them by")),
+                 ACFlag.CHECKERED: ("checkered", tr("CHEQUERED FLAG")),
+                 ACFlag.BLACK: ("black", tr("BLACK FLAG")), ACFlag.PENALTY: ("penalty", tr("PENALTY")),
+                 ACFlag.WHITE: ("white", tr("WHITE FLAG"))}
         if ac_flag in fixed:
             return FlagStatus(*fixed[ac_flag])
         ahead = self.zone_ahead(player_pos)
         if ahead is not None:
             zone, dist = ahead
-            where = "in this sector" if dist <= 0 else f"in {dist:.0f} m"
+            where = tr("in this sector") if dist <= 0 else tr("in {d} m", d=f"{dist:.0f}")
             if zone.kind == "red":
-                return FlagStatus("red", f"DOUBLE YELLOW · stopped car {where}")
-            return FlagStatus("yellow", f"YELLOW FLAG · slow car {where}")
+                return FlagStatus("red", tr("DOUBLE YELLOW · stopped car {where}", where=where))
+            return FlagStatus("yellow", tr("YELLOW FLAG · slow car {where}", where=where))
         if ac_flag == ACFlag.YELLOW and (not cars_known or now - self._ac_flag_t < AC_FLAG_FRESH_S):
-            return FlagStatus("yellow", "YELLOW FLAG")
+            return FlagStatus("yellow", tr("YELLOW FLAG"))
         return None
 
     def zone_ahead(self, player_pos: float | None) -> tuple[Zone, float] | None:

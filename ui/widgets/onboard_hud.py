@@ -11,6 +11,7 @@ from ui.theme import C
 from ui.widgets import paint_font
 from ui.widgets.car_status import LEVEL_COLORS
 from ui.widgets.hybrid import battery_color
+from hub_core.i18n import tr
 
 
 def frame_image(f: Frame) -> QImage:
@@ -92,7 +93,7 @@ class OnboardView(QWidget):
         p.setPen(QColor("white"))
         p.setFont(paint_font(9 * k))
         p.drawText(QRectF(tl.left() + 26 * k, tl.top() + 6 * k, tl.width(), 22 * k), Qt.AlignmentFlag.AlignVCenter,
-                   ("ONBOARD LIVE" if self.live else "ONBOARD") + (f"  ·  {h['camera']}" if h.get("camera") else ""))
+                   (tr("ONBOARD LIVE") if self.live else "ONBOARD") + (f"  ·  {h['camera']}" if h.get("camera") else ""))
         p.setFont(paint_font(11 * k))
         p.drawText(QRectF(tl.left() + 12 * k, tl.top() + 27 * k, tl.width() - 20 * k, 22 * k),
                    Qt.AlignmentFlag.AlignVCenter, h.get("title", ""))

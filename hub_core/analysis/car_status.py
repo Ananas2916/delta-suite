@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from statistics import median
 
+from hub_core.i18n import tr
+
 CORNERS = ("front left", "front right", "rear left", "rear right")
 DAMAGE_ZONES = ("front", "rear", "left", "right", "centre")
 
@@ -85,7 +87,7 @@ class HybridState:
 
     @property
     def mode_text(self) -> str:
-        return "deploying" if self.deploying else "charging" if self.charging else "idle"
+        return tr("deploying") if self.deploying else tr("charging") if self.charging else tr("idle")
 
 
 def hybrid_state(s, info: dict | None) -> HybridState | None:
@@ -109,6 +111,15 @@ def hybrid_state(s, info: dict | None) -> HybridState | None:
     )
 
 
+def _sentence(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def corner_name(i: int) -> str:
+    """Translated wheel name ("front left"...)."""
+    return tr(CORNERS[i])
+
+
 def _brakes_simulated(s) -> bool:
     # some cars do not simulate brake temperature: it stays at air temperature
     return max(s.brake_temp) > s.air_temp + 5.0
@@ -123,64 +134,74 @@ def car_alerts(s, info: dict | None = None, fuel_per_lap: float | None = None) -
         for zone, v in zip(DAMAGE_ZONES, s.car_damage):
             lvl = damage_level(v)
             if lvl:
-                word = ("Minor", "Moderate", "Severe")[lvl - 1]
-                out.append(Alert(CRIT if lvl >= 2 else WARN, f"{word} {zone} damage", f"damage_{zone}"))
+                word = tr(("minor", "moderate", "severe")[lvl - 1])
+                text = _sentence(tr("{word} {zone} damage", word=word, zone=tr(zone)))
+                out.append(Alert(CRIT if lvl >= 2 else WARN, text, f"damage_{zone}"))
 
     flat = punctured(s.tyre_pressure)
     for i in flat:
-        out.append(Alert(CRIT, f"Puncture? {CORNERS[i].capitalize()} tyre at {s.tyre_pressure[i]:.1f} psi", f"flat_{i}"))
+        out.append(Alert(CRIT, _sentence(tr("Puncture? {corner} tyre at {p} psi", corner=corner_name(i),
+                                            p=f"{s.tyre_pressure[i]:.1f}")), f"flat_{i}"))
 
     for i, t in enumerate(s.tyre_core_temp):
         if t >= TYRE_OVERHEAT:
-            out.append(Alert(CRIT, f"{CORNERS[i].capitalize()} tyre overheating ({t:.0f}°)", f"tyre_hot_{i}"))
+            out.append(Alert(CRIT, _sentence(tr("{corner} tyre overheating ({t}°)", corner=corner_name(i),
+                                                t=f"{t:.0f}")), f"tyre_hot_{i}"))
         elif t >= TYRE_HOT:
-            out.append(Alert(WARN, f"{CORNERS[i].capitalize()} tyre hot ({t:.0f}°)", f"tyre_hot_{i}"))
+            out.append(Alert(WARN, _sentence(tr("{corner} tyre hot ({t}°)", corner=corner_name(i), t=f"{t:.0f}")),
+                             f"tyre_hot_{i}"))
         elif t < TYRE_COLD and s.speed_kmh > 30:
-            out.append(Alert(WARN, f"{CORNERS[i].capitalize()} tyre cold ({t:.0f}°)", f"tyre_cold_{i}"))
+            out.append(Alert(WARN, _sentence(tr("{corner} tyre cold ({t}°)", corner=corner_name(i), t=f"{t:.0f}")),
+                             f"tyre_cold_{i}"))
 
     for i, w in enumerate(s.tyre_wear):
         if i in flat or w <= 0:
             continue
         if w < WEAR_CRIT:
-            out.append(Alert(CRIT, f"{CORNERS[i].capitalize()} tyre worn out ({w:.1f}%)", f"wear_{i}"))
+            out.append(Alert(CRIT, _sentence(tr("{corner} tyre worn out ({w}%)", corner=corner_name(i),
+                                                w=f"{w:.1f}")), f"wear_{i}"))
         elif w < WEAR_WARN:
-            out.append(Alert(WARN, f"{CORNERS[i].capitalize()} tyre wear ({w:.1f}%)", f"wear_{i}"))
+            out.append(Alert(WARN, _sentence(tr("{corner} tyre wear ({w}%)", corner=corner_name(i), w=f"{w:.1f}")),
+                             f"wear_{i}"))
 
     if _brakes_simulated(s):
         for i, t in enumerate(s.brake_temp):
             if t >= BRAKE_CRIT:
-                out.append(Alert(CRIT, f"{CORNERS[i].capitalize()} brake overheating ({t:.0f}°)", f"brake_{i}"))
+                out.append(Alert(CRIT, _sentence(tr("{corner} brake overheating ({t}°)", corner=corner_name(i),
+                                                    t=f"{t:.0f}")), f"brake_{i}"))
             elif t >= BRAKE_WARN:
-                out.append(Alert(WARN, f"{CORNERS[i].capitalize()} brake very hot ({t:.0f}°)", f"brake_{i}"))
+                out.append(Alert(WARN, _sentence(tr("{corner} brake very hot ({t}°)", corner=corner_name(i),
+                                                    t=f"{t:.0f}")), f"brake_{i}"))
 
-    dirty = [CORNERS[i] for i, d in enumerate(s.tyre_dirt) if d >= DIRT_WARN]
+    dirty = [corner_name(i) for i, d in enumerate(s.tyre_dirt) if d >= DIRT_WARN]
     if dirty:
-        out.append(Alert(WARN, "Dirty tyres: " + ", ".join(dirty), "dirt"))
+        out.append(Alert(WARN, tr("Dirty tyres: {wheels}", wheels=", ".join(dirty)), "dirt"))
 
     for i, f in enumerate(suspension_fraction(s, info)):
         if f >= 0.97 and (info.get("suspension_max_travel") or [0])[0] > 0:
-            out.append(Alert(WARN, f"{CORNERS[i].capitalize()} suspension bottoming out", f"susp_{i}"))
+            out.append(Alert(WARN, _sentence(tr("{corner} suspension bottoming out", corner=corner_name(i))),
+                             f"susp_{i}"))
 
     if fuel_per_lap and fuel_per_lap > 0:
         laps_left = s.fuel / fuel_per_lap
         if laps_left < 1.0:
-            out.append(Alert(CRIT, f"Fuel for less than a lap ({s.fuel:.1f} L)", "fuel"))
+            out.append(Alert(CRIT, tr("Fuel for less than a lap ({fuel} L)", fuel=f"{s.fuel:.1f}"), "fuel"))
         elif laps_left < 2.0:
-            out.append(Alert(WARN, f"Fuel for {laps_left:.1f} laps", "fuel"))
+            out.append(Alert(WARN, tr("Fuel for {n} laps", n=f"{laps_left:.1f}"), "fuel"))
 
     h = hybrid_state(s, info)
     if h is not None:
         if h.charge < BATTERY_CRIT:
-            out.append(Alert(CRIT, f"Battery empty ({h.charge * 100:.0f}%)", "battery"))
+            out.append(Alert(CRIT, tr("Battery empty ({pct}%)", pct=f"{h.charge * 100:.0f}"), "battery"))
         elif h.charge < BATTERY_WARN:
-            out.append(Alert(WARN, f"Battery low ({h.charge * 100:.0f}%)", "battery"))
+            out.append(Alert(WARN, tr("Battery low ({pct}%)", pct=f"{h.charge * 100:.0f}"), "battery"))
         if h.lap_left_kj is not None and h.lap_left_kj <= 0.5:
-            out.append(Alert(WARN, "Lap electric energy used up", "lap_energy"))
+            out.append(Alert(WARN, tr("Lap electric energy used up"), "lap_energy"))
 
     if s.tyres_out >= 3:
-        out.append(Alert(WARN, "Off track", "off_track"))
+        out.append(Alert(WARN, tr("Off track"), "off_track"))
     if s.pit_limiter and not s.is_in_pit:
-        out.append(Alert(WARN, "Pit limiter on", "limiter"))
+        out.append(Alert(WARN, tr("Pit limiter on"), "limiter"))
 
     out.sort(key=lambda a: -a.level)
     return out

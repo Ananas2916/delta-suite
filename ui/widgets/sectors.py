@@ -10,6 +10,7 @@ from hub_core.analysis.live_lap import SectorView
 from hub_core.analysis.race_strategy import fmt_ms
 from ui.theme import C
 from ui.widgets import Card, label, paint_font
+from hub_core.i18n import tr
 
 SECTOR_COLORS = {"best": C["purple"], "slower": C["yellow"], "current": "#ffffff", "empty": C["border"]}
 
@@ -72,13 +73,13 @@ class SectorBar(QWidget):
 class LapTimeTile(Card):
     """Current lap time, live delta to the best and splits below."""
 
-    def __init__(self, title: str = "LAP TIME"):
+    def __init__(self, title: str = ""):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(4)
         head = QHBoxLayout()
-        t = label(title, "dim")
+        t = label(title or tr("LAP TIME"), "dim")
         t.setStyleSheet("font-size: 8pt; letter-spacing: 1px;")
         head.addWidget(t)
         head.addStretch()

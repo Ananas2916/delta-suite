@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from ui.theme import C
 from ui.widgets import Card, label
+from hub_core.i18n import tr
 
 STATE_COLORS = {"done": C["green"], "todo": C["red"], "wait": C["yellow"]}
 
@@ -15,16 +16,16 @@ class ChecklistCard(Card):
     action = pyqtSignal(str)
     hide_requested = pyqtSignal()
 
-    def __init__(self, title: str = "GET STARTED"):
+    def __init__(self, title: str = ""):
         super().__init__()
         self._lay = QVBoxLayout(self)
         self._lay.setContentsMargins(12, 10, 12, 10)
         self._lay.setSpacing(4)
         head = QHBoxLayout()
-        head.addWidget(label(title, "dim"))
+        head.addWidget(label(title or tr("GET STARTED"), "dim"))
         head.addStretch()
-        hide = QPushButton("Hide")
-        hide.setToolTip("Hide this list (it comes back from the Race engineer settings)")
+        hide = QPushButton(tr("Hide"))
+        hide.setToolTip(tr("Hide this list (it comes back from the Race engineer settings)"))
         hide.clicked.connect(self.hide_requested)
         head.addWidget(hide)
         self._lay.addLayout(head)

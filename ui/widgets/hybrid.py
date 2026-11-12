@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from hub_core.analysis import car_status as cs
 from ui.theme import C
 from ui.widgets import Card, label
+from hub_core.i18n import tr
 
 
 def battery_color(charge: float) -> str:
@@ -49,13 +50,13 @@ class MeterBar(QWidget):
 
 
 class HybridCard(Card):
-    def __init__(self, title: str = "HYBRID"):
+    def __init__(self, title: str = ""):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 10)
         lay.setSpacing(4)
         head = QHBoxLayout()
-        head.addWidget(label(title, "dim"))
+        head.addWidget(label(title or tr("HYBRID"), "dim"))
         head.addStretch()
         self.state = label("")
         head.addWidget(self.state)
@@ -78,19 +79,19 @@ class HybridCard(Card):
         if h is None:
             return
         col = battery_color(h.charge)
-        self.charge.setText(f"Battery {h.charge * 100:.0f}%")
+        self.charge.setText(tr("Battery {pct}%", pct=f"{h.charge * 100:.0f}"))
         self.charge.setStyleSheet(f"font-size: 16pt; font-weight: 700; color: {col};")
         self.battery.set(h.charge, col)
         self.state.setText(h.mode_text)
         self.state.setStyleSheet(f"font-weight: 700; color: {state_color(h)};")
         if h.lap_limit_kj > 0:
             left = h.lap_left_kj
-            self.lap.setText(f"Lap {h.lap_used_kj:.0f} / {h.lap_limit_kj:.0f} kJ")
+            self.lap.setText(tr("Lap {used} / {limit} kJ", used=f"{h.lap_used_kj:.0f}", limit=f"{h.lap_limit_kj:.0f}"))
             self.lap_bar.set(h.lap_used_fraction or 0.0, C["red"] if left is not None and left <= 0.5 else C["blue"])
             self.lap_bar.show()
         else:
-            self.lap.setText(f"Lap {h.lap_used_kj:.0f} kJ")
+            self.lap.setText(tr("Lap {used} kJ", used=f"{h.lap_used_kj:.0f}"))
             self.lap_bar.hide()
         mode = f"{h.power_mode}/{h.power_modes}" if h.power_modes else f"{h.power_mode}"
-        self.modes.setText(f"Map {mode} · recovery {h.recovery}\n"
-                           f"MGU-H → {'battery' if h.heat_to_battery else 'engine'}")
+        self.modes.setText(tr("Map {mode} · recovery {rec}", mode=mode, rec=h.recovery) + "\n"
+                           + tr("MGU-H → {to}", to=tr("battery") if h.heat_to_battery else tr("engine")))

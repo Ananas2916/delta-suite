@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.theme import C
+from hub_core.i18n import tr
 
 
 def label(text: str = "", obj: str | None = None, align=None) -> QLabel:
@@ -179,19 +180,19 @@ class TyreBox(QFrame):
             self.info.setText("")
             return
         self.temp.setText(f"{temp:.0f}°")
-        extra = f"\nbrake {brake:.0f}°" if brake is not None else ""
+        extra = "\n" + tr("brake {t}°", t=f"{brake:.0f}") if brake is not None else ""
         self.info.setText(f"{press:.1f} psi · {wear:.1f}%{extra}")
 
 
 class TyreGrid(Card):
-    NAMES = ("FRONT L", "FRONT R", "REAR L", "REAR R")
+    NAMES = ("FRONT L", "FRONT R", "REAR L", "REAR R")       # translated when shown
 
     def __init__(self):
         super().__init__()
         g = QGridLayout(self)
         g.setContentsMargins(10, 10, 10, 10)
         g.setSpacing(8)
-        self.boxes = [TyreBox(n) for n in self.NAMES]
+        self.boxes = [TyreBox(tr(n)) for n in self.NAMES]
         for i, b in enumerate(self.boxes):
             g.addWidget(b, i // 2, i % 2)
 
@@ -214,9 +215,10 @@ class SessionPicker(QComboBox):
         current = self.currentData()
         self.blockSignals(True)
         self.clear()
-        self.addItem("Current session (live)", None)
+        self.addItem(tr("Current session (live)"), None)
         for s in self.hub.db.sessions():
-            self.addItem(f"#{s['id']}  {s['started']:%d/%m %H:%M}  {s['car']} @ {s['track']}  ({s['laps']} laps)",
+            self.addItem(f"#{s['id']}  {s['started']:%d/%m %H:%M}  {s['car']} @ {s['track']}  "
+                         f"({tr('{n} laps', n=s['laps'])})",
                          s["id"])
         idx = self.findData(current)
         self.setCurrentIndex(max(0, idx))

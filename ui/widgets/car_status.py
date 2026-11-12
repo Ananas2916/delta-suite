@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QWidget
 from hub_core.analysis import car_status as cs
 from ui.theme import C
 from ui.widgets import paint_font, temp_color
+from hub_core.i18n import tr
 
 LEVEL_COLORS = {cs.OK: C["green"], cs.WARN: C["yellow"], cs.CRIT: C["red"]}
 DAMAGE_COLORS = ("#3a414f", "#f1c40f", "#ff9f43", "#ff4d4d")
@@ -51,7 +52,7 @@ class CarStatusView(QWidget):
         # bodywork: nose at the top, five damage zones
         p.setPen(QColor(C["dim"]))
         p.setFont(paint_font(7.5, QFont.Weight.DemiBold))
-        p.drawText(QRectF(body.left(), 0, bw, (H - bh) / 2 + 4), Qt.AlignmentFlag.AlignCenter, "▲ NOSE")
+        p.drawText(QRectF(body.left(), 0, bw, (H - bh) / 2 + 4), Qt.AlignmentFlag.AlignCenter, tr("▲ NOSE"))
         zones = {
             "front": QRectF(body.left() + bw * 0.12, body.top(), bw * 0.76, bh * 0.16),
             "rear": QRectF(body.left() + bw * 0.08, body.bottom() - bh * 0.14, bw * 0.84, bh * 0.14),
@@ -80,7 +81,7 @@ class CarStatusView(QWidget):
         p.setBrush(QColor(C["bg"]))
         cock = QRectF(body.center().x() - bw * 0.16, body.top() + bh * 0.4, bw * 0.32, bh * 0.2)
         p.drawRoundedRect(cock, 8, 8)
-        note = "damage disabled" if not dmg_on else "no damage" \
+        note = tr("damage disabled") if not dmg_on else tr("no damage") \
             if s is None or not any(cs.damage_level(v) for v in s.car_damage) else ""
         if note:
             p.setPen(QColor(C["dim"]))
@@ -118,12 +119,12 @@ class CarStatusView(QWidget):
                 continue
             lines = [(f"{s.tyre_core_temp[i]:.0f}°", paint_font(13), col.name()),
                      (f"{s.tyre_pressure[i]:.1f} psi", paint_font(8.5, QFont.Weight.Normal), C["red"] if flat else C["text"]),
-                     (f"wear {s.tyre_wear[i]:.1f}%", paint_font(8.5, QFont.Weight.Normal),
+                     (tr("wear {w}%", w=f"{s.tyre_wear[i]:.1f}"), paint_font(8.5, QFont.Weight.Normal),
                       C["red"] if s.tyre_wear[i] < cs.WEAR_CRIT else C["yellow"] if s.tyre_wear[i] < cs.WEAR_WARN
                       else C["text"]),
-                     (f"brake {s.brake_temp[i]:.0f}°", paint_font(8.5, QFont.Weight.Normal),
+                     (tr("brake {t}°", t=f"{s.brake_temp[i]:.0f}"), paint_font(8.5, QFont.Weight.Normal),
                       C["red"] if s.brake_temp[i] >= cs.BRAKE_WARN else C["dim"]),
-                     (f"susp. {f * 100:.0f}%", paint_font(8, QFont.Weight.Normal), C["dim"])]
+                     (tr("susp. {pct}%", pct=f"{f * 100:.0f}"), paint_font(8, QFont.Weight.Normal), C["dim"])]
             tx_w = (W - bw) / 2 - tw / 2 - 14
             x = 2 if left else body.right() + tw / 2 + 12
             y = cy - 44

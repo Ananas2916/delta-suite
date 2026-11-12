@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QW
 from ui.widgets.onboard_hud import OnboardView
 from ui.theme import C
 from ui.widgets import label
+from hub_core.i18n import tr
 
 VIEW_COLORS = ("#ffffff", C["blue"], C["yellow"], C["purple"])   # main view, then secondary
 
@@ -32,9 +33,9 @@ class ViewPanel(QWidget):
         bar.setSpacing(6)
         dot = label("●")
         dot.setStyleSheet(f"color: {VIEW_COLORS[index]}; font-size: 12pt;")
-        dot.setToolTip("View colour, same as the car's circle on the GPS")
+        dot.setToolTip(tr("View colour, same as the car's circle on the GPS"))
         self.car = QComboBox()
-        self.car.addItem("My car", -1)
+        self.car.addItem(tr("My car"), -1)
         self.camera = QComboBox()
         for combo in (self.car, self.camera):     # shrinkable: long names do not widen the page
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -45,7 +46,7 @@ class ViewPanel(QWidget):
         bar.addWidget(self.camera, 1)
         if index:
             up = QPushButton("▲")
-            up.setToolTip("Put this onboard in the main view")
+            up.setToolTip(tr("Put this onboard in the main view"))
             up.setFixedWidth(34)
             up.clicked.connect(lambda: self.make_main.emit(self.index))
             bar.addWidget(up)
@@ -77,7 +78,7 @@ class ViewPanel(QWidget):
     def fill_cars(self, others: list[tuple[int, str]], selected: int):
         self.car.blockSignals(True)
         self.car.clear()
-        self.car.addItem("My car", -1)
+        self.car.addItem(tr("My car"), -1)
         for idx, text in others:
             self.car.addItem(text, idx)
         self.car.setCurrentIndex(max(0, self.car.findData(selected)))

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from hub_core.model import CarEntry
+from hub_core.i18n import tr
 
 HISTORY_S = 400.0      # enough for a lapping on long tracks
 
@@ -44,7 +45,7 @@ class StandingRow:
 def fmt_gap(r: StandingRow) -> str:
     """Gap as on TV: laps behind, otherwise seconds; the leader has none."""
     if r.laps_down >= 1:
-        return f"+{r.laps_down} {'lap' if r.laps_down == 1 else 'laps'}"
+        return "+" + (tr("1 lap") if r.laps_down == 1 else tr("{n} laps", n=r.laps_down))
     return "-" if not r.gap_s else f"+{r.gap_s:.1f}"
 
 

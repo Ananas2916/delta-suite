@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget
 
 from ui.theme import C
 from ui.widgets import table_item
+from hub_core.i18n import tr
 
 
 class TimingTable(QTableWidget):
@@ -19,7 +20,7 @@ class TimingTable(QTableWidget):
 
     def __init__(self):
         super().__init__(0, 5)
-        self.setHorizontalHeaderLabels(["P", "Driver", "Gap", "Int", "Last"])
+        self.setHorizontalHeaderLabels([tr(h) for h in ("P", "Driver", "Gap", "Int", "Last")])
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(22)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
