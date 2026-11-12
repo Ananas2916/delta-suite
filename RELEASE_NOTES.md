@@ -1,4 +1,4 @@
-## Delta Suite 0.6.0 — now in English, and open source
+## Delta Suite 0.5.9 — now in English, and open source
 
 **Delta Suite speaks English.** The whole app is now in English: pages, buttons, alerts, flags, the TV
 graphics, the CSP app window and the engineer's written analysis. The radio still speaks the language of the

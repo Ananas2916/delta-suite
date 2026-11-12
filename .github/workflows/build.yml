@@ -84,6 +84,8 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:TAG" dist/DeltaSuite.exe --clobber
           } else {
+            # only this version's notes: the first section of RELEASE_NOTES.md, before the first "---"
+            ((Get-Content RELEASE_NOTES.md -Raw) -split '\r?\n---\r?\n')[0] | Set-Content release_notes_this.md -Encoding utf8
             gh release create "$env:TAG" dist/DeltaSuite.exe --draft --target "${{ github.sha }}" `
-              --title "Delta Suite $env:TAG" --notes-file RELEASE_NOTES.md
+              --title "Delta Suite $env:TAG" --notes-file release_notes_this.md
           }

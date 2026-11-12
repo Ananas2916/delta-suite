@@ -30,7 +30,7 @@ from ui.mic import MicRecorder
 from ui.workers import SOURCE_AC, Job, TelemetryWorker
 
 MODES = {"driver": "Driver", "engineer": "Engineer", "analysis": "Analysis"}
-_OLD_MODES = {"pilota": "driver", "ingegnere": "engineer", "analisi": "analysis"}   # settings saved before 0.6
+_OLD_MODES = {"pilota": "driver", "ingegnere": "engineer", "analisi": "analysis"}   # settings saved before 0.5.9
 
 
 def _quiet(fn):

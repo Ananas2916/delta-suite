@@ -5,14 +5,14 @@
 ## Goal
 "All-in-One Engineering & Strategy Suite": a modular desktop app that brings together the features of
 professional F1/WEC/GTWC software, connected to **original Assetto Corsa (2014)** — NOT ACC, NOT AC EVO (their
-shared memory layouts differ). Open source under the MIT license (public repo since 0.6.0, 12/11/2026); no
+shared memory layouts differ). Open source under the MIT license (public repo since 0.5.9, 12/11/2026); no
 dependency on commercial licences.
 
 ## Owner's setup
 - Windows 11, Desktop synced to OneDrive: project in `%USERPROFILE%\OneDrive\Desktop\mio_hub_motorsport`
 - Launches AC through **Content Manager** (almost certainly with Custom Shaders Patch)
 - Working language with the owner: **Italian** (replies, explanations). Code, comments, UI and docs are in
-  **English** since 0.6.0; the radio phrases stay multilingual.
+  **English** since 0.5.9; the radio phrases stay multilingual.
 
 ## Modules
 Seven modules in two sidebar groups (`SECTIONS` in `ui/navigation.py`; the descriptions are the tooltips),
@@ -117,7 +117,7 @@ docs/                          # logo and README screenshots
 - Extra data and commands: **CSP Lua app** (not the Python 3.3 app), two mapped files
   `DeltaSuite_Bridge_Out_v1` / `_In_v1` with int/float/char[] only layouts; if the layout changes, change it
   in both files and bump the version. CSP 0.2.11 hot-loads it (`LAZY = NONE`). The setup is editable on track
-  too in practice sessions (`isSetupAvailableToEdit`). CSP buttons (0.6.0): `DeltaSuite/Engineer radio
+  too in practice sessions (`isSetupAvailableToEdit`). CSP buttons (0.5.9): `DeltaSuite/Engineer radio
   (hold)`, `DeltaSuite/Confirm proposal`, `DeltaSuite/Discard proposal`.
 - Agent via CLI instead of API: `claude -p --output-format stream-json --tools "" --allowedTools
   mcp__deltasuite --strict-mcp-config`, session resumed with `--resume`. Changes always go through
@@ -130,7 +130,7 @@ docs/                          # logo and README screenshots
 - Language: the chosen voice decides the language (it, en-us, en-gb, es, fr, pt; phrases in
   `ai_engine/lang.py`). Over the radio the agent answers in that language (`[RADIO] [English]`); the written
   analysis is in English like the interface (`[ANALYSIS] [English]`). Default voice `am_michael`.
-- Modes: driver / engineer / analysis (values saved before 0.6 as pilota/ingegnere/analisi are migrated).
+- Modes: driver / engineer / analysis (values saved before 0.5.9 as pilota/ingegnere/analisi are migrated).
 - `hub_core` and the rest run on external **Python 3.11+**.
 
 ## Build and environment
@@ -153,10 +153,10 @@ docs/                          # logo and README screenshots
   `QT_QPA_FONTDIR=C:/Windows/Fonts` and a 1920×1080 window (no window shows up; isolate QSettings and the DB).
 - Recordings: `%LOCALAPPDATA%\DeltaSuite\recordings\*.dsr`.
 - Archive: `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
-- GitHub repo (public since 0.6.0): `Ananas2916/delta-suite`.
+- GitHub repo (public since 0.5.9): `Ananas2916/delta-suite`.
 
 ## Next steps
-1. On-track test with the owner driving: push-to-talk (button bound in the CSP app — rebind after 0.6.0),
+1. On-track test with the owner driving: push-to-talk (button bound in the CSP app — rebind after 0.5.9),
    voice in the headset, confirming proposals from the wheel.
 2. Check ABS/TC: with the BMW M4 GT3 (trr mod) `absMode`/`tcMode` stay 0 while the setup says 5/3.
 3. Standings with real rivals (session with AI or online) and race gaps.
@@ -185,7 +185,7 @@ docs/                          # logo and README screenshots
 - [x] 0.5.1: laps to go, flags from slow/stopped cars, map from the AI line (tested in demo)
 - [x] 0.5.2: live splits and delta, Int column, compound, green flag; F1-game-style engineer lexicon
       (tested in demo; to be heard in a real race)
-- [x] 0.6.0 (12/11/2026): everything in English, MIT license, public repo, README with screenshots
+- [x] 0.5.9 (12/11/2026): everything in English, MIT license, public repo, README with screenshots
 - [x] Test with real AC (15/10/2026, Red Bull Ring, BMW M4 GT3): laps, sectors, fuel ok
 - [x] CSP app: setup/pit/car reading and commands with confirmation tested live (values unchanged)
 - [x] Claude Code via MCP tested with real data (radio answer in ~8 s)
