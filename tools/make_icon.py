@@ -15,5 +15,5 @@ if __name__ == "__main__":
     out = ROOT / "assets" / "deltasuite.ico"
     out.parent.mkdir(exist_ok=True)
     if not app_icon_pixmap(256).save(str(out), "ICO"):
-        sys.exit("Impossibile salvare l'icona")
-    print(f"Icona scritta in {out}")
+        sys.exit("Could not save the icon")
+    print(f"Icon written to {out}")

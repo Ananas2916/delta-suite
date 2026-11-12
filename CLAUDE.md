@@ -1,188 +1,194 @@
-# Delta Suite — contesto di progetto
+# Delta Suite — project context
 
-(nome precedente: Mio Hub Motorsport; la cartella resta `mio_hub_motorsport`)
+(former name: Mio Hub Motorsport; the local folder is still `mio_hub_motorsport`)
 
-## Obiettivo
-Suite software proprietaria "All-in-One Engineering & Strategy Suite" che raggruppa in un unico
-ecosistema modulare le funzionalità dei software professionali F1/WEC/GTWC, interfacciata con
-**Assetto Corsa originale (2014)** — NON ACC, NON AC EVO (hanno layout di shared memory diversi).
-Codice proprietario dell'utente, nessuna dipendenza da licenze commerciali.
+## Goal
+"All-in-One Engineering & Strategy Suite": a modular desktop app that brings together the features of
+professional F1/WEC/GTWC software, connected to **original Assetto Corsa (2014)** — NOT ACC, NOT AC EVO (their
+shared memory layouts differ). Open source under the MIT license (public repo since 0.6.0, 12/11/2026); no
+dependency on commercial licences.
 
-## Setup utente
-- Windows 11, Desktop sincronizzato su OneDrive: progetto in `C:\Users\filip\OneDrive\Desktop\mio_hub_motorsport`
-- Avvia AC tramite **Content Manager** (quasi certamente con Custom Shaders Patch)
-- Lingua di lavoro: italiano
+## Owner's setup
+- Windows 11, Desktop synced to OneDrive: project in `%USERPROFILE%\OneDrive\Desktop\mio_hub_motorsport`
+- Launches AC through **Content Manager** (almost certainly with Custom Shaders Patch)
+- Working language with the owner: **Italian** (replies, explanations). Code, comments, UI and docs are in
+  **English** since 0.6.0; the radio phrases stay multilingual.
 
-## Moduli
-Sette moduli in due gruppi in barra laterale (`SECTIONS` in `ui/navigation.py`; le descrizioni sono i
-suggerimenti delle voci), preceduti dalla pagina **Generale** (18/10/2026, al posto della vecchia Home con le
-schede dei moduli): tutto insieme come al muretto, per la squadra: sessione e bandiera, numeri chiave, onboard
-principale con grafica TV, classifica, GPS, stato vettura e avvisi, strategia, batteria delle ibride, proposte
-dell'ingegnere da confermare e registro della radio (`ui/pages/general_page.py`). Il CAD/CFD bridge è stato
-tolto (16/10/2026): non c'entrava con la suite.
+## Modules
+Seven modules in two sidebar groups (`SECTIONS` in `ui/navigation.py`; the descriptions are the tooltips),
+preceded by the **Overview** page (`ui/pages/general_page.py`, page key "general"): everything at once like on
+the pit wall: session and flag, key numbers, main onboard with TV graphics, standings, GPS, car status and
+alerts, strategy, hybrid battery, engineer proposals to confirm and the radio log. The CAD/CFD bridge was
+removed (16/10/2026).
 
-**In pista**
-1. **Telemetria live** (sostituisce MoTeC i2 / ATLAS / WinDARAB): acquisizione 60–100 Hz (velocità,
-   pedali/sterzo, temperature e pressioni gomme, sospensioni, G-force, batteria/ERS delle ibride),
-   registrazione e replay. Ibride (18/10/2026): `kersCharge`, `kersInput`, `kersCurrentKJ`, livelli ERS,
-   MGU-H dalla fisica; `hasKERS`/`hasERS`, limite per giro (`ersMaxJ`/`kersMaxJ`) e mappe dalla statica;
-   stato e avvisi in `car_status.hybrid_state`, solo se l'auto è ibrida. Il demo è una hypercar ibrida.
-2. **Onboard live** (18/10/2026): fino a 4 onboard insieme (principale + 3 secondari, come le dirette
-   SRO; ▲ scambia con il principale), telecamere di Delta Suite (T-cam, cofano, posteriore, 4 ruote,
-   inseguimento; anche sugli avversari) e F6 dell'auto con nomi ricavati da posizione e direzione
-   (`f6_names`), grafica TV sopra, GPS della pista (0.5.1: linea AI `ai/fast_lane.ai` del tracciato in
-   `hub_core/ac/track_map.py`, stessa spline della posizione sul giro delle auto, che si mettono sulla mappa da
-   `splinePosition`; senza linea AI la si impara girando; tratti gialli/rossi/blu da
-   `hub_core/analysis/track_status.py`; clic su un'auto → riquadro principale) e vista
-   dall'alto dello stato vettura: danni per zona (`carDamage`), gomme, freni, corsa sospensioni, sporco e avvisi
-   (`hub_core/analysis/car_status.py`). Il video lo rende l'app CSP con `ac.GeometryShot` (seconda vista, costa
-   FPS), gli dà esposizione + curva filmica + gamma con `ui.renderShader` (la seconda vista non ha il
-   post-processing del gioco: senza esce molto scura; in alternativa YEBIS = post-processing del gioco)
-   e li passa a Delta Suite tramite la mapping a parte `DeltaSuite_Onboard_v6` (`hub_core/ac/onboard_feed.py`;
-   una vista resa per fotogramma di AC, la più in ritardo; secondarie al massimo 640×360)
-   in tre modi: texture D3D11 condivisa (`hub_core/ac/d3d_shared.py`, Delta Suite la apre provando tutte
-   le GPU e la copia lei: niente lettura dalla GPU in AC; se non si apre si torna alla memoria), in
-   memoria come DDS grezzo a rotazione su 3 posti (`ExtraCanvas:encode()` in CSP 0.2.11 dà
-   solo DDS non compresso, ~0,9 MB a 640×360) oppure JPG in `%LOCALAPPDATA%\DeltaSuite\onboard` (CSP
-   logga una riga per ogni file). Il ponte comandi resta v1. Rende solo con la pagina aperta e il video
-   acceso. Prove del 18/10 (CSP 0.2.11 b3465, PC: Iris Xe + RTX 4060 Laptop): v1 scura e abitacolo non
-   reso (→ "Cofano"); v2 filmica 1.6 la più simile al gioco, AC da 180 a ~150–165 FPS col video, T-cam e
-   ruote ok, posteriore coperta dalla coda (→ v3); v4 texture condivisa aperta sulla GPU 1 (NVIDIA),
-   render in AC ~1 ms a ogni qualità contro 5–9 ms in memoria e 6–13 ms su file → predefinita, con
-   ritorno automatico alla memoria. `sharedHandle(true)` (crossProcess): con false è un id interno
-   agli script e OpenSharedResource dà E_INVALIDARG. Prova a mano:
-   `python tools/onboard_probe.py $env:LOCALAPPDATA\DeltaSuite\onboard_probe 6 [trasporti]`.
-3. **Ingegnere di pista** (ex "AI Race Engineer" + "Radio & voce", unite): un solo agente per chat
-   scritta e radio. Agente a riga di comando (Claude Code con l'abbonamento dell'utente; Codex,
-   Antigravity o comando personalizzato, API Anthropic come ultima opzione) che legge i dati via MCP e
-   propone modifiche da confermare. Radio a regole locali (giro/delta, carburante, gomme, bandiere, e da
-   0.5.2 le chiamate stile giochi F1 di `ai_engine/race_calls.py`: primo giro, sorpassi, giro più veloce,
-   tendenza dei distacchi, auto vicine e ai box, leader all'ultimo giro, arrivo, risparmio carburante, forature,
-   danni, gomme finite, limitatore, gialle con la distanza, tempo della sessione; frasi in
-   `ai_engine/phrases_race.py`, tutte le lingue affiancate, varianti separate da "|") letta da Kokoro; push-to-talk dal volante → Whisper locale → agente in modalità RADIO → risposta parlata
-   nella lingua della voce. Pagina a schede: Conversazione (chat + radio in cuffia), Riepilogo stint,
-   Impostazioni (agente, MCP, voce, microfono, regole radio).
-4. **Box & Assetto**: bias/ABS/TC/freno motore in diretta, setup, proposte dell'ingegnere, pit stop e
-   classifica con gap tramite l'app Lua CSP `ac_app/DeltaSuiteBridge`.
+**On track**
+1. **Live telemetry** (replaces MoTeC i2 / ATLAS / WinDARAB): 60–100 Hz acquisition (speed, pedals/steering,
+   tyre temperatures and pressures, suspension, G-force, hybrid battery/ERS), recording and replay. Hybrids
+   (18/10/2026): `kersCharge`, `kersInput`, `kersCurrentKJ`, ERS levels, MGU-H from physics;
+   `hasKERS`/`hasERS`, per-lap limit (`ersMaxJ`/`kersMaxJ`) and maps from static; state and alerts in
+   `car_status.hybrid_state`, only if the car is hybrid. The demo is a hybrid hypercar.
+2. **Live onboard** (18/10/2026): up to 4 onboards at once (main + 3 secondary, like SRO broadcasts; ▲ swaps
+   with the main one), Delta Suite cameras (T-cam, bonnet, rear, 4 wheels, chase; rivals too) and the car's F6
+   cameras with names derived from position and direction (`f6_names`), TV graphics on top, track GPS (0.5.1:
+   AI line `ai/fast_lane.ai` of the track in `hub_core/ac/track_map.py`, the same spline as the cars' lap
+   position, cars placed on the map from `splinePosition`; without an AI line it is learned while driving;
+   yellow/red/blue stretches from `hub_core/analysis/track_status.py`; click a car → main view) and a top-down
+   car status: damage per zone (`carDamage`), tyres, brakes, suspension travel, dirt and alerts
+   (`hub_core/analysis/car_status.py`). The video is rendered by the CSP app with `ac.GeometryShot` (an extra
+   view, costs FPS), gets exposure + filmic curve + gamma via `ui.renderShader` (the extra view has none of the
+   game's post-processing: without it it is very dark; alternatively YEBIS = game post-processing) and is
+   handed to Delta Suite through the separate mapping `DeltaSuite_Onboard_v6` (`hub_core/ac/onboard_feed.py`;
+   one view rendered per AC frame, the most overdue; secondary views at most 640×360) in three ways: shared
+   D3D11 texture (`hub_core/ac/d3d_shared.py`, Delta Suite opens it trying every GPU and copies it itself: no
+   GPU readback in AC; if it cannot be opened it falls back to memory), in memory as raw DDS rotating over 3
+   slots (`ExtraCanvas:encode()` in CSP 0.2.11 only gives uncompressed DDS, ~0.9 MB at 640×360) or JPG in
+   `%LOCALAPPDATA%\DeltaSuite\onboard` (CSP logs one line per file). The command bridge stays v1. Renders only
+   with the page open and the video on. Tests on 18/10 (CSP 0.2.11 b3465, PC: Iris Xe + RTX 4060 Laptop):
+   v1 dark and cockpit not rendered (→ "Bonnet"); v2 filmic 1.6 closest to the game, AC from 180 to ~150–165
+   FPS with video, T-cam and wheels ok, rear covered by the tail (→ v3); v4 shared texture opened on GPU 1
+   (NVIDIA), render in AC ~1 ms at every quality vs 5–9 ms in memory and 6–13 ms on file → default, with
+   automatic fallback to memory. `sharedHandle(true)` (crossProcess): with false it is an id internal to the
+   scripts and OpenSharedResource gives E_INVALIDARG. Manual test:
+   `python tools/onboard_probe.py $env:LOCALAPPDATA\DeltaSuite\onboard_probe 6 [transports|views]`.
+3. **Race engineer** (former "AI Race Engineer" + "Radio & voice", merged): one agent for written chat and
+   radio. Command-line agent (Claude Code with the owner's subscription; Codex, Antigravity or a custom
+   command, Anthropic API as last option) that reads the data via MCP and proposes changes to confirm. Local
+   rule-based radio (lap/delta, fuel, tyres, flags, and since 0.5.2 the F1-game-style calls in
+   `ai_engine/race_calls.py`: first lap, overtakes, fastest lap, gap trends, close cars and cars pitting,
+   leader on the last lap, finish, fuel saving, punctures, damage, worn tyres, limiter, yellows with the
+   distance, session time; phrases in `ai_engine/phrases_race.py`, all languages side by side, variants
+   separated by "|") read by Kokoro; push-to-talk from the wheel → local Whisper → agent in RADIO mode →
+   spoken answer in the voice's language. Tabbed page: Conversation (chat + headset radio), Stint summary,
+   Settings (agent, MCP, voice, microphone, radio rules).
+4. **Pit & Setup** (page key "box"): live bias/ABS/TC/engine brake, setup, engineer proposals, pit stop and
+   standings with gaps through the CSP Lua app `ac_app/DeltaSuiteBridge`.
 
-**Analisi e strategia**
-5. **Analisi giri**: giri sovrapposti (Delta-T, traiettoria, pedali, RPM), confronto curva per curva,
-   archivio DuckDB ed export Parquet.
-6. **Strategia & Timing** (sostituisce HH Timing / SBG RaceWatch): settori, consumo medio, pit-window,
-   degrado gomme sui 10–20 giri successivi.
-7. **Dinamica veicolo** (sostituisce ChassisSim / OptimumG / Adams): Pacejka (Magic Formula),
-   cinematica sospensioni (centri di rollio, camber/toe dinamici, ride height).
+**Analysis & strategy**
+5. **Lap analysis**: overlaid laps (Delta-T, racing line, pedals, RPM), corner-by-corner comparison, DuckDB
+   archive and Parquet export.
+6. **Strategy & Timing** (replaces HH Timing / SBG RaceWatch): sectors, average fuel use, pit window, tyre
+   degradation over the next 10–20 laps.
+7. **Vehicle dynamics** (replaces ChassisSim / OptimumG / Adams): Pacejka (Magic Formula), suspension
+   kinematics (roll centres, dynamic camber/toe, ride height).
 
-## Struttura
-Dettagli e regole sugli import in `ARCHITECTURE.md` (controllate da `tests/test_structure.py`).
+## Structure
+Details and import rules in `ARCHITECTURE.md` (checked by `tests/test_structure.py`).
 ```
-ac_app/DeltaSuiteBridge/        # app Lua per CSP: DeltaSuiteBridge.lua (ponte comandi/setup/avversari/
-                                # tasti radio) + DeltaSuiteOnboard.lua (video, caricato con pcall(require))
-hub_core/model.py              # TelemetrySample, CarEntry, enum di AC (nessuna dipendenza)
-hub_core/ac/                   # parla con AC; si importa anche fuori da Windows (kernel32 al primo uso)
-  shared_memory.py, receiver.py  # pagine di AC → TelemetrySample (sample_from_pages condiviso col replay)
-  recording.py                 # registrazione .dsr delle pagine grezze e ReplaySource
-  csp_bridge.py                # ponte CSP (layout = DeltaSuiteBridge.lua), installazione app, cartella AC
-  onboard_feed.py              # video onboard (DeltaSuite_Onboard_v6 = DeltaSuiteOnboard.lua, 4 viste)
-  d3d_shared.py                # lettura della texture condivisa D3D11 (ctypes, vtable COM)
-  track_map.py                 # linea AI del tracciato (fast_lane.ai, pit_lane.ai) per il GPS
-  setup_files.py, win32.py     # setup .ini in Documenti (OneDrive); MappedView
-hub_core/analysis/             # calcoli, senza AC: lap_recorder, lap_analysis, timing, race_strategy
-                               # (anche giri mancanti), vehicle_dynamics, car_status (avvisi per pagina
-                               # Onboard e MCP), track_status (linea della pista, auto lente/ferme, bandiere),
-                               # live_lap (parziali del giro in corso e delta live sul miglior giro)
+ac_app/DeltaSuiteBridge/        # CSP Lua app: DeltaSuiteBridge.lua (command bridge/setup/rivals/radio
+                                # buttons) + DeltaSuiteOnboard.lua (video, loaded with pcall(require))
+hub_core/model.py              # TelemetrySample, CarEntry, AC enums (no dependencies)
+hub_core/ac/                   # talks to AC; importable outside Windows too (kernel32 on first use)
+  shared_memory.py, receiver.py  # AC pages → TelemetrySample (sample_from_pages shared with replay)
+  recording.py                 # .dsr recording of the raw pages and ReplaySource
+  csp_bridge.py                # CSP bridge (layout = DeltaSuiteBridge.lua), app installation, AC folder
+  onboard_feed.py              # onboard video (DeltaSuite_Onboard_v6 = DeltaSuiteOnboard.lua, 4 views)
+  d3d_shared.py                # reading the shared D3D11 texture (ctypes, COM vtable)
+  track_map.py                 # track AI line (fast_lane.ai, pit_lane.ai) for the GPS
+  setup_files.py, win32.py     # .ini setups in Documents (OneDrive); MappedView
+hub_core/analysis/             # calculations, no AC: lap_recorder, lap_analysis, timing, race_strategy
+                               # (also laps to go), vehicle_dynamics, car_status (alerts for the Onboard
+                               # page and MCP), track_status (track line, slow/stopped cars, flags),
+                               # live_lap (splits of the current lap and live delta to the best lap)
 hub_core/database.py           # DuckDB / SQLite
-ai_engine/race_engineer_agent.py  # backend API (riepilogo stint)
-ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in modalità non interattiva
-ai_engine/mcp_server.py        # server MCP HTTP locale con token (7 strumenti)
-ai_engine/radio.py, voice.py   # regole radio, Kokoro/Tsukumo, coda a priorità
-ai_engine/race_calls.py        # chiamate di gara stile giochi F1 (RaceContext dalla classifica e dalle gialle)
-ai_engine/phrases_race.py      # frasi di quelle chiamate in it/en/es/fr/pt, con varianti
-ai_engine/stt.py               # trascrizione push-to-talk (Whisper locale / Tsukumo)
-ui/hub_state.py, hub_data.py   # stato hub, proposte, fornitore dati per l'MCP
-ui/workers.py                  # TelemetryWorker (thread di acquisizione) e Job
-ui/widgets/                    # widget riusabili: base, car_status, gps, timing_table, hybrid, sectors
-                               # (parziali e tempo con delta), onboard_hud (grafica TV), view_panel
-ui/race_view.py                # dati per classifica/GPS/grafica TV/stato vettura (Onboard e Generale)
-ui/navigation.py               # sezioni e moduli della barra laterale
-ui/main_dashboard.py           # PyQt6 + pyqtgraph, una pagina per modulo in ui/pages/
-                               # (pagine per chiave: "general", "telemetry", "onboard", ...; onboard/ è un pacchetto)
-tests/                         # pytest, incluso un giro vero registrato al Red Bull Ring
+ai_engine/race_engineer_agent.py  # API backend (stint summary)
+ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in non-interactive mode
+ai_engine/mcp_server.py        # local HTTP MCP server with token (7 tools: live_state, session_laps,
+                               # compare_laps, current_setup, standings, session_archive, propose_change)
+ai_engine/radio.py, voice.py   # radio rules, Kokoro/Tsukumo, priority queue
+ai_engine/race_calls.py        # F1-game-style race calls (RaceContext from standings and yellows)
+ai_engine/phrases_race.py      # phrases for those calls in it/en/es/fr/pt, with variants
+ai_engine/stt.py               # push-to-talk transcription (local Whisper / Tsukumo)
+ui/hub_state.py, hub_data.py   # hub state, proposals, data provider for the MCP
+ui/workers.py                  # TelemetryWorker (acquisition thread) and Job
+ui/widgets/                    # reusable widgets: base, car_status, gps, timing_table, hybrid, sectors
+                               # (splits and time with delta), onboard_hud (TV graphics), view_panel
+ui/race_view.py                # data for standings/GPS/TV graphics/car status (Onboard and Overview)
+ui/navigation.py               # sidebar sections and modules
+ui/main_dashboard.py           # PyQt6 + pyqtgraph, one page per module in ui/pages/
+                               # (pages by key: "general", "telemetry", "onboard", ...; onboard/ is a package)
+tests/                         # pytest, including a real lap recorded at the Red Bull Ring
+docs/                          # logo and README screenshots
 ```
 
-## Decisioni tecniche prese
-- **Fonte dati primaria: shared memory di AC letta dall'esterno via `mmap`** (`Local\acpmf_physics`,
-  `Local\acpmf_graphics`, `Local\acpmf_static`), come fanno SimHub/CrewChief. Funziona identico con
-  Content Manager (CM è solo un launcher, la memoria la scrive `acs.exe`). Dati validi solo in sessione
-  di guida, non nei menu.
-- Dati extra e comandi: **app Lua CSP** (non l'app Python 3.3), due file mappati
-  `DeltaSuite_Bridge_Out_v1` / `_In_v1` con layout solo int/float/char[]; se si cambia il layout va
-  cambiato in entrambi i file e alzata la versione. CSP 0.2.11 la carica a caldo (`LAZY = NONE`).
-  Il setup risulta modificabile anche in pista nelle sessioni di prova (`isSetupAvailableToEdit`).
-- Agente via CLI invece che API: `claude -p --output-format stream-json --tools "" --allowedTools
-  mcp__deltasuite --strict-mcp-config`, sessione ripresa con `--resume`. Le modifiche passano sempre da
-  `proponi_modifica` → conferma del pilota (tasto CSP o pulsante): mai applicate dall'agente.
-- Voce: Kokoro (`kokoro-onnx`) in processo con i modelli di Tsukumo
-  (`%LOCALAPPDATA%\Programs\Tsukumo\resources\tsukumo\models`). Trascrizione: `faster-whisper` locale,
-  modello `base` (~1 s su CPU) dalla cache HF `~\.cache\huggingface\hub` (l'utente ha già tiny, base,
-  large-v3); alternativa Tsukumo `/api/transcribe`. `DELTA_MUTE=1` silenzia la voce (test).
-- Lingua: la voce scelta decide la lingua (it, en-us, en-gb, es, fr, pt; frasi in `ai_engine/lang.py`).
-  Via radio l'agente risponde in quella lingua (`[RADIO] [English]`); l'analisi scritta resta in
-  italiano come l'interfaccia.
-- `hub_core` e il resto girano su **Python 3.11+** esterno.
+## Technical decisions
+- **Primary data source: AC's shared memory read from outside via `mmap`** (`Local\acpmf_physics`,
+  `Local\acpmf_graphics`, `Local\acpmf_static`), like SimHub/CrewChief. Works the same with Content Manager
+  (CM is just a launcher, `acs.exe` writes the memory). Data only valid in a driving session, not in menus.
+- Extra data and commands: **CSP Lua app** (not the Python 3.3 app), two mapped files
+  `DeltaSuite_Bridge_Out_v1` / `_In_v1` with int/float/char[] only layouts; if the layout changes, change it
+  in both files and bump the version. CSP 0.2.11 hot-loads it (`LAZY = NONE`). The setup is editable on track
+  too in practice sessions (`isSetupAvailableToEdit`). CSP buttons (0.6.0): `DeltaSuite/Engineer radio
+  (hold)`, `DeltaSuite/Confirm proposal`, `DeltaSuite/Discard proposal`.
+- Agent via CLI instead of API: `claude -p --output-format stream-json --tools "" --allowedTools
+  mcp__deltasuite --strict-mcp-config`, session resumed with `--resume`. Changes always go through
+  `propose_change` → driver confirmation (CSP button or app button): never applied by the agent. Proposal
+  kinds: brake_bias, abs, tc, engine_brake, setup.
+- Voice: Kokoro (`kokoro-onnx`) in-process with Tsukumo's models
+  (`%LOCALAPPDATA%\Programs\Tsukumo\resources\tsukumo\models`). Transcription: local `faster-whisper`, `base`
+  model (~1 s on CPU) from the HF cache `~\.cache\huggingface\hub` (the owner already has tiny, base,
+  large-v3); alternative Tsukumo `/api/transcribe`. `DELTA_MUTE=1` silences the voice (tests).
+- Language: the chosen voice decides the language (it, en-us, en-gb, es, fr, pt; phrases in
+  `ai_engine/lang.py`). Over the radio the agent answers in that language (`[RADIO] [English]`); the written
+  analysis is in English like the interface (`[ANALYSIS] [English]`). Default voice `am_michael`.
+- Modes: driver / engineer / analysis (values saved before 0.6 as pilota/ingegnere/analisi are migrated).
+- `hub_core` and the rest run on external **Python 3.11+**.
 
-## Build e ambiente
-- venv di sviluppo fuori da OneDrive: `C:\Users\filip\.venvs\miohub` (Python 3.11).
-- UI: **PyQt6 + pyqtgraph** (decisione presa). Entry point `run_hub.py`.
-- **L'utente non vuole l'exe sul PC**: lo compila GitHub Actions (`.github/workflows/build.yml`) a ogni
-  push su main; un tag `v*` crea una release in **bozza** che l'utente pubblica quando vuole (note in
-  `RELEASE_NOTES.md`). Dalle sessioni cloud i tag non passano (il proxy git accetta solo il branch di lavoro):
-  si lancia il workflow a mano sul branch con l'input `release` = `v0.5.1`, che crea la bozza puntata a quel
-  commit (il tag nasce alla pubblicazione). Compilare in locale solo per debug, poi cancellare `dist\`.
-- Exe: `.\build_exe.ps1` → `dist\DeltaSuite.exe` (PyInstaller onefile, spec `DeltaSuite.spec`,
-  workpath in `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow esclusi apposta: non servono.
-- Build da bash se PowerShell si ferma sugli INFO di PyInstaller su stderr:
+## Build and environment
+- Development venv outside OneDrive: `%USERPROFILE%\.venvs\miohub` (Python 3.11).
+- UI: **PyQt6 + pyqtgraph** (decided). Entry point `run_hub.py`.
+- **The owner does not want the exe on the PC**: GitHub Actions builds it (`.github/workflows/build.yml`) at
+  every push to main; a `v*` tag creates a **draft** release that the owner publishes when they want (notes in
+  `RELEASE_NOTES.md`). From cloud sessions tags do not get through (the git proxy only accepts the working
+  branch): run the workflow by hand on the branch with the input `release` = `v0.6.0`, which creates the draft
+  pointing at that commit (the tag is created on publish). Build locally only for debugging, then delete
+  `dist\`.
+- Exe: `.\build_exe.ps1` → `dist\DeltaSuite.exe` (PyInstaller onefile, spec `DeltaSuite.spec`, workpath in
+  `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow excluded on purpose: not needed.
+- Build from bash if PowerShell stops on PyInstaller's INFO lines on stderr:
   `python -m PyInstaller DeltaSuite.spec --noconfirm --clean --workpath "$LOCALAPPDATA/DeltaSuite/build" --distpath dist`.
-- Test: `python -m pytest` (dipendenze in `requirements-dev.txt`).
-- Autotest UI/exe: variabile `DELTA_SELFTEST=<cartella>` → demo, screenshot di ogni pagina, verifica
-  voce/app CSP/MCP in `selftest.txt`, uscita.
-- Registrazioni: `%LOCALAPPDATA%\DeltaSuite\recordings\*.dsr`.
-- Archivio: `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
-- Repo GitHub privato: `Ananas2916/delta-suite`.
+- Tests: `python -m pytest` (dependencies in `requirements-dev.txt`). With AC running and the CSP app loaded,
+  `test_onboard_roundtrip_with_fake_app` attaches to the real onboard mapping and fails: environmental.
+- UI/exe self-test: variable `DELTA_SELFTEST=<folder>` → demo, a screenshot of every page, voice/CSP app/MCP
+  check in `selftest.txt`, exit. README screenshots: run it with `QT_QPA_PLATFORM=offscreen`,
+  `QT_QPA_FONTDIR=C:/Windows/Fonts` and a 1920×1080 window (no window shows up; isolate QSettings and the DB).
+- Recordings: `%LOCALAPPDATA%\DeltaSuite\recordings\*.dsr`.
+- Archive: `%LOCALAPPDATA%\DeltaSuite\telemetry.duckdb`.
+- GitHub repo (public since 0.6.0): `Ananas2916/delta-suite`.
 
-## Prossimo passo
-1. Prova in pista con l'utente al volante: push-to-talk (tasto assegnato nell'app CSP), voce in cuffia,
-   conferma proposte dal volante.
-2. Verificare ABS/TC: con la BMW M4 GT3 (mod trr) `absMode`/`tcMode` restano 0 mentre il setup dice 5/3.
-3. Classifica con avversari veri (sessione con IA o online) e gap in gara.
-4. Onboard (0.5.0): telecamere calcolate nello spazio dell'auto e portate nel mondo con
-   `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (prima: centro ruote + stato fisico → forte
-   tremolio; con le F6 l'utente l'ha visto sparire); F6 da `ac.accessCarCamera(i)` (solo auto 0, `.look`
-   all'indietro). Da verificare in AC: v6 con più riquadri (FPS con 2-4 viste:
-   `onboard_probe.py <cartella> 6 riquadri`), nomi delle F6, GPS con gli avversari. Soglie dei danni
-   (`DAMAGE_THRESHOLDS`, prese da CrewChief) con un urto vero e danni attivi.
-   Da 0.5.0 il video sta in `DeltaSuiteOnboard.lua`: verificare in AC che il `require` lo carichi.
-5. Provato dall'utente il 18/10 (Barcellona layout_moto, gara con IA, trr_lmh_ferrari_499p ibrida): Generale
-   con video ok. Visti e corretti in 0.5.1: mancavano i giri alla fine; la `flag` di AC restava gialla a
-   incidente passato (ora la gialla viene dalle auto lente/ferme dell'app CSP, quella di AC vale solo ~8 s se
-   nessuna auto la conferma); mappa map.png troppo spoglia (ora linea AI disegnata come un tracciato, auto con
-   la posizione, tratti gialli/rossi/blu); la 499P dichiara `ersMaxJ` = 9.99e16 (= nessun limite per giro).
-   Da verificare in AC: lettura di `fast_lane.ai` su piste vere (se il formato non torna si impara girando),
-   soglie delle auto lente (`SLOW_FRACTION`, `SLOW_KMH`) in gara vera.
+## Next steps
+1. On-track test with the owner driving: push-to-talk (button bound in the CSP app — rebind after 0.6.0),
+   voice in the headset, confirming proposals from the wheel.
+2. Check ABS/TC: with the BMW M4 GT3 (trr mod) `absMode`/`tcMode` stay 0 while the setup says 5/3.
+3. Standings with real rivals (session with AI or online) and race gaps.
+4. Onboard (0.5.0): cameras computed in car space and brought into the world with
+   `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (before: wheel centre + physics state → strong
+   shaking; with the F6 cameras the owner saw it disappear); F6 from `ac.accessCarCamera(i)` (car 0 only,
+   `.look` backwards). To check in AC: v6 with several views (FPS with 2-4 views:
+   `onboard_probe.py <folder> 6 views`), F6 names, GPS with rivals. Damage thresholds
+   (`DAMAGE_THRESHOLDS`, taken from CrewChief) with a real crash and damage on.
+   Since 0.5.0 the video lives in `DeltaSuiteOnboard.lua`: check in AC that the `require` loads it.
+5. Tested by the owner on 18/10 (Barcelona layout_moto, race with AI, trr_lmh_ferrari_499p hybrid): Overview
+   with video ok. Seen and fixed in 0.5.1: laps to go were missing; AC's `flag` stayed yellow after the
+   incident (now the yellow comes from the slow/stopped cars of the CSP app, AC's lasts only ~8 s if no car
+   confirms it); map.png too bare (now the AI line drawn like a circuit, cars with position,
+   yellow/red/blue stretches); the 499P declares `ersMaxJ` = 9.99e16 (= no per-lap limit).
+   To check in AC: reading `fast_lane.ai` on real tracks (if the format does not match it is learned while
+   driving), slow-car thresholds (`SLOW_FRACTION`, `SLOW_KMH`) in a real race.
 
-## Stato
-- [x] Lettore shared memory (`hub_core/ac/shared_memory.py`, `receiver.py`)
-- [x] Hub completo con 6 moduli (7 con l'Onboard) + simulatore demo, exe compilato e autotestato
-- [x] Riordino (16/10/2026): via il CAD/CFD, ingegnere AI e radio in un'unica pagina, barra laterale in sezioni
-- [x] Riordino del codice (18/10/2026): `hub_core/ac` e `hub_core/analysis`, app CSP in ponte + modulo
-      onboard, UI in widget/pagine/thread, confini controllati da `tests/test_structure.py`; build Windows ok
-- [x] Pagina Generale e dati delle ibride (18/10/2026), provata dall'utente in gara con la 499P
-- [x] 0.5.1: giri mancanti, bandiere dalle auto lente/ferme, mappa dalla linea AI (provato in demo)
-- [x] 0.5.2: parziali e delta live, colonna Int, mescola, bandiera verde; lessico dell'ingegnere stile giochi F1
-      (provato in demo; da sentire in gara vera)
-- [x] Verifica con AC vero (15/10/2026, Red Bull Ring, BMW M4 GT3): giri, settori, carburante ok
-- [x] App CSP: lettura setup/pit/auto e comandi con conferma provati dal vivo (valori invariati)
-- [x] Claude Code via MCP provato con dati veri (risposta radio in ~8 s)
-- [ ] Push-to-talk e voce in cuffia provati in pista dall'utente
-- [x] Onboard live: video dall'app CSP provato con AC vero (18/10, texture condivisa, 8 telecamere, 4 qualità)
-- [ ] Onboard: danni con un urto vero e pagina completa provata dall'utente
+## Status
+- [x] Shared memory reader (`hub_core/ac/shared_memory.py`, `receiver.py`)
+- [x] Full hub with 6 modules (7 with Onboard) + demo simulator, exe built and self-tested
+- [x] Reorganisation (16/10/2026): CAD/CFD removed, AI engineer and radio on one page, sidebar in sections
+- [x] Code reorganisation (18/10/2026): `hub_core/ac` and `hub_core/analysis`, CSP app split into bridge +
+      onboard module, UI in widgets/pages/threads, boundaries checked by `tests/test_structure.py`; Windows build ok
+- [x] Overview page and hybrid data (18/10/2026), tested by the owner in a race with the 499P
+- [x] 0.5.1: laps to go, flags from slow/stopped cars, map from the AI line (tested in demo)
+- [x] 0.5.2: live splits and delta, Int column, compound, green flag; F1-game-style engineer lexicon
+      (tested in demo; to be heard in a real race)
+- [x] 0.6.0 (12/11/2026): everything in English, MIT license, public repo, README with screenshots
+- [x] Test with real AC (15/10/2026, Red Bull Ring, BMW M4 GT3): laps, sectors, fuel ok
+- [x] CSP app: setup/pit/car reading and commands with confirmation tested live (values unchanged)
+- [x] Claude Code via MCP tested with real data (radio answer in ~8 s)
+- [ ] Push-to-talk and headset voice tested on track by the owner
+- [x] Live onboard: video from the CSP app tested with real AC (18/10, shared texture, 8 cameras, 4 qualities)
+- [ ] Onboard: damage with a real crash and the full page tested by the owner

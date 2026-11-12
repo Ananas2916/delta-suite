@@ -1,127 +1,126 @@
-# Architettura di Delta Suite
+# Delta Suite architecture
 
-Come sono divisi i pezzi, chi può usare chi e dove mettere le cose nuove. I confini tra i pacchetti li
-controlla `tests/test_structure.py`: se un import li viola, i test falliscono.
+How the pieces are split, who may use whom and where new things go. The package boundaries are checked by
+`tests/test_structure.py`: if an import breaks them, the tests fail.
 
-## Livelli
+## Layers
 
 ```
 Assetto Corsa (acs.exe)                 shared memory acpmf_physics / graphics / static
-  └─ app CSP ac_app/DeltaSuiteBridge    ponte comandi, setup, avversari, tasti radio, video onboard
-        │ file mappati in memoria (Local\...)
+  └─ CSP app ac_app/DeltaSuiteBridge    command bridge, setup, rivals, radio buttons, onboard video
+        │ memory-mapped files (Local\...)
         ▼
-hub_core/ac          parla con AC: legge le mapping, le registra, apre la texture condivisa
-hub_core/model.py    tipi comuni: TelemetrySample, CarEntry, stati e bandiere di AC
-hub_core/analysis    calcoli: giri, curve, classifica, strategia, dinamica, stato vettura
-hub_core/database.py archivio DuckDB          hub_core/demo_source.py simulatore
+hub_core/ac          talks to AC: reads the mappings, records them, opens the shared texture
+hub_core/model.py    shared types: TelemetrySample, CarEntry, AC states and flags
+hub_core/analysis    calculations: laps, corners, standings, strategy, dynamics, car status
+hub_core/database.py DuckDB archive          hub_core/demo_source.py simulator
         ▼
-ai_engine            ingegnere (Claude Code / Codex / API), MCP, radio, voce, trascrizione; radio senza AI in
-                     radio.py (giro, carburante, gomme, bandiere) + race_calls.py (chiamate di gara stile
-                     giochi F1, frasi in phrases_race.py)
-ui                   PyQt6: stato condiviso, thread, widget, una pagina per modulo
+ai_engine            engineer (Claude Code / Codex / API), MCP, radio, voice, transcription; radio without AI
+                     in radio.py (lap, fuel, tyres, flags) + race_calls.py (F1-game-style race calls,
+                     phrases in phrases_race.py)
+ui                   PyQt6: shared state, threads, widgets, one page per module
 ```
 
-Regole (in `tests/test_structure.py`):
+Rules (in `tests/test_structure.py`):
 
-| Pacchetto | Non può importare |
+| Package | May not import |
 |---|---|
-| `hub_core` (tutto) | PyQt6, pyqtgraph, `ui`, `ai_engine` |
-| `hub_core/analysis` | `hub_core.ac`, ctypes: gira uguale su dati veri, demo e replay |
-| `hub_core/model.py` | niente del progetto, niente ctypes |
+| `hub_core` (all of it) | PyQt6, pyqtgraph, `ui`, `ai_engine` |
+| `hub_core/analysis` | `hub_core.ac`, ctypes: it runs the same on real data, demo and replay |
+| `hub_core/model.py` | nothing from the project, no ctypes |
 | `ai_engine` | PyQt6, pyqtgraph, `ui` |
 | `ui/widgets` | `ui.pages`, `ui.hub_state`, `ui.main_dashboard` |
-| `ui/pages/<pagina>` | le altre pagine |
+| `ui/pages/<page>` | the other pages |
 
-`hub_core` si importa anche fuori da Windows: kernel32 si carica al primo uso (`hub_core/ac/win32.py`) e
-lì aprire una mapping dà `FileNotFoundError`, come con AC spento. Così i test girano ovunque; quelli che
-creano mapping vere sono marcati `windows_only`.
+`hub_core` can be imported outside Windows too: kernel32 is loaded on first use (`hub_core/ac/win32.py`) and
+there opening a mapping raises `FileNotFoundError`, as with AC not running. So the tests run anywhere; those
+that create real mappings are marked `windows_only`.
 
 ## hub_core/ac
 
-| File | Cosa fa |
+| File | What it does |
 |---|---|
-| `shared_memory.py` | strutture ctypes delle tre pagine di AC e lettura coerente (`wstr` per i testi) |
-| `receiver.py` | `TelemetryReceiver`: pagine → `TelemetrySample` (`sample_from_pages`, usato anche dal replay) |
-| `recording.py` | registrazione `.dsr` delle pagine grezze e `ReplaySource` |
-| `csp_bridge.py` | ponte con l'app CSP (`DeltaSuite_Bridge_Out_v1` / `_In_v1`), installazione dell'app, cartella di AC |
-| `onboard_feed.py` | video onboard (`DeltaSuite_Onboard_v6`): richieste, fotogrammi, posizioni, telecamere F6 |
-| `d3d_shared.py` | apre e copia la texture D3D11 condivisa dall'app (ctypes, vtable COM) |
-| `track_map.py` | linea AI del tracciato (`ai/fast_lane.ai`, `pit_lane.ai`) per il GPS |
-| `setup_files.py` | setup `.ini` nei Documenti (anche rediretti su OneDrive) |
-| `win32.py` | `MappedView`: vista su una mapping creata da un altro processo |
+| `shared_memory.py` | ctypes structures of AC's three pages and consistent reads (`wstr` for text) |
+| `receiver.py` | `TelemetryReceiver`: pages → `TelemetrySample` (`sample_from_pages`, also used by replay) |
+| `recording.py` | `.dsr` recording of the raw pages and `ReplaySource` |
+| `csp_bridge.py` | bridge with the CSP app (`DeltaSuite_Bridge_Out_v1` / `_In_v1`), app installation, AC folder |
+| `onboard_feed.py` | onboard video (`DeltaSuite_Onboard_v6`): requests, frames, positions, F6 cameras |
+| `d3d_shared.py` | opens and copies the D3D11 texture shared by the app (ctypes, COM vtable) |
+| `track_map.py` | the track's AI line (`ai/fast_lane.ai`, `pit_lane.ai`) for the GPS |
+| `setup_files.py` | `.ini` setups in Documents (also when redirected to OneDrive) |
+| `win32.py` | `MappedView`: view of a mapping created by another process |
 
 ## hub_core/analysis
 
-`lap_recorder.py` (giri e settori), `lap_analysis.py` (curve automatiche, confronto), `timing.py`
-(classifica, gap, interval), `race_strategy.py` (carburante, pit, degrado gomme, giri mancanti),
-`vehicle_dynamics.py` (Pacejka, cinematica), `live_lap.py` (parziali del giro in corso, delta live sul miglior
-giro), `car_status.py` (danni, gomme, freni, sospensioni, batteria →
-avvisi; anche per l'MCP), `track_status.py` (linea della pista per posizione sul giro, velocità tipiche, auto
-lente o ferme → tratti gialli/rossi, blu, bandiera per il pilota). `HubState.track` ne tiene una per sessione:
-la linea AI arriva a inizio sessione, le zone si aggiornano a ogni stato dell'app CSP.
+`lap_recorder.py` (laps and sectors), `lap_analysis.py` (automatic corners, comparison), `timing.py`
+(standings, gap, interval), `race_strategy.py` (fuel, pit, tyre degradation, laps to go),
+`vehicle_dynamics.py` (Pacejka, kinematics), `live_lap.py` (splits of the current lap, live delta to the best
+lap), `car_status.py` (damage, tyres, brakes, suspension, battery → alerts; also for the MCP),
+`track_status.py` (track line by lap position, typical speeds, slow or stopped cars → yellow/red stretches,
+blue, the driver's flag). `HubState.track` keeps one per session: the AI line arrives at session start, the
+zones update with every CSP app state.
 
-## App CSP (ac_app/DeltaSuiteBridge)
+## CSP app (ac_app/DeltaSuiteBridge)
 
-- `DeltaSuiteBridge.lua`: ponte comandi, setup, pit, avversari, tasti radio. È la parte da cui dipendono
-  conferme e radio: niente di non indispensabile.
-- `DeltaSuiteOnboard.lua`: video onboard, posizioni delle auto, telecamere F6. Lo carica il ponte con
-  `pcall(require, 'DeltaSuiteOnboard')`; se non parte, il ponte va lo stesso e la finestra dell'app dice
-  perché. Espone solo `M.update(dt, sim)` e `M.window()`.
-- `manifest.ini`: `LAZY = NONE`, l'app è attiva da quando AC carica la sessione.
+- `DeltaSuiteBridge.lua`: command bridge, setup, pit, rivals, radio buttons. Confirmations and radio depend
+  on it: nothing that is not essential goes here.
+- `DeltaSuiteOnboard.lua`: onboard video, car positions, F6 cameras. The bridge loads it with
+  `pcall(require, 'DeltaSuiteOnboard')`; if it fails, the bridge keeps working and the app window says why.
+  It only exposes `M.update(dt, sim)` and `M.window()`.
+- `manifest.ini`: `LAZY = NONE`, the app is active as soon as AC loads the session.
 
-Delta Suite installa e aggiorna tutti i file della cartella (*Box & Assetto → Aggiorna app CSP*);
-`app_needs_update` li confronta uno per uno.
+Delta Suite installs and updates every file in the folder (*Pit & Setup → Update CSP app*);
+`app_needs_update` compares them one by one.
 
-### Mapping
+### Mappings
 
-| Nome | Scrive | Lato Lua | Lato Python |
+| Name | Written by | Lua side | Python side |
 |---|---|---|---|
 | `DeltaSuite_Bridge_Out_v1` | app | `OUT_LAYOUT` in DeltaSuiteBridge.lua | `BridgeOut` in csp_bridge.py |
 | `DeltaSuite_Bridge_In_v1` | Delta Suite | `IN_LAYOUT` in DeltaSuiteBridge.lua | `BridgeIn` in csp_bridge.py |
-| `DeltaSuite_Onboard_v6` | entrambi (richieste / fotogrammi) | `ONBOARD_LAYOUT` in DeltaSuiteOnboard.lua | `OnboardShared` in onboard_feed.py |
+| `DeltaSuite_Onboard_v6` | both (requests / frames) | `ONBOARD_LAYOUT` in DeltaSuiteOnboard.lua | `OnboardShared` in onboard_feed.py |
 
-Per cambiare un layout: stessi campi nello stesso ordine nei due file (solo int/float a 4 byte e char[]),
-nuova versione nel nome della mapping e nella costante. I test confrontano i layout Lua e Python campo
-per campo.
+To change a layout: same fields in the same order in both files (only 4-byte int/float and char[]), a new
+version in the mapping name and in the constant. The tests compare the Lua and Python layouts field by field.
 
 ## ui
 
-- `main_dashboard.py`: finestra, barra laterale, pagine per chiave (`self.pages`, ognuna in uno
-  `QScrollArea`). La prima voce è la pagina Generale; sezioni, ordine e descrizioni dei moduli stanno in
-  `navigation.py`.
-- `hub_state.py`: `HubState`, lo stato condiviso (sorgente attiva, giri, ponte CSP, radio, ingegnere,
-  MCP) e i suoi segnali; `hub_data.py` fornisce i dati all'MCP e valida le proposte.
-- `workers.py`: `TelemetryWorker` (thread di acquisizione: AC, demo o replay → campioni, giri, stato del
-  ponte ogni 0,1 s) e `Job` (lavori bloccanti fuori dal thread della UI).
-- `widgets/`: pezzi riusabili. `__init__` ha i widget di base (Card, ValueTile, grafici, tabelle);
-  `car_status.py` (schema dell'auto), `gps.py` (mappa della pista), `timing_table.py` (classifica),
-  `hybrid.py` (batteria ed ERS), `onboard_hud.py` (grafica TV sopra il video), `view_panel.py` (riquadro
-  onboard con auto e telecamera).
-- `race_view.py`: cosa mostrano le pagine "da muretto" (classifica, auto sul GPS, grafica TV, righe dello
-  stato vettura, motivo del video assente), uguale in Onboard e Generale.
-- `pages/`: una pagina per modulo; le pagine grandi sono pacchetti (`pages/onboard/`). `general_page.py`
-  mette insieme i widget di gara.
-- Testi lunghi nelle pagine: niente `setWordWrap` sulle etichette (in una `QScrollArea` l'altezza
-  calcolata "per larghezza" allunga la pagina); righe spezzate a mano.
+- `main_dashboard.py`: window, sidebar, pages by key (`self.pages`, each in a `QScrollArea`). The first entry
+  is the Overview page; sections, order and module descriptions live in `navigation.py`.
+- `hub_state.py`: `HubState`, the shared state (active source, laps, CSP bridge, radio, engineer, MCP) and
+  its signals; `hub_data.py` serves the data to the MCP and validates proposals.
+- `workers.py`: `TelemetryWorker` (acquisition thread: AC, demo or replay → samples, laps, bridge state
+  every 0.1 s) and `Job` (blocking work off the UI thread).
+- `widgets/`: reusable pieces. `__init__` has the base widgets (Card, ValueTile, plots, tables);
+  `car_status.py` (car diagram), `gps.py` (track map), `timing_table.py` (standings), `hybrid.py` (battery
+  and ERS), `onboard_hud.py` (TV graphics over the video), `view_panel.py` (onboard view with car and camera),
+  `sectors.py` (splits and lap time with delta).
+- `race_view.py`: what the "pit wall" pages show (standings, cars on the GPS, TV graphics, car status lines,
+  why the video is missing), the same on Onboard and Overview.
+- `pages/`: one page per module; large pages are packages (`pages/onboard/`). `general_page.py` (Overview)
+  puts the race widgets together.
+- Long text in pages: no `setWordWrap` on labels (inside a `QScrollArea` the height-for-width makes the page
+  taller); lines are broken by hand.
 
-### Flusso dei dati
+### Data flow
 
 ```
-TelemetryWorker (thread)  ── sample_ready / lap_completed / bridge_state ──▶ HubState ──▶ pagine
-Onboard / Generale (QTimer) ── hub.onboard_feed: richieste e fotogrammi, direttamente sulla mapping onboard
+TelemetryWorker (thread)  ── sample_ready / lap_completed / bridge_state ──▶ HubState ──▶ pages
+Onboard / Overview (QTimer) ── hub.onboard_feed: requests and frames, straight on the onboard mapping
 ```
 
-Il collegamento al video è uno solo (`hub.onboard_feed`), ma lo usa solo la pagina visibile: una pagina
-nascosta non manda richieste e alla chiusura scollega, così AC rende le viste in più solo quando servono.
+There is a single video link (`hub.onboard_feed`), but only the visible page uses it: a hidden page sends no
+requests and disconnects when it closes, so AC renders the extra views only when needed.
 
-### Aggiungere una pagina
+### Adding a page
 
-1. `ui/pages/<nome>_page.py` (o un pacchetto se cresce), con una classe che riceve `hub`.
-2. Registrarla in `MainWindow.pages` e in `SECTIONS` di `navigation.py`.
-3. Prendere i pezzi comuni da `ui/widgets`; se un widget serve a più pagine, va lì e non in una pagina.
+1. `ui/pages/<name>_page.py` (or a package if it grows), with a class that takes `hub`.
+2. Register it in `MainWindow.pages` and in `SECTIONS` in `navigation.py`.
+3. Take the common pieces from `ui/widgets`; if a widget is used by several pages, it goes there and not in a
+   page.
 
-## Test
+## Tests
 
-`python -m pytest`. Su Linux girano tutti tranne quelli con mapping vere (`windows_only`) e quelli che
-chiedono Whisper/Kokoro in locale. GitHub Actions li fa girare su Windows a ogni push su main, compila
-l'exe e lo autotesta (`DELTA_SELFTEST`); si può lanciare a mano su un branch (workflow_dispatch).
+`python -m pytest`. On Linux everything runs except the tests with real mappings (`windows_only`) and the
+ones that need local Whisper/Kokoro. GitHub Actions runs them on Windows at every push to main, builds the
+exe and self-tests it (`DELTA_SELFTEST`); it can be run by hand on a branch (workflow_dispatch).

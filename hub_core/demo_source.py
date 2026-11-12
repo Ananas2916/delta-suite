@@ -65,7 +65,7 @@ def _speed_profile(seg, k, mu=1.75):
 class DemoSource:
     """Hybrid hypercar simulator on a synthetic track (same interface as TelemetryReceiver)."""
 
-    name = "Demo (simulatore)"
+    name = "Demo (simulator)"
     waiting_message = "Starting the simulator..."
     finished = False
 

@@ -90,6 +90,7 @@ class HubState(QObject):
         self.track = TrackWatch()           # track line and yellow/red/blue zones of the session
         self.live_lap = LiveLap()           # splits and live delta of the current lap
         self._ptt = False
+        self._closed = False
 
         self.radio_rules = RadioRules(self.load_radio_config(), self.lang)
         self.voice = RadioVoice(self._make_tts(), is_safe=self._safe_to_talk,
@@ -234,6 +235,8 @@ class HubState(QObject):
         return TrackWatch(lap, pit, info.get("track_length") or 0.0)
 
     def _on_lap(self, lap: LapData):
+        if self._closed:                # a lap queued by the worker after shutdown: the archive is closed
+            return
         if self.session_id is None:
             self.session_id = self.db.new_session(self.session_info)
         self.db.save_lap(self.session_id, lap)
@@ -471,6 +474,7 @@ class HubState(QObject):
 
     # ------------------------------------------------------------- shutdown
     def shutdown(self):
+        self._closed = True
         self.stop()
         self.onboard_feed.disconnect()
         if self.agent is not None:
