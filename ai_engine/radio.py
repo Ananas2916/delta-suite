@@ -41,6 +41,8 @@ class RadioConfig:
     positions: bool = True          # first lap, positions gained/lost, fastest lap, finish
     rivals: bool = True             # close car ahead/behind, rivals in the pits
     car: bool = True                # punctures, damage, worn tyres, limiter
+    chatter: int = 2                # 0 essential, 1 normal, 2 chatty (ai_engine.race_chatter)
+    ai_comment_laps: int = 0        # spontaneous AI comment every N race laps (0 = never)
     tyre_temp_lo: float = 75.0
     tyre_temp_hi: float = 100.0
     tyre_press_lo: float = 25.5     # hot psi
@@ -59,10 +61,12 @@ _FLAGS = {
 class RadioRules:
     def __init__(self, cfg: RadioConfig | None = None, lang: Language | None = None, seed: int | None = None):
         from ai_engine.race_calls import RaceCalls      # here: race_calls uses this module's Msg
+        from ai_engine.race_chatter import RaceChatter
         self.cfg = cfg or RadioConfig()
         self.lang = lang or LANGUAGES["en-us"]
         self.rng = random.Random(seed)
         self.race = RaceCalls(self)
+        self.chatter = RaceChatter(self)
         self.reset()
 
     def reset(self):
@@ -73,6 +77,7 @@ class RadioRules:
         self._battery_said: set[str] = set()
         self._lap_energy_said = False
         self.race.reset()
+        self.chatter.reset()
 
     def _p(self, key: str, **kw) -> str:
         """Phrase in the voice's language; if it has variants ("a|b|c") one is picked."""
@@ -83,10 +88,11 @@ class RadioRules:
 
     # ------------------------------------------------------------- per lap
     def on_lap(self, lap: LapData, laps: list[LapData], neighbours=None, race: bool = False,
-               to_go: int | None = None, position: int | None = None, field_best_ms: int | None = None) -> list[Msg]:
+               to_go: int | None = None, position: int | None = None, field_best_ms: int | None = None,
+               rows: list | None = None) -> list[Msg]:
         """`laps` are the session laps, with `lap` (just completed) last; `to_go` the laps left until the end
         of the race (from the leader, including the one just started); `field_best_ms` the rivals' best lap,
-        for the race's fastest lap."""
+        for the race's fastest lap; `rows` the standings, for the chatty engineer (rivals' names and laps)."""
         out: list[Msg] = []
         c, lg = self.cfg, self.lang
         previous = laps[-2] if len(laps) >= 2 else None
@@ -137,6 +143,9 @@ class RadioRules:
             parts = self.race.gap_parts(*neighbours)
             if parts:
                 out.append(Msg(self._p("gaps", parts=", ".join(parts)), PRIO_LOW, 20, "gap"))
+        out += self.chatter.on_lap(lap, laps, rows, race, to_go, position)
+        if out:
+            self.chatter.heard()
         return out
 
     def _tyre_messages(self, laps: list[LapData]) -> list[Msg]:
@@ -178,6 +187,9 @@ class RadioRules:
             out += self._hybrid_messages(s, info)
         if ctx is not None:
             out += self.race.on_sample(s, info, ctx)
+            out += self.chatter.on_sample(s, info, ctx)
+            if out:
+                self.chatter.heard(ctx.now)
         return out
 
     def _flag_messages(self, s, ctx=None) -> list[Msg]:

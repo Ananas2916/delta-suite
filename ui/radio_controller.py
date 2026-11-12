@@ -15,6 +15,7 @@ from ui.workers import Job
 
 RADIO_FLAGS = ("lap_times", "fuel", "tyres", "gaps", "flags", "hybrid", "positions", "rivals", "car")
 RADIO_LIMITS = ("tyre_temp_lo", "tyre_temp_hi", "tyre_press_lo", "tyre_press_hi")
+RADIO_LEVELS = ("chatter", "ai_comment_laps")       # how talkative the engineer is; AI comment every N laps
 
 
 def _quiet(fn):
@@ -47,6 +48,8 @@ class RadioController:
             setattr(c, f, self.hub.setting(f"radio/{f}", True, bool))
         for f in RADIO_LIMITS:
             setattr(c, f, self.hub.setting(f"radio/{f}", getattr(c, f), float))
+        for f in RADIO_LEVELS:
+            setattr(c, f, self.hub.setting(f"radio/{f}", getattr(c, f), int))
         return c
 
     def save_config(self, c: RadioConfig):

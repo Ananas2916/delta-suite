@@ -15,6 +15,7 @@ class EngineerController:
         self.agent = None
         self._job: Job | None = None
         self._job_mode = "ANALYSIS"
+        self._job_auto = False
 
     def _make_agent(self):
         h = self.hub
@@ -37,7 +38,8 @@ class EngineerController:
         """The written analysis follows the interface language; the radio follows the voice."""
         return self.hub.ui_language_name
 
-    def ask(self, question: str, mode: str = "ANALYSIS") -> bool:
+    def ask(self, question: str, mode: str = "ANALYSIS", auto: bool = False) -> bool:
+        """`auto`: comment the engineer makes on its own (not asked by the driver): fails silently."""
         question = question.strip()
         if not question or self.busy:
             return False
@@ -56,7 +58,8 @@ class EngineerController:
         self._job.done.connect(lambda ans, m=mode: self._on_done(ans, m))
         self._job.failed.connect(self._on_failed)
         self._job_mode = mode
-        h.engineer_started.emit(question, mode)
+        self._job_auto = auto
+        h.engineer_started.emit("(spontaneous radio update)" if auto else question, mode)
         self._job.start()
         return True
 
@@ -69,7 +72,7 @@ class EngineerController:
         h = self.hub
         h.engineer_failed.emit(err)
         h.radio_log.emit("system", f"Engineer: {err}")
-        if self._job_mode == "RADIO":
+        if self._job_mode == "RADIO" and not self._job_auto:
             h.radio.say(h.radio.phrase("agent_error"), PRIO_NORMAL, 15)
 
     def new_conversation(self):

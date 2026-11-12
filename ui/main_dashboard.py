@@ -9,8 +9,7 @@ from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-    QScrollArea,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from hub_core.ac import csp_bridge
@@ -78,6 +77,10 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("sidebar")
         sl.addWidget(self.nav, 1)
+        self.remote_btn = QPushButton()
+        self.remote_btn.setToolTip("Follow the session and act as the engineer from another PC, tablet or phone")
+        self.remote_btn.clicked.connect(self._open_remote)
+        sl.addWidget(self.remote_btn)
         lay.addWidget(side)
 
         self.stack = QStackedWidget()
@@ -123,11 +126,26 @@ class MainWindow(QMainWindow):
         self.general.start_demo.connect(self.telemetry.start_demo)     # the demo starts while staying on the Overview
         self.general.checklist_action.connect(self._on_checklist)
 
+        self.hub.remote.changed.connect(self._remote_label)
+        self._remote_label()
+
         self.status_label = QLabel(tr("Ready"))
         self.statusBar().addWidget(self.status_label, 1)
         self.hub.status.connect(lambda text, ok: self.status_label.setText(text))
         self.hub.lap_completed.connect(
             lambda lap: self.statusBar().showMessage(tr("Lap {n} saved to the archive", n=lap.lap_no), 4000))
+
+    def _remote_label(self):
+        r = self.hub.remote
+        n = len(r.pairing.device_list())
+        self.remote_btn.setText(f"  Remote access: {'on' if r.enabled else 'off'}" + (f" · {n}" if r.enabled and n else ""))
+        color = theme.C["green"] if r.enabled else theme.C["dim"]
+        self.remote_btn.setStyleSheet(f"text-align: left; padding: 10px 12px; border: 0; border-radius: 0; "
+                                      f"background: {theme.C['panel']}; color: {color}; font-weight: 600;")
+
+    def _open_remote(self):
+        from ui.remote_dialog import RemoteDialog
+        RemoteDialog(self.hub, self).exec()
 
     def _scrollable(self, key: str, page: QWidget) -> QScrollArea:
         """Page in a scroll area: on a narrow screen (or scaled to 150%) the window never asks for more

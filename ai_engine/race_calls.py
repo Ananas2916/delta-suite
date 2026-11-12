@@ -15,6 +15,7 @@ from hub_core.analysis.timing import neighbours
 from hub_core.model import ACFlag
 from ai_engine.lang import speak_amount, speak_number
 from ai_engine.radio import Msg
+from ai_engine.race_chatter import surname
 from ai_engine.voice import PRIO_HIGH, PRIO_LOW, PRIO_NORMAL, PRIO_URGENT
 
 POS_CONFIRM_S = 2.5          # the new position must hold for a moment (mid-corner overtakes)
@@ -39,6 +40,7 @@ class RaceContext:
     zone_ahead: tuple | None = None                # (Zone, metres) from TrackWatch
     to_go: int | None = None                       # laps to go, from the leader
     cars_known: bool = False                       # rivals' data from the CSP app
+    slow_cars: set = field(default_factory=set)    # cars slow or stopped on track (TrackWatch yellow/red zones)
 
 
 class RaceCalls:
@@ -67,6 +69,7 @@ class RaceCalls:
         self._time_prev: float | None = None
         self._fuel_short = False
         self._gaps: dict[str, tuple[int, float]] = {}   # "ahead"/"behind" → (car, gap on the previous lap)
+        self._ahead_row = None      # car ahead while the position was stable: the one overtaken on a gain
 
     def p(self, key: str, **kw) -> str:
         return self.rules._p(key, **kw)
@@ -88,7 +91,7 @@ class RaceCalls:
         if ctx.race and self.start_pos is None and s.completed_laps == 0 and s.position > 0:
             self.start_pos = s.position
         if ctx.race and c.positions:
-            out += self._positions(s, now)
+            out += self._positions(s, ctx, now)
         if ctx.race and c.rivals and not s.is_in_pit:
             out += self._rivals(s, ctx, now)
         if ctx.race and c.lap_times:
@@ -101,14 +104,16 @@ class RaceCalls:
             out += self._session_time(s)
         return out
 
-    def _positions(self, s, now: float) -> list[Msg]:
+    def _positions(self, s, ctx: RaceContext, now: float) -> list[Msg]:
         if s.position <= 0:
             return []
+        ahead_now = neighbours(ctx.rows)[0]
         if self.pos is None:
             self.pos = s.position
             return []
         if s.position == self.pos:
             self._cand = None
+            self._ahead_row = ahead_now
             return []
         if s.position != self._cand:
             self._cand, self._cand_t = s.position, now
@@ -120,8 +125,20 @@ class RaceCalls:
                 or s.flag == ACFlag.CHECKERED or now - self._last_pos_call < POS_GAP_S):
             return []           # first lap (summed up by the end-of-lap call), stops, finish
         self._last_pos_call = now
-        key = "pos_gained" if self.pos < old else "pos_lost"
-        return [Msg(self.p(key, pos=self.pos), PRIO_NORMAL, 10, "position")]
+        gained = self.pos < old
+        # one place with the rival known: by name, as on the real radio ("great move on Leclerc, P4")
+        rival = (self._ahead_row if gained else ahead_now) if abs(old - self.pos) == 1 else None
+        self._ahead_row = ahead_now
+        name = surname(rival.driver) if rival is not None and self._chatty() else None
+        if name:
+            key = "pos_gained_on" if gained else "pos_lost_to"
+            text = self.p(key, pos=self.pos, who=name)
+        else:
+            text = self.p("pos_gained" if gained else "pos_lost", pos=self.pos)
+        return [Msg(text, PRIO_NORMAL, 10, "position")]
+
+    def _chatty(self) -> bool:
+        return getattr(self.rules.cfg, "chatter", 0) >= 1
 
     def _rivals(self, s, ctx: RaceContext, now: float) -> list[Msg]:
         ahead, me, behind = neighbours(ctx.rows)
@@ -144,7 +161,9 @@ class RaceCalls:
                 out.append(Msg(self.p("behind_close", g=speak_number(gap, lg)), PRIO_NORMAL, 8, "behind_close"))
         for r, key in ((ahead, "ahead_pitted"), (behind, "behind_pitted")):
             if r is not None and r.in_pit and r.index not in self._pitted_seen:
-                out.append(Msg(self.p(key), PRIO_LOW, 15, key))
+                name = surname(r.driver) if self._chatty() else None
+                text = self.p(key + "_name", who=name) if name else self.p(key)     # with a name: undercut/overcut
+                out.append(Msg(text, PRIO_NORMAL if name else PRIO_LOW, 15, key))
         self._pitted_seen = {r.index for r in ctx.rows if r.in_pit}
         return out
 

@@ -15,6 +15,7 @@ from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
 from ai_engine.mcp_server import MCPServer
 from ai_engine.race_calls import RaceContext
+from ai_engine.race_chatter import AI_COMMENT_PROMPT
 from ai_engine.radio import RadioConfig
 from ai_engine.voice import PRIO_NORMAL
 from hub_core.ac.csp_bridge import CMD_SETUP, BridgeState, find_ac_root
@@ -103,6 +104,9 @@ class HubState(QObject):
         self.provider = HubDataProvider(self)
         self.mcp = MCPServer(self.provider, int(self.settings.value("mcp_port", 8787)))
         self.mcp.start()
+        # remote access from another device (web page on the local network, off by default)
+        from ui.remote_data import RemoteAccess      # here: it reads HubState's signals and provider
+        self.remote = RemoteAccess(self)
 
     # ----------------------------------------------------------- settings
     def setting(self, key: str, default, typ=str):
@@ -171,8 +175,8 @@ class HubState(QObject):
     def discard_proposal(self, pid: int):
         self.proposal_ctl.discard(pid)
 
-    def ask_engineer(self, question: str, mode: str = "ANALYSIS") -> bool:
-        return self.engineer.ask(question, mode)
+    def ask_engineer(self, question: str, mode: str = "ANALYSIS", auto: bool = False) -> bool:
+        return self.engineer.ask(question, mode, auto)
 
     @property
     def engineer_busy(self) -> bool:
@@ -260,8 +264,15 @@ class HubState(QObject):
             others = [c.best_lap_ms for c in (b.cars if b else []) if c.index != 0 and c.best_lap_ms > 0]
             for m in self.radio.rules.on_lap(lap, self.laps, neighbours(self.standings_rows), self.is_race,
                                              self._to_go(s), s.position if s is not None else None,
-                                             min(others) if others else None):
+                                             min(others) if others else None, rows=self.standings_rows):
                 self.radio.say_msg(m)
+            self._maybe_ai_comment(lap)
+
+    def _maybe_ai_comment(self, lap: LapData):
+        """Every N race laps the AI engineer says one thing on its own (where the local phrases cannot reach)."""
+        n = self.radio.rules.cfg.ai_comment_laps
+        if n and self.is_race and lap.lap_no >= 2 and lap.lap_no % n == 0 and not self.engineer.busy:
+            self.engineer.ask(AI_COMMENT_PROMPT, "RADIO", auto=True)
 
     def _to_go(self, s) -> int | None:
         if s is None:
@@ -273,7 +284,8 @@ class HubState(QObject):
         b = self.bridge_state
         return RaceContext(now=time.monotonic(), race=self.is_race, rows=self.standings_rows,
                            zone_ahead=self.track.zone_ahead(s.lap_position), to_go=self._to_go(s),
-                           cars_known=bool(b and len(b.cars) > 1))
+                           cars_known=bool(b and len(b.cars) > 1),
+                           slow_cars={z.car for z in self.track.zones if z.kind in ("yellow", "red") and z.car > 0})
 
     def _on_sample(self, s):
         self.last_sample = s
@@ -367,4 +379,5 @@ class HubState(QObject):
         self.engineer.shutdown()
         self.radio.shutdown()
         self.mcp.stop()
+        self.remote.shutdown()
         self.db.close()

@@ -69,7 +69,7 @@ def test_bridge_loads_onboard_module_safely():
     bridge, onboard = _lua("DeltaSuiteBridge.lua"), _lua("DeltaSuiteOnboard.lua")
     assert "pcall(require, 'DeltaSuiteOnboard')" in bridge
     assert "if onboard then onboard.update(dt, sim) end" in bridge
-    assert "ONBOARD" not in bridge and "DeltaSuite_Onboard_v" not in bridge
+    assert "ONBOARD_LAYOUT" not in bridge and "DeltaSuite_Onboard_v" not in bridge
     assert onboard.rstrip().endswith("return M")
     assert "function M.update(dt, sim)" in onboard and "pcall(updateOnboard, dt, sim)" in onboard
 

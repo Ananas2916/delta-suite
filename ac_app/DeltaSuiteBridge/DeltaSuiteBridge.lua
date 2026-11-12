@@ -266,7 +266,21 @@ function script.update(dt)
   if onboard then onboard.update(dt, sim) end
 end
 
-function script.windowMain(dt)
+-- ------------------------------------------------------------------ window
+-- Styled window: header with the connection state, cards for the radio buttons and the onboard video. Cards get
+-- their background from the height measured on the previous frame (ImGui draws in order: the background must
+-- come before the content). If anything in the styled version fails (older CSP), the plain one is used.
+
+local C = {
+  accent = rgbm(0.88, 0.02, 0, 1), good = rgbm(0.18, 0.82, 0.48, 1), bad = rgbm(1, 0.3, 0.3, 1),
+  warn = rgbm(1, 0.76, 0.24, 1), text = rgbm(0.91, 0.92, 0.94, 1), dim = rgbm(0.55, 0.58, 0.64, 1),
+  panel = rgbm(0.08, 0.09, 0.12, 0.72), line = rgbm(1, 1, 1, 0.07),
+}
+local PAD, GAP = 10, 8
+local cardH = {}
+local styledFailed = false
+
+local function plainWindow()
   local connected = clock - lastBeatChange < 2
   ui.text(connected and 'Delta Suite: connected' or 'Delta Suite: not connected (start the acquisition)')
   if lastAck ~= '' then ui.text('Last command: ' .. lastAck) end
@@ -278,8 +292,119 @@ function script.windowMain(dt)
   ui.text(' ')
   ui.text('Engineer radio (hold):')
   btnRadio:control(vec2(0, 0))
-  ui.text('Confirm the engineer\'s proposal:')
+  ui.text("Confirm the engineer's proposal:")
   btnOk:control(vec2(0, 0))
   ui.text('Discard proposal:')
   btnNo:control(vec2(0, 0))
+end
+
+local function pill(text, color, right)
+  ui.pushFont(ui.Font.Small)
+  local size = ui.measureText(text)
+  local w, h = size.x + 22, size.y + 6
+  local p = vec2(right - w, ui.getCursorY())
+  ui.drawRectFilled(p, p + vec2(w, h), rgbm(color.r, color.g, color.b, 0.16), h / 2)
+  ui.drawCircleFilled(p + vec2(9, h / 2), 3.5, color, 12)
+  ui.setCursor(p + vec2(16, 3))
+  ui.textColored(text, color)
+  ui.popFont()
+end
+
+local function card(id, title, width, content)
+  local p = ui.getCursor()
+  local h = cardH[id] or 60
+  ui.drawRectFilled(p, p + vec2(width, h), C.panel, 6)
+  ui.drawRectFilled(p, p + vec2(3, h), C.accent, 1)
+  ui.setCursor(p + vec2(PAD + 2, PAD - 2))
+  ui.beginGroup()
+  ui.pushFont(ui.Font.Small)
+  ui.textColored(title, C.dim)
+  ui.popFont()
+  ui.offsetCursorY(2)
+  content(width - 2 * PAD - 2)
+  ui.endGroup()
+  cardH[id] = ui.getCursorY() - p.y + PAD - 4
+  ui.setCursor(vec2(p.x, p.y + cardH[id] + GAP))
+end
+
+local function binding(label, button, width, hint)
+  ui.textColored(label, C.text)
+  if hint then
+    ui.sameLine(0, 6)
+    ui.pushFont(ui.Font.Small)
+    ui.textColored(hint, C.dim)
+    ui.popFont()
+  end
+  button:control(vec2(width, 0))
+  ui.offsetCursorY(4)
+end
+
+local function styledWindow()
+  local connected = clock - lastBeatChange < 2
+  local win = ui.windowSize()
+  local x0 = ui.getCursorX()
+  local width = win.x - 2 * x0
+
+  -- header: logo and connection state
+  local top = ui.getCursorY()
+  ui.pushFont(ui.Font.Title)
+  local th = ui.measureText('DELTA SUITE').y
+  ui.drawRectFilled(vec2(x0, top + th * 0.2), vec2(x0 + th * 0.6, top + th * 0.8), C.accent, 2)
+  ui.setCursor(vec2(x0 + th * 0.6 + 8, top))
+  ui.textColored('DELTA SUITE', C.text)
+  ui.popFont()
+  local after = ui.getCursorY()
+  ui.setCursorY(top + 4)
+  pill(connected and 'CONNECTED' or 'OFFLINE', connected and C.good or C.bad, x0 + width)
+  ui.setCursor(vec2(x0, after))
+  ui.pushFont(ui.Font.Small)
+  if not connected then
+    ui.textColored('Start the acquisition in Delta Suite on this PC.', C.dim)
+  elseif lastAck ~= '' then
+    ui.textColored('Last command: ' .. lastAck, out.ackOk == 1 and C.good or C.warn)
+  else
+    ui.textColored('Telemetry, rivals and setup are being shared.', C.dim)
+  end
+  ui.popFont()
+  ui.offsetCursorY(GAP)
+
+  card('radio', 'ENGINEER RADIO', width, function(w)
+    local tx = btnRadio:down()
+    ui.textColored('Push to talk', C.text)
+    if tx then
+      ui.sameLine(0, 16)
+      local c = ui.getCursor()
+      ui.drawCircleFilled(c + vec2(-6, ui.measureText('T').y / 2), 4, C.bad, 12)
+      ui.textColored('TRANSMITTING', C.bad)
+    end
+    btnRadio:control(vec2(w, 0))
+    ui.offsetCursorY(2)
+  end)
+
+  card('proposals', "ENGINEER'S PROPOSALS", width, function(w)
+    binding('Confirm', btnOk, w, 'applies the proposed change')
+    binding('Discard', btnNo, w, nil)
+  end)
+
+  card('onboard', 'ONBOARD VIDEO', width, function(w)
+    if onboard then
+      local y = ui.getCursorY()
+      onboard.window()
+      if ui.getCursorY() == y then
+        ui.textColored('Idle: opens with the Onboard page in Delta Suite.', C.dim)
+      end
+    else
+      ui.textColored('Not loaded: ' .. tostring(onboardError), C.warn)
+    end
+  end)
+end
+
+function script.windowMain(dt)
+  if not styledFailed then
+    local ok, err = pcall(styledWindow)
+    if ok then return end
+    styledFailed = true
+    ac.log('DeltaSuite styled window failed, plain window from now on: ' .. tostring(err))
+  end
+  plainWindow()
 end

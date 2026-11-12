@@ -17,7 +17,9 @@ hub_core/database.py DuckDB archive          hub_core/demo_source.py simulator
         ▼
 ai_engine            engineer (Claude Code / Codex / API), MCP, radio, voice, transcription; radio without AI
                      in radio.py (lap, fuel, tyres, flags) + race_calls.py (F1-game-style race calls,
-                     phrases in phrases_race.py)
+                     phrases in phrases_race.py) + race_chatter.py (the "chatty" engineer between the
+                     important calls, chattiness 0-2, phrases in phrases_chatter.py)
+hub_core/remote      remote access: rotating-code pairing (auth.py) and LAN web server + page (server.py, web/)
 ui                   PyQt6: shared state, threads, widgets, one page per module
 ```
 
@@ -89,6 +91,8 @@ version in the mapping name and in the constant. The tests compare the Lua and P
   is the Overview page; sections, order and module descriptions live in `navigation.py`.
 - `hub_state.py`: `HubState`, the shared state (active source, laps, CSP bridge, radio, engineer, MCP) and
   its signals; `hub_data.py` serves the data to the MCP and validates proposals.
+- `remote_data.py`: `RemoteAccess`, the hub side of `hub_core/remote` (snapshot for the web page, actions
+  routed to the Qt thread); `remote_dialog.py` shows the 10-second code, the addresses and the paired devices.
 - `workers.py`: `TelemetryWorker` (acquisition thread: AC, demo or replay → samples, laps, bridge state
   every 0.1 s) and `Job` (blocking work off the UI thread).
 - `widgets/`: reusable pieces. `__init__` has the base widgets (Card, ValueTile, plots, tables);
