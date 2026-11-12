@@ -3,7 +3,8 @@ Race engineer through command-line agents (subscription instead of an API key).
 
 Claude Code is the main backend: -p mode with stream-json output, session resumed with
 --resume, no built-in tools (no commands or files), only Delta Suite's MCP tools.
-Codex and Antigravity use the same idea with their non-interactive commands.
+Any other agent can be plugged in as a custom command: it gets the MCP address and token in
+DELTASUITE_MCP_URL / DELTASUITE_MCP_TOKEN and the instructions in AGENTS.md in its working folder.
 """
 
 from __future__ import annotations
@@ -39,8 +40,6 @@ every recommendation, finish with the actions in order of priority."""
 
 BACKENDS = {
     "claude": "Claude Code (subscription)",
-    "codex": "Codex CLI (untested)",
-    "antigravity": "Antigravity CLI (untested)",
     "custom": "Custom command",
     "api": "Anthropic API (key)",
 }
@@ -51,8 +50,8 @@ CREATE_NO_WINDOW = 0x08000000
 def engineer_workdir() -> Path:
     d = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DeltaSuite" / "engineer"
     d.mkdir(parents=True, exist_ok=True)
-    # instructions also as project files, for the agents that read them (Codex, Antigravity)
-    for name in ("AGENTS.md", "GEMINI.md"):
+    # instructions also as a project file, for custom agents that read it
+    for name in ("AGENTS.md",):
         p = d / name
         if not p.is_file() or p.read_text(encoding="utf-8") != ENGINEER_PROMPT:
             p.write_text(ENGINEER_PROMPT, encoding="utf-8")
@@ -117,22 +116,6 @@ class CLIAgent:
             if self.session_id:
                 cmd += ["--resume", self.session_id]
             return cmd, True, {}
-        if self.backend == "codex":
-            exe = find_executable("codex")
-            if not exe:
-                raise AgentError("Codex CLI not found")
-            cmd = [exe, "exec", "--skip-git-repo-check",
-                   "-c", f'mcp_servers.deltasuite.url="{server["url"]}"',
-                   "-c", 'mcp_servers.deltasuite.bearer_token_env_var="DELTASUITE_MCP_TOKEN"']
-            if self.model:
-                cmd += ["-m", self.model]
-            return cmd + ["-"], True, {"DELTASUITE_MCP_TOKEN": token}
-        if self.backend == "antigravity":
-            exe = find_executable("agy") or find_executable("antigravity")
-            if not exe:
-                raise AgentError("Antigravity CLI (agy) not found")
-            # the MCP must be configured in ~/.gemini/config/mcp_config.json ("Copy MCP configuration" button)
-            return [exe, "-p", "{prompt}"], False, {}
         if self.backend == "custom":
             if not self.custom_command.strip():
                 raise AgentError("Custom command is empty")

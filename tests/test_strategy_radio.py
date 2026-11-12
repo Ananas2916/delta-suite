@@ -64,7 +64,7 @@ def test_radio_lap_and_fuel():
     r = RadioRules(RadioConfig(tyres=False, gaps=False), IT)
     laps = [lap(1, 90500, fuel_start=15.0, fuel_end=12.0)]
     msgs = r.on_lap(laps[0], laps)
-    assert msgs[0].text.startswith("Giro migliore")
+    assert msgs[0].text.startswith("Miglior giro personale")
     laps.append(lap(2, 90700, fuel_start=12.0, fuel_end=9.0))
     texts = [m.text for m in r.on_lap(laps[1], laps)]
     assert texts[0] == "1, 30 e 7, più 2 decimi."

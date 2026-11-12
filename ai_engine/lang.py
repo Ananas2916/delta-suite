@@ -25,7 +25,7 @@ class Language:
 
 _IT = {
     "lap_invalid": "{t}, giro non valido.",
-    "best_lap": "Giro migliore! {t}{gain}.",
+    "best_lap": "Miglior giro personale! {t}{gain}.",
     "lap": "{t}, {delta}.",
     "laps_to_go": "Mancano {n} giri.", "last_lap": "Ultimo giro, spingi.",
     "fuel_box": "Box, box. Carburante per un giro.",
@@ -55,7 +55,7 @@ _IT = {
 
 _EN = {
     "lap_invalid": "{t}, lap invalid.",
-    "best_lap": "Fastest lap! {t}{gain}.",
+    "best_lap": "Personal best! {t}{gain}.",
     "lap": "{t}, {delta}.",
     "laps_to_go": "{n} laps to go.", "last_lap": "Last lap, push.",
     "fuel_box": "Box, box. Fuel for one lap.",
@@ -85,7 +85,7 @@ _EN = {
 
 _ES = {
     "lap_invalid": "{t}, vuelta no válida.",
-    "best_lap": "¡Vuelta rápida! {t}{gain}.",
+    "best_lap": "¡Tu mejor vuelta! {t}{gain}.",
     "lap": "{t}, {delta}.",
     "laps_to_go": "Quedan {n} vueltas.", "last_lap": "Última vuelta, empuja.",
     "fuel_box": "Box, box. Combustible para una vuelta.",
@@ -115,7 +115,7 @@ _ES = {
 
 _FR = {
     "lap_invalid": "{t}, tour invalide.",
-    "best_lap": "Meilleur tour ! {t}{gain}.",
+    "best_lap": "Ton meilleur tour ! {t}{gain}.",
     "lap": "{t}, {delta}.",
     "laps_to_go": "Encore {n} tours.", "last_lap": "Dernier tour, attaque.",
     "fuel_box": "Box, box. Carburant pour un tour.",
@@ -145,7 +145,7 @@ _FR = {
 
 _PT = {
     "lap_invalid": "{t}, volta inválida.",
-    "best_lap": "Volta mais rápida! {t}{gain}.",
+    "best_lap": "Sua melhor volta! {t}{gain}.",
     "lap": "{t}, {delta}.",
     "laps_to_go": "Faltam {n} voltas.", "last_lap": "Última volta, força.",
     "fuel_box": "Box, box. Combustível para uma volta.",

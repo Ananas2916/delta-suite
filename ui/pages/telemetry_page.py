@@ -48,6 +48,11 @@ class TelemetryPage(QWidget):
         self.record.setToolTip("Save AC's raw data to a .dsr file, to watch later as a replay")
         self.record.setChecked(hub.setting("record_sessions", True, bool))
         self.record.toggled.connect(lambda v: hub.settings.setValue("record_sessions", v))
+        self.delta_ref = QCheckBox("Delta vs all-time best")
+        self.delta_ref.setToolTip("Live delta against the fastest lap in the archive for this car and track, "
+                                  "instead of this session's best")
+        self.delta_ref.setChecked(hub.delta_vs_archive)
+        self.delta_ref.toggled.connect(hub.set_delta_vs_archive)
         self.hz = QSpinBox()
         self.hz.setRange(10, 200)
         self.hz.setValue(60)
@@ -58,7 +63,7 @@ class TelemetryPage(QWidget):
         self.start_btn = QPushButton("Start acquisition")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self._toggle)
-        for w in (label("Source", "dim"), self.source, self.record, self.hz, label("Demo/replay speed", "dim"),
+        for w in (label("Source", "dim"), self.source, self.record, self.delta_ref, self.hz, label("Demo/replay speed", "dim"),
                   self.demo_speed, self.start_btn):
             bar.addWidget(w)
         bar.addStretch()

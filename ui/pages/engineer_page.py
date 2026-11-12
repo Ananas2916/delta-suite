@@ -24,10 +24,12 @@ from ai_engine.race_engineer_agent import build_stint_summary
 from ai_engine.radio import RadioConfig
 from ai_engine.stt import DEFAULT_MODEL, WHISPER_MODELS, model_cached
 from ai_engine.voice import PRIO_URGENT, make_backend
+from ai_engine.voice_models import DOWNLOAD_MB, download_kokoro
 from ui.hub_state import MODES
 from ui.mic import input_devices
 from ui.theme import C
 from ui.widgets import Card, SessionPicker, dspin, label
+from ui.workers import Job
 
 QUICK_QUESTIONS = {
     "Where am I losing time": "Compare my last valid lap with the best one, corner by corner, and tell me where and "
@@ -231,6 +233,9 @@ class EngineerPage(QWidget):
         v.addWidget(self.mcp_info)
         v.addWidget(copy)
         c1.addWidget(g)
+        again = QPushButton("Show the get-started list on the Overview")
+        again.clicked.connect(lambda: hub.settings.setValue("checklist/hidden", False))
+        c1.addWidget(again)
 
         # --- voice
         g = QGroupBox("Voice and language")
@@ -247,7 +252,7 @@ class EngineerPage(QWidget):
         self.voice_lang.setWordWrap(True)
         self.speed = dspin(0.6, 1.8, hub.setting("voice/speed", 1.1, float), 0.05, 2)
         self.model_dir = QLineEdit(hub.setting("voice/model_dir", ""))
-        self.model_dir.setPlaceholderText("empty = Tsukumo models")
+        self.model_dir.setPlaceholderText("empty = downloaded model (or Tsukumo's)")
         browse = QPushButton("…")
         browse.setFixedWidth(34)
         browse.setStyleSheet("padding: 4px 0;")
@@ -263,6 +268,11 @@ class EngineerPage(QWidget):
         f.addRow("Speed", self.speed)
         f.addRow("Kokoro model", md)
         f.addRow(self.voice_status)
+        self.voice_dl = QPushButton(f"Download voice ({DOWNLOAD_MB} MB, once)")
+        self.voice_dl.setObjectName("primary")
+        self.voice_dl.clicked.connect(self.download_voice)
+        f.addRow(self.voice_dl)
+        self._dl_job = None
         for w in (self.engine, self.voice):
             w.currentIndexChanged.connect(self._save_voice)
         self.speed.valueChanged.connect(self._save_voice)
@@ -470,6 +480,34 @@ class EngineerPage(QWidget):
             self.model_dir.setText(d)
             self._save_voice()
 
+    def download_voice(self):
+        """Download the Kokoro model in the background, then switch the voice on."""
+        if self._dl_job is not None and self._dl_job.isRunning():
+            return
+        self.voice_dl.setEnabled(False)
+        self.voice_dl.setText("Downloading…")
+
+        def work(emit):
+            download_kokoro(progress=lambda done, total: emit(f"{done * 100 // total}"))
+            return True
+
+        self._dl_job = Job(work)
+        self._dl_job.text.connect(lambda pct: self.voice_dl.setText(f"Downloading… {pct}%"))
+        self._dl_job.done.connect(lambda _: self._download_finished(None))
+        self._dl_job.failed.connect(self._download_finished)
+        self._dl_job.start()
+
+    def _download_finished(self, error: str | None):
+        self.voice_dl.setEnabled(True)
+        self.voice_dl.setText(f"Download voice ({DOWNLOAD_MB} MB, once)")
+        if error:
+            self._log("system", f"Voice download failed: {error}")
+        else:
+            self.model_dir.clear()          # the default folder now has the model
+            self._save_voice()
+            self._log("system", "Voice downloaded")
+            self.hub.say(self.hub.phrase("radio_check"), PRIO_URGENT, 30)
+
     def _copy_mcp(self):
         QGuiApplication.clipboard().setText(json.dumps(self.hub.mcp.client_config(), indent=2))
         self._log("system", "MCP configuration copied to the clipboard (valid while the hub stays open)")
@@ -477,10 +515,10 @@ class EngineerPage(QWidget):
     # ------------------------------------------------------------ status
     def _update_status(self):
         b = self.backend.currentData()
-        exe = {"claude": "claude", "codex": "codex", "antigravity": "agy"}.get(b)
+        exe = {"claude": "claude"}.get(b)
         agent_ok = True
         if exe:
-            found = find_executable(exe) or (find_executable("antigravity") if b == "antigravity" else None)
+            found = find_executable(exe)
             agent_ok = found is not None
             self.agent_status.setText(dot(C["green"], found) if found else
                                       dot(C["red"], f"'{exe}' not found in PATH"))
@@ -503,6 +541,9 @@ class EngineerPage(QWidget):
         voice_ok, why = make_backend(self.engine.currentData(), voice, self.speed.value(),
                                      self.model_dir.text() or None).available()
         self.voice_status.setText(dot(C["green"], "ready") if voice_ok else dot(C["red"], why))
+        downloading = self._dl_job is not None and self._dl_job.isRunning()
+        missing = self.engine.currentData() == "kokoro" and not voice_ok and not self.model_dir.text().strip()
+        self.voice_dl.setVisible(missing or downloading)
         stt_ok, stt_why = self.hub.stt.available()
         self.stt_status.setText(dot(C["green"] if stt_ok else C["red"], f"{stt_why} · language {lang.code}"))
         self.stt_model.setEnabled(self.stt_engine.currentData() == "whisper")
@@ -511,7 +552,7 @@ class EngineerPage(QWidget):
         m = self.hub.mcp
         self.mcp_info.setText(
             f"MCP server running on {m.url} (local-only port, new token at every start). The agent chosen above "
-            "uses it by itself; you can also connect an interactive Claude Code, Codex or Antigravity session "
+            "uses it by itself; you can also connect an interactive Claude Code session or any MCP client "
             "by pasting the configuration." if m.error is None else f"MCP server not started: {m.error}")
 
         voice_name = voice_label(voice).split(" — ")[0] if self.engine.currentData() != "none" else "off"

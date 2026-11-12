@@ -11,7 +11,6 @@ from __future__ import annotations
 import io
 import itertools
 import json
-import os
 import queue
 import threading
 import time
@@ -26,6 +25,7 @@ from typing import Callable
 import numpy as np
 
 from ai_engine.lang import language_of
+from ai_engine.voice_models import default_kokoro_dir
 
 try:
     import winsound
@@ -33,7 +33,6 @@ except ImportError:   # pragma: no cover - Windows only
     winsound = None
 
 TSUKUMO_URL = "http://127.0.0.1:8770"
-DEFAULT_KOKORO_DIR = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tsukumo" / "resources" / "tsukumo" / "models"
 
 PRIO_URGENT, PRIO_HIGH, PRIO_NORMAL, PRIO_LOW = 0, 1, 2, 3
 
@@ -52,12 +51,12 @@ class TTSBackend:
 
 
 class KokoroBackend(TTSBackend):
-    """In-process kokoro-onnx, with the model files already downloaded by Tsukumo (or another folder)."""
+    """In-process kokoro-onnx, with the model files downloaded by Delta Suite, Tsukumo's or another folder."""
 
     name = "kokoro"
 
     def __init__(self, model_dir: str | Path | None = None, voice: str = "am_michael", speed: float = 1.1):
-        self.model_dir = Path(model_dir) if model_dir else DEFAULT_KOKORO_DIR
+        self.model_dir = Path(model_dir) if model_dir else default_kokoro_dir()
         self.voice, self.speed = voice, speed
         self._kokoro = None
         self._lock = threading.Lock()
@@ -72,7 +71,7 @@ class KokoroBackend(TTSBackend):
             return False, "kokoro-onnx package not installed"
         missing = [p.name for p in self.files() if not p.is_file()]
         if missing:
-            return False, f"missing {', '.join(missing)} in {self.model_dir}"
+            return False, "voice model not downloaded"
         return True, ""
 
     def synth(self, text: str) -> tuple[np.ndarray, int] | None:

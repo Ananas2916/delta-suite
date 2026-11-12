@@ -22,11 +22,14 @@ from hub_core.ac.onboard_feed import (
 )
 from hub_core.analysis import race_strategy as rs
 from hub_core.model import ACSessionType
+from hub_core.ac.csp_bridge import find_ac_root
+from ui import first_run
 from ui import race_view as rv
 from ui.race_view import STALE_S
 from ui.theme import C
 from ui.widgets import Card, ValueTile, label
 from ui.widgets.car_status import CarStatusView
+from ui.widgets.checklist import ChecklistCard
 from ui.widgets.gps import GPSView
 from ui.widgets.hybrid import HybridCard
 from ui.widgets.onboard_hud import frame_image
@@ -68,6 +71,7 @@ def _card(title: str) -> tuple[Card, QVBoxLayout]:
 class GeneralPage(QWidget):
     open_module = pyqtSignal(str)
     start_demo = pyqtSignal()
+    checklist_action = pyqtSignal(str)
 
     def __init__(self, hub):
         super().__init__()
@@ -109,6 +113,15 @@ class GeneralPage(QWidget):
         if hub.db_error:
             root.addWidget(label(f"<span style='color:{C['yellow']}'>Archive not available ({hub.db_error}): "
                                  "this session's data stays in memory only.</span>"))
+
+        # --- get started: what is ready and what is missing, until everything is green or hidden
+        self.checklist = ChecklistCard()
+        self.checklist.action.connect(self.checklist_action)
+        self.checklist.hide_requested.connect(self._hide_checklist)
+        root.addWidget(self.checklist)
+        self._ac_root = None
+        self._ac_root_t = -1e9
+        self._check_t = -1e9
 
         # --- numbers
         tiles = QHBoxLayout()
@@ -322,6 +335,25 @@ class GeneralPage(QWidget):
         if now - self._ui_t >= 0.066:       # graphics at 15 Hz, video every frame
             self._ui_t = now
             self._refresh()
+        if now - self._check_t >= 3.0:
+            self._check_t = now
+            self.refresh_checklist()
+
+    # ------------------------------------------------------------- get started
+    def refresh_checklist(self):
+        if self.hub.setting("checklist/hidden", False, bool):
+            self.checklist.hide()
+            return
+        now = time.monotonic()
+        if now - self._ac_root_t > 30.0:    # the registry lookup is not free: once every 30 s is plenty
+            self._ac_root, self._ac_root_t = find_ac_root(), now
+        items = first_run.checklist(self.hub, self._ac_root)
+        self.checklist.set_items(items)
+        self.checklist.setVisible(not first_run.all_done(items))
+
+    def _hide_checklist(self):
+        self.hub.settings.setValue("checklist/hidden", True)
+        self.checklist.hide()
 
     def _refresh(self):
         self._sync_cameras()

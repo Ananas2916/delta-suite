@@ -115,6 +115,17 @@ class TelemetryDB:
         ).fetchnumpy()
         return {c: np.asarray(res[c], dtype=np.float64) for c in CHANNELS}
 
+    def best_laps(self, car: str, track: str, limit: int = 10, exclude_session: int | None = None) -> list[dict]:
+        """Fastest valid laps ever driven with this car on this track (all sessions), fastest first."""
+        rows = self.con.execute(
+            """SELECT l.session_id, l.lap_no, l.lap_time_ms, s.started
+               FROM laps l JOIN sessions s ON s.id = l.session_id
+               WHERE s.car = ? AND s.track = ? AND l.valid AND l.lap_time_ms > 0 AND s.id IS DISTINCT FROM ?
+               ORDER BY l.lap_time_ms LIMIT ?""",
+            [car, track, exclude_session, limit],
+        ).fetchall()
+        return [dict(zip(("session_id", "lap_no", "lap_time_ms", "started"), r)) for r in rows]
+
     def delete_session(self, session_id: int) -> None:
         for table, col in (("samples", "session_id"), ("laps", "session_id"), ("sessions", "id")):
             self.con.execute(f"DELETE FROM {table} WHERE {col} = ?", [session_id])

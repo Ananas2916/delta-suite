@@ -53,7 +53,9 @@ class StrategyPage(QWidget):
         self.margin = dspin(0, 5, 1, 0.25, 2, "laps")
         self.pit_loss = dspin(5, 120, 25, 0.5, 1, "s")
         self.fuel_corr = dspin(0, 0.2, 0.025, 0.005, 3, "s/L")
-        self.live = QCheckBox("Update laps and fuel from live data")
+        self.live = QCheckBox("Take race, laps and fuel from the session")
+        self.live.setToolTip("Race type, total laps, time left, laps completed and fuel come from AC; "
+                             "untick to try your own numbers (what if)")
         self.live.setChecked(True)
         f2.addRow("Fuel on board", self.fuel_now)
         f2.addRow("Tank", self.tank)
@@ -106,6 +108,8 @@ class StrategyPage(QWidget):
         for w in (self.time_left, self.fuel_now, self.tank, self.per_lap, self.margin, self.pit_loss, self.fuel_corr):
             w.valueChanged.connect(self.recompute)
         self.auto_fuel.toggled.connect(self.recompute)
+        self.live.toggled.connect(self._on_live_toggled)
+        self.picker.currentIndexChanged.connect(lambda _: self._live_update())
         hub.lap_completed.connect(lambda _: self.recompute())
         hub.session_changed.connect(self._on_session)
 
@@ -118,14 +122,38 @@ class StrategyPage(QWidget):
         if info.get("max_fuel"):
             self.tank.setValue(float(info["max_fuel"]))
 
+    def _following_session(self) -> bool:
+        return self.live.isChecked() and self.picker.currentData() is None
+
+    def _on_live_toggled(self, _on: bool):
+        self._live_update()
+        self.recompute()
+
     def _live_update(self):
+        """With "from the session" ticked, the race inputs mirror AC: the fields become read-only."""
+        following = self._following_session()
+        self.race_type.setEnabled(not following)
+        for w in (self.race_laps, self.time_left, self.laps_done, self.fuel_now):
+            w.setReadOnly(following)
         s = self.hub.last_sample
-        if not self.live.isChecked() or s is None or self.picker.currentData() is not None:
+        if not following or s is None:
             return
-        self.fuel_now.blockSignals(True)
+        b = self.hub.bridge_state
+        prog = rs.race_progress_for(s, b.cars if b else [], self.hub.is_race,
+                                    self.hub.session_info.get("extra_lap", False))
+        timed = s.session_laps <= 0 and s.session_time_left > 0
+        widgets = (self.race_type, self.race_laps, self.time_left, self.laps_done, self.fuel_now)
+        for w in widgets:
+            w.blockSignals(True)
+        self.race_type.setCurrentIndex(1 if timed else 0)
+        if s.session_laps > 0:
+            self.race_laps.setValue(s.session_laps)
+        if s.session_time_left > 0:
+            self.time_left.setValue(s.session_time_left / 60000)
+        self.laps_done.setValue(max(0, prog.lap - 1) if prog is not None else s.completed_laps)
         self.fuel_now.setValue(s.fuel)
-        self.fuel_now.blockSignals(False)
-        self.laps_done.setValue(s.completed_laps)
+        for w in widgets:
+            w.blockSignals(False)
         self.recompute()
 
     def recompute(self):

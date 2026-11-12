@@ -6,7 +6,7 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSplitter,
+    QComboBox, QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSplitter,
     QVBoxLayout, QWidget,
 )
 
@@ -37,6 +37,12 @@ class AnalysisPage(QWidget):
         self.picker = SessionPicker(hub)
         self.picker.currentIndexChanged.connect(self._load_laps)
         ll.addWidget(self.picker)
+        ll.addWidget(label("Reference from the archive (same car and track)", "dim"))
+        self.ref = QComboBox()
+        self.ref.setToolTip("A lap from another session, e.g. your all-time best: it becomes the reference "
+                            "for Delta-T and is drawn first")
+        self.ref.currentIndexChanged.connect(lambda _: self._redraw())
+        ll.addWidget(self.ref)
         ll.addWidget(label(f"Laps (tick up to {MAX_LAPS}; the first is the reference)", "dim"))
         self.lap_list = QListWidget()
         self.lap_list.itemChanged.connect(self._on_check)
@@ -118,7 +124,24 @@ class AnalysisPage(QWidget):
             it.setData(Qt.ItemDataRole.UserRole, lap.lap_no)
             self.lap_list.addItem(it)
         self.lap_list.blockSignals(False)
+        self._fill_reference(info)
         self._redraw()
+
+    def _fill_reference(self, info):
+        """Best laps of the same car and track from other sessions."""
+        current = self.ref.currentData()
+        self.ref.blockSignals(True)
+        self.ref.clear()
+        self.ref.addItem("None", None)
+        car, track = (info or {}).get("car"), (info or {}).get("track")
+        if car and track:
+            sid = self.picker.selected()[2]
+            for b in self.hub.db.best_laps(car, track, limit=10, exclude_session=sid):
+                when = f"{b['started']:%d/%m %H:%M}" if b.get("started") else ""
+                self.ref.addItem(f"{fmt_ms(b['lap_time_ms'])}  ·  session #{b['session_id']} lap {b['lap_no']}  {when}",
+                                 (b["session_id"], b["lap_no"], b["lap_time_ms"]))
+        self.ref.setCurrentIndex(max(0, self.ref.findData(current)))
+        self.ref.blockSignals(False)
 
     def _on_live_lap(self, _lap):
         if self.picker.currentData() is None:
@@ -176,6 +199,13 @@ class AnalysisPage(QWidget):
         info, _, _ = self.picker.selected()
         order = self._checked()
         self._loaded = []
+        ref = self.ref.currentData()
+        if ref is not None:
+            sid, lap_no, lap_ms = ref
+            ch = self.hub.db.lap_channels(sid, lap_no)
+            if len(ch["t"]) >= 10:
+                self._loaded.append((f"Ref #{sid} lap {lap_no} {fmt_ms(lap_ms)}", clean_lap(ch, self._track_len(info)),
+                                     C["text"]))
         for i, lap_no in enumerate(order):
             ch = self._channels(lap_no)
             if ch is not None:

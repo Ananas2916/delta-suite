@@ -83,8 +83,9 @@ def test_claude_command_has_no_builtin_tools(monkeypatch):
     a.session_id = "s1"
     cmd, _, _ = a.command()
     assert cmd[cmd.index("--resume") + 1] == "s1"
-    codex_cmd, _, env = CLIAgent("codex", cfg).command()
-    assert env["DELTASUITE_MCP_TOKEN"] == "abc" and codex_cmd[-1] == "-"
+    custom_cmd, stdin, env = CLIAgent("custom", cfg, "my_agent.exe --ask {prompt}").command()
+    assert env["DELTASUITE_MCP_TOKEN"] == "abc" and env["DELTASUITE_MCP_URL"].endswith("/mcp")
+    assert custom_cmd == ["my_agent.exe", "--ask", "{prompt}"] and not stdin
 
 
 def test_claude_stream_parsing():

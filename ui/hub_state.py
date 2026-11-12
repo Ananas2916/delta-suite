@@ -8,7 +8,7 @@ import time
 
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
-from ai_engine.agent_cli import APIAgent, CLIAgent
+from ai_engine.agent_cli import BACKENDS, APIAgent, CLIAgent
 from ai_engine.mcp_server import MCPServer
 from ai_engine.lang import DEFAULT_VOICE, Language, language_of
 from ai_engine.race_calls import RaceContext
@@ -63,9 +63,15 @@ class HubState(QObject):
 
     def __init__(self):
         super().__init__()
-        self.settings = QSettings("DeltaSuite", "DeltaSuite")
+        selftest = os.environ.get("DELTA_SELFTEST")
+        if selftest:        # self-test: fresh settings and an in-memory archive, the real ones stay untouched
+            os.makedirs(selftest, exist_ok=True)
+            self.settings = QSettings(os.path.join(selftest, "settings.ini"), QSettings.Format.IniFormat)
+            self.settings.clear()
+        else:
+            self.settings = QSettings("DeltaSuite", "DeltaSuite")
         try:
-            self.db = TelemetryDB()
+            self.db = TelemetryDB(":memory:" if selftest else None)
             self.db_error = None
         except Exception as exc:   # e.g. DB locked by another hub instance
             self.db = TelemetryDB(":memory:")
@@ -89,6 +95,7 @@ class HubState(QObject):
         self.onboard_feed = OnboardFeed()
         self.track = TrackWatch()           # track line and yellow/red/blue zones of the session
         self.live_lap = LiveLap()           # splits and live delta of the current lap
+        self._archive_ref: LapData | None = None   # all-time best lap for this car and track (delta reference)
         self._ptt = False
         self._closed = False
 
@@ -223,7 +230,43 @@ class HubState(QObject):
         self.timing.reset()
         self.track = self._load_track(info)
         self.live_lap.reset(info.get("sector_count") or 3)
+        self._archive_ref = self._load_archive_reference(info)
+        self._update_reference()
         self.session_changed.emit(info)
+
+    # -------------------------------------------------------- reference lap
+    @property
+    def delta_vs_archive(self) -> bool:
+        """Live delta against the all-time best lap for this car and track instead of the session best."""
+        return self.setting("delta/archive", False, bool)
+
+    def set_delta_vs_archive(self, on: bool):
+        self.settings.setValue("delta/archive", on)
+        self._update_reference()
+
+    def _load_archive_reference(self, info: dict) -> LapData | None:
+        car, track = info.get("car"), info.get("track")
+        if not car or not track:
+            return None
+        try:
+            best = self.db.best_laps(car, track, limit=1)
+            if not best:
+                return None
+            b = best[0]
+            channels = self.db.lap_channels(b["session_id"], b["lap_no"])
+        except Exception:
+            return None
+        if len(channels.get("t", [])) < 10:
+            return None
+        return LapData(b["lap_no"], b["lap_time_ms"], True, [], 0.0, 0.0, [], [], [], [], 0.0, channels)
+
+    def _update_reference(self):
+        """Live delta reference: the session's best valid lap, or the archive best if faster and enabled."""
+        candidates = [l for l in self.laps if l.valid]
+        if self.delta_vs_archive and self._archive_ref is not None:
+            candidates.append(self._archive_ref)
+        if candidates:
+            self.live_lap.set_reference(min(candidates, key=lambda l: l.lap_time_ms))
 
     @staticmethod
     def _load_track(info: dict) -> TrackWatch:
@@ -241,9 +284,7 @@ class HubState(QObject):
             self.session_id = self.db.new_session(self.session_info)
         self.db.save_lap(self.session_id, lap)
         self.laps = self.laps + [lap]    # new list: MCP threads read without a lock
-        valid = [l for l in self.laps if l.valid]
-        if valid:                        # live delta against the best valid lap
-            self.live_lap.set_reference(min(valid, key=lambda l: l.lap_time_ms))
+        self._update_reference()
         self.lap_completed.emit(lap)
         self.db_changed.emit()
         if self.radio_active:
@@ -312,6 +353,9 @@ class HubState(QObject):
 
     def _handle_buttons(self, b: BridgeState):
         counts = (b.confirm_count, b.cancel_count)
+        pressed = b.ptt_down or (self._bridge_counts is not None and counts != self._bridge_counts)
+        if pressed and not self.setting("checklist/wheel_used", False, bool):
+            self.settings.setValue("checklist/wheel_used", True)     # a wheel button works: bound
         if self._bridge_counts is not None:
             if counts[0] != self._bridge_counts[0]:
                 self.confirm_latest()
@@ -392,6 +436,8 @@ class HubState(QObject):
     # ------------------------------------------------------- AI engineer
     def _make_agent(self):
         backend = self.setting("engineer/backend", "claude")
+        if backend not in BACKENDS:     # e.g. "codex"/"antigravity", removed in 0.6.0
+            backend = "claude"
         if backend == "api":
             from ai_engine.race_engineer_agent import RaceEngineer, build_stint_summary
             key = self.setting("api_key", "") or None

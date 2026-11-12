@@ -8,7 +8,8 @@ import sys
 from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QScrollArea,
+    QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QScrollArea,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -110,6 +111,7 @@ class MainWindow(QMainWindow):
 
         self.general.open_module.connect(self.open_page)
         self.general.start_demo.connect(self.telemetry.start_demo)     # the demo starts while staying on the Overview
+        self.general.checklist_action.connect(self._on_checklist)
 
         self.status_label = QLabel("Ready")
         self.statusBar().addWidget(self.status_label, 1)
@@ -152,6 +154,27 @@ class MainWindow(QMainWindow):
                 "engineer": "Engineer mode: live adjustments and setup from the Pit & Setup page",
                 "analysis": "Analysis mode: lap comparison and archive, radio off"}
         self.statusBar().showMessage(tips[mode], 5000)
+
+    def _on_checklist(self, key: str):
+        """Buttons of the get-started list on the Overview."""
+        if key == "install_csp":
+            try:
+                path = csp_bridge.install_app()
+            except Exception as exc:
+                QMessageBox.warning(self, "Installation", f"Installation failed:\n{exc}")
+            else:
+                QMessageBox.information(
+                    self, "CSP app installed",
+                    f"App copied to:\n{path}\n\nRestart the AC session to load it. In game, open 'Delta Suite "
+                    "Bridge' from the app bar to bind the wheel buttons (radio, confirm, discard).")
+        elif key == "open_telemetry":
+            self.open_page("telemetry")
+        elif key in ("open_engineer", "download_voice"):
+            self.open_page("engineer")
+            self.engineer.tabs.setCurrentIndex(2)
+            if key == "download_voice":
+                self.engineer.download_voice()
+        self.general.refresh_checklist()
 
     def _start_demo(self):
         self.open_page("telemetry")

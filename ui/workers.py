@@ -96,9 +96,17 @@ class TelemetryWorker(QThread):
                     break
 
                 now = time.perf_counter()
-                if self.bridge is not None and now >= next_bridge:
+                if now >= next_bridge:
                     next_bridge = now + 0.1
-                    self.bridge_state.emit(self.bridge.read())
+                    if self.bridge is not None:
+                        state = self.bridge.read()
+                        if state is not None and recorder is not None and state.cars:
+                            recorder.write_cars(state.cars, now)
+                        self.bridge_state.emit(state)
+                    elif hasattr(src, "bridge_state"):        # replay of a recording with the rivals
+                        state = src.bridge_state()
+                        if state is not None:
+                            self.bridge_state.emit(state)
 
                 next_tick += period
                 delay = next_tick - time.perf_counter()
@@ -112,6 +120,7 @@ class TelemetryWorker(QThread):
         src.disconnect()
         if self.bridge is not None:
             self.bridge.disconnect()
+        if self.bridge is not None or hasattr(src, "bridge_state"):
             self.bridge_state.emit(None)
         if not src.finished:
             self.status.emit("Acquisition stopped", False)
