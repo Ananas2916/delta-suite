@@ -1,4 +1,4 @@
-"""Analisi curva per curva tra giri: dove si perde tempo, frenata, velocità minima, gas."""
+"""Corner-by-corner analysis between laps: where time is lost, braking, minimum speed, throttle."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import numpy as np
 
 
 def clean_lap(ch: dict, track_len: float) -> dict:
-    """Toglie i campioni di inizio giro ancora a fine pista e rende la distanza monotona."""
+    """Drop lap-start samples still at the end of the track and make the distance monotonic."""
     d, t = ch["dist"], ch["t"]
     keep = ~((d > 0.5 * track_len) & (t < 5.0)) & ~((d < 0.1 * track_len) & (t > 20.0))
     out = {k: v[keep] for k, v in ch.items()}
@@ -16,7 +16,7 @@ def clean_lap(ch: dict, track_len: float) -> dict:
         return out
     out["dist"] = np.maximum.accumulate(out["dist"])
     d0, t0 = out["dist"][0], out["t"][0]
-    if d0 > 0:   # punto sintetico sulla linea del via, altrimenti il Delta-T parte con un gradino
+    if d0 > 0:   # synthetic point on the start line, otherwise the Delta-T starts with a step
         out = {k: np.concatenate([v[:1], v]) for k, v in out.items()}
         out["dist"][0] = 0.0
         out["t"][0] = max(0.0, t0 - d0 / max(out["speed"][1] / 3.6, 1.0))
@@ -39,7 +39,7 @@ class Corner:
 
 def find_corners(speed: np.ndarray, grid: np.ndarray, min_drop_kmh: float = 12.0,
                  min_gap_m: float = 120.0) -> list[Corner]:
-    """Curve = minimi locali di velocità con una frenata/ripresa di almeno `min_drop_kmh` attorno."""
+    """Corners = local speed minima with braking/acceleration of at least `min_drop_kmh` around them."""
     step = float(grid[1] - grid[0])
     k = max(1, int(25.0 / step))
     v = np.convolve(np.pad(speed, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
@@ -78,18 +78,18 @@ def corner_stats(r: dict, grid: np.ndarray, c: Corner) -> dict:
     b = _first(brake[:apex_i + 1] > 0.15)
     th = _first(gas[apex_i:] > 0.9)
     return {
-        "tempo_s": float(t[-1] - t[0]),
+        "time_s": float(t[-1] - t[0]),
         "v_min_kmh": float(v[apex_i]),
-        "v_ingresso_kmh": float(v[0]),
-        "v_uscita_kmh": float(v[-1]),
-        "frenata_a_m": None if b is None else float(g[b]),
-        "freno_max": float(brake.max()),
-        "gas_pieno_a_m": None if th is None else float(g[apex_i + th]),
+        "v_entry_kmh": float(v[0]),
+        "v_exit_kmh": float(v[-1]),
+        "braking_at_m": None if b is None else float(g[b]),
+        "brake_max": float(brake.max()),
+        "full_throttle_at_m": None if th is None else float(g[apex_i + th]),
     }
 
 
 def compare_laps(ref: dict, other: dict, track_len: float, step_m: float = 5.0) -> dict:
-    """Confronto curva per curva di `other` rispetto a `ref` (canali da LapData/DB, già puliti o no)."""
+    """Corner-by-corner comparison of `other` against `ref` (channels from LapData/DB, cleaned or not)."""
     ref, other = clean_lap(ref, track_len), clean_lap(other, track_len)
     end = min(ref["dist"][-1], other["dist"][-1], track_len)
     grid = np.arange(0.0, end, step_m)
@@ -104,18 +104,18 @@ def compare_laps(ref: dict, other: dict, track_len: float, step_m: float = 5.0) 
             return None if a[key] is None or b[key] is None else round(b[key] - a[key], 3)
 
         out.append({
-            "curva": c.number, "apice_m": round(c.apex_m), "da_m": round(c.start_m), "a_m": round(c.end_m),
-            "tempo_perso_s": round(b["tempo_s"] - a["tempo_s"], 3),
+            "corner": c.number, "apex_m": round(c.apex_m), "from_m": round(c.start_m), "to_m": round(c.end_m),
+            "time_lost_s": round(b["time_s"] - a["time_s"], 3),
             "v_min_kmh": [round(a["v_min_kmh"], 1), round(b["v_min_kmh"], 1)],
-            "frenata_a_m": [a["frenata_a_m"], b["frenata_a_m"]],
-            "frenata_anticipata_m": None if diff("frenata_a_m") is None else -diff("frenata_a_m"),
-            "gas_pieno_a_m": [a["gas_pieno_a_m"], b["gas_pieno_a_m"]],
-            "v_uscita_kmh": [round(a["v_uscita_kmh"], 1), round(b["v_uscita_kmh"], 1)],
+            "braking_at_m": [a["braking_at_m"], b["braking_at_m"]],
+            "braking_earlier_m": None if diff("braking_at_m") is None else -diff("braking_at_m"),
+            "full_throttle_at_m": [a["full_throttle_at_m"], b["full_throttle_at_m"]],
+            "v_exit_kmh": [round(a["v_exit_kmh"], 1), round(b["v_exit_kmh"], 1)],
         })
-    worst = sorted(out, key=lambda x: x["tempo_perso_s"], reverse=True)
+    worst = sorted(out, key=lambda x: x["time_lost_s"], reverse=True)
     return {
-        "delta_finale_s": round(float(delta[-1]), 3),
-        "curve": out,
-        "dove_perdi_di_piu": [w["curva"] for w in worst[:3] if w["tempo_perso_s"] > 0.02],
-        "nota": "valori a coppie: [riferimento, giro confrontato]; tempo_perso_s > 0 = il giro confrontato è più lento",
+        "final_delta_s": round(float(delta[-1]), 3),
+        "corners": out,
+        "where_you_lose_most": [w["corner"] for w in worst[:3] if w["time_lost_s"] > 0.02],
+        "note": "paired values: [reference, compared lap]; time_lost_s > 0 = the compared lap is slower",
     }

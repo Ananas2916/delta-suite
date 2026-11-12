@@ -41,7 +41,7 @@ def test_every_phrase_in_every_language_takes_its_placeholders():
             if isinstance(text, tuple):
                 continue
             for variant in text.split("|"):
-                variant.format(**ARGS)          # nessun segnaposto sconosciuto o mancante
+                variant.format(**ARGS)          # no unknown or missing placeholder
     for lg in LANGUAGES.values():
         assert len(lg.phrases["zones"]) == 5 and len(lg.phrases["places"]) == 2
 
@@ -71,24 +71,24 @@ def test_position_changes_are_confirmed_and_not_repeated():
     r = RadioRules(lang=IT, seed=1)
     said = lambda t, pos, **kw: texts(r.on_sample(race_sample(**{**kw, "position": pos}), None, ctx(t)))  # noqa: E731
     assert said(0.0, 4) == []
-    assert said(1.0, 3) == []                 # appena cambiata: si aspetta che resti
+    assert said(1.0, 3) == []                 # just changed: wait for it to hold
     assert any("P3" in t for t in said(4.0, 3))
-    assert said(5.0, 2) == [] and said(8.0, 2) == []     # confermata ma troppo presto dopo l'ultima chiamata
-    assert said(20.0, 3) == [] and any("P3" in t for t in said(23.0, 3))   # da P2 a P3: posizione persa
+    assert said(5.0, 2) == [] and said(8.0, 2) == []     # confirmed but too soon after the last call
+    assert said(20.0, 3) == [] and any("P3" in t for t in said(23.0, 3))   # from P2 to P3: position lost
     pit = dict(is_in_pit=True, pit_limiter=True)
-    assert said(31.0, 5, **pit) == [] and said(40.0, 5, **pit) == []   # soste: zitto
+    assert said(31.0, 5, **pit) == [] and said(40.0, 5, **pit) == []   # pit stops: quiet
 
 
 def test_rivals_close_and_pitting():
     r = RadioRules(lang=IT, seed=1)
     rows = [row(3, 7), row(4, 0, interval=1.8, me=True), row(5, 9, interval=0.8)]
     msgs = texts(r.on_sample(race_sample(), None, ctx(0.0, rows=rows)))
-    assert any("0 e 8" in t for t in msgs)                 # auto dietro sotto il secondo
-    assert r.on_sample(race_sample(), None, ctx(10.0, rows=rows)) == []      # già detto
+    assert any("0 e 8" in t for t in msgs)                 # car behind within a second
+    assert r.on_sample(race_sample(), None, ctx(10.0, rows=rows)) == []      # already said
     rows[2] = row(5, 9, interval=2.0)
-    r.on_sample(race_sample(), None, ctx(20.0, rows=rows))                   # si allontana...
+    r.on_sample(race_sample(), None, ctx(20.0, rows=rows))                   # it drops back...
     rows[2] = row(5, 9, interval=0.7)
-    assert texts(r.on_sample(race_sample(), None, ctx(30.0, rows=rows))) == []   # ...ma meno di 45 s fa
+    assert texts(r.on_sample(race_sample(), None, ctx(30.0, rows=rows))) == []   # ...but less than 45 s ago
     assert any("0 e 7" in t for t in texts(r.on_sample(race_sample(), None, ctx(80.0, rows=rows))))
     rows[0] = row(3, 7, in_pit=True)
     assert any("ai box" in t for t in texts(r.on_sample(race_sample(), None, ctx(81.0, rows=rows))))
@@ -110,7 +110,7 @@ def test_puncture_worn_tyres_and_limiter():
     assert "Foratura anteriore destra! Box, box." in texts(r.on_sample(flat, {}, ctx(0.0)))
     assert r.on_sample(flat, {}, ctx(1.0)) == []
     worn = race_sample(tyre_wear=(91.0, 91.0, 99.0, 99.0))
-    assert len([t for t in texts(r.on_sample(worn, {}, ctx(2.0))) if "gomme" in t.lower()]) == 1   # una sola
+    assert len([t for t in texts(r.on_sample(worn, {}, ctx(2.0))) if "gomme" in t.lower()]) == 1   # only one
     pit = dict(is_in_pit=True, speed_kmh=90.0, pit_limiter=False)
     r.on_sample(race_sample(**pit), {}, ctx(10.0))
     assert any("imitatore" in t for t in texts(r.on_sample(race_sample(**pit), {}, ctx(12.0))))
@@ -125,7 +125,7 @@ def test_yellow_ahead_then_track_clear():
     assert r.on_sample(race_sample(), None, ctx(1.0, zone_ahead=(zone, 200.0))) == []
     assert r.on_sample(race_sample(), None, ctx(2.0)) == []
     assert any("Pista libera" in t or "pista libera" in t for t in texts(r.on_sample(race_sample(), None, ctx(7.0))))
-    # la gialla di AC non si ripete a voce se ci sono le auto: la chiamata è quella con la distanza
+    # AC's yellow is not repeated by voice when the cars are known: the call is the one with the distance
     assert texts(r.on_sample(race_sample(flag=ACFlag.YELLOW), None, ctx(8.0))) == []
     assert texts(RadioRules(lang=IT).on_sample(race_sample(flag=ACFlag.YELLOW), None, None)) == ["Bandiera gialla."]
 
@@ -155,6 +155,6 @@ def test_gap_trend_fastest_lap_and_fuel():
     assert any("Giro più veloce" in t or "giro più veloce" in t for t in msgs)
     gaps = next(t for t in msgs if t.startswith("Distacchi"))
     assert "recuperi 3 decimi al giro" in gaps and "guadagni 4 decimi al giro" in gaps
-    assert any("risparmia" in t or "risparmiare" in t for t in msgs)       # 44 L per 20 giri da 3 L: non basta
+    assert any("risparmia" in t or "risparmiare" in t for t in msgs)       # 44 L for 20 laps at 3 L: not enough
     laps.append(lap(3, 90800, 44.0, 41.0))
     assert any("a posto" in t for t in texts(r.on_lap(laps[2], laps, rows, race=True, to_go=12)))

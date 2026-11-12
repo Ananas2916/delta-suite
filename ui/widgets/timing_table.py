@@ -1,4 +1,4 @@
-"""Classifica compatta (posizione, pilota, distacco, intervallo, ultimo giro); clic su una riga → car_clicked."""
+"""Compact standings (position, driver, gap, interval, last lap); click on a row → car_clicked."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from ui.widgets import table_item
 
 
 class TimingTable(QTableWidget):
-    """Classifica compatta come le torri dei tempi in TV: posizione, pilota, distacco dal primo, intervallo
-    dall'auto davanti, ultimo giro.
-    Un segno colorato a sinistra indica le auto nei riquadri; clic su una riga → riquadro principale."""
+    """Compact standings like TV timing towers: position, driver, gap to the leader, interval
+    to the car ahead, last lap.
+    A coloured mark on the left shows the cars in the views; click on a row → main view."""
 
     car_clicked = pyqtSignal(int)
 
     def __init__(self):
         super().__init__(0, 5)
-        self.setHorizontalHeaderLabels(["P", "Pilota", "Distacco", "Int", "Ultimo"])
+        self.setHorizontalHeaderLabels(["P", "Driver", "Gap", "Int", "Last"])
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(22)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -36,7 +36,7 @@ class TimingTable(QTableWidget):
                                  if row < len(self._indices) else None)
 
     def fill(self, rows: list[tuple[int, str, str, str, str, str, bool, str | None]]):
-        """rows: (indice auto, posizione, pilota, distacco, intervallo, ultimo, sei tu, colore del riquadro o
+        """rows: (car index, position, driver, gap, interval, last, is you, view colour or
         None)."""
         self._indices = [r[0] for r in rows]
         self.setRowCount(len(rows))

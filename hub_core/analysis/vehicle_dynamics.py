@@ -1,6 +1,6 @@
 """
-Dinamica veicolo: pneumatico Pacejka (Magic Formula), trasferimenti di carico,
-cinematica sospensione a quadrilatero (vista frontale).
+Vehicle dynamics: Pacejka tyre (Magic Formula), load transfer,
+double-wishbone suspension kinematics (front view).
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ G = 9.81
 
 @dataclass
 class PacejkaParams:
-    """Magic Formula semplificata con sensibilità al carico.
+    """Simplified Magic Formula with load sensitivity.
 
     F = Fz * mu(Fz) * sin(C * atan(B*x - E*(B*x - atan(B*x))))
-    mu(Fz) = mu0 * (1 + load_sens * (Fz - Fz0) / Fz0)   (load_sens < 0 => meno grip per kg)
+    mu(Fz) = mu0 * (1 + load_sens * (Fz - Fz0) / Fz0)   (load_sens < 0 => less grip per kg)
     """
 
     B: float = 10.0
@@ -28,21 +28,21 @@ class PacejkaParams:
     mu0: float = 1.6
     E: float = 0.97
     load_sens: float = -0.12
-    Fz0: float = 4000.0     # N, carico nominale
+    Fz0: float = 4000.0     # N, nominal load
 
     def mu(self, fz):
         return self.mu0 * (1.0 + self.load_sens * (np.asarray(fz) - self.Fz0) / self.Fz0)
 
 
 def magic_formula(x, fz, p: PacejkaParams):
-    """Forza (N) in funzione dello slip x (angolo in rad oppure slip ratio)."""
+    """Force (N) as a function of slip x (angle in rad or slip ratio)."""
     x = np.asarray(x, dtype=float)
     bx = p.B * x
     return fz * p.mu(fz) * np.sin(p.C * np.arctan(bx - p.E * (bx - np.arctan(bx))))
 
 
 def peak_slip(fz: float, p: PacejkaParams, x_max: float = 0.5) -> tuple[float, float]:
-    """Slip al picco di forza e forza di picco (ricerca numerica)."""
+    """Slip at peak force and peak force (numerical search)."""
     x = np.linspace(0.0, x_max, 4001)
     f = magic_formula(x, fz, p)
     i = int(np.argmax(f))
@@ -50,7 +50,7 @@ def peak_slip(fz: float, p: PacejkaParams, x_max: float = 0.5) -> tuple[float, f
 
 
 def combined_forces(alpha, kappa, fz, p_lat: PacejkaParams, p_long: PacejkaParams):
-    """Slip combinato con ellisse d'attrito sullo slip normalizzato (modello di Brach-like)."""
+    """Combined slip with a friction ellipse on normalised slip (Brach-like model)."""
     a_pk, _ = peak_slip(fz, p_lat, 0.5)
     k_pk, _ = peak_slip(fz, p_long, 0.5)
     sa, sk = np.asarray(alpha) / a_pk, np.asarray(kappa) / k_pk
@@ -61,18 +61,18 @@ def combined_forces(alpha, kappa, fz, p_lat: PacejkaParams, p_long: PacejkaParam
     return fx, fy
 
 
-# ------------------------------------------------------- trasferimenti di carico
+# ------------------------------------------------------------------ load transfer
 
 @dataclass
 class VehicleParams:
-    mass: float = 1300.0            # kg con pilota e carburante
+    mass: float = 1300.0            # kg with driver and fuel
     cg_height: float = 0.45         # m
     wheelbase: float = 2.65         # m
     track_f: float = 1.62           # m
     track_r: float = 1.58           # m
-    weight_dist_f: float = 0.47     # frazione sull'anteriore
-    roll_stiff_dist_f: float = 0.55 # frazione rigidezza a rollio anteriore
-    rc_height_f: float = 0.04       # m, centro di rollio anteriore
+    weight_dist_f: float = 0.47     # front fraction
+    roll_stiff_dist_f: float = 0.55 # front roll stiffness fraction
+    rc_height_f: float = 0.04       # m, front roll centre
     rc_height_r: float = 0.08       # m
     cl_a: float = 2.4               # m^2 (CL * area)
     cd_a: float = 0.85              # m^2
@@ -88,14 +88,14 @@ class WheelLoads:
     rr: float
     downforce: float
     drag: float
-    lltd_f: float   # quota di trasferimento laterale sull'anteriore
+    lltd_f: float   # front share of lateral load transfer
 
     def as_list(self):
         return [self.fl, self.fr, self.rl, self.rr]
 
 
 def wheel_loads(v: VehicleParams, ay_g: float, ax_g: float, speed_kmh: float) -> WheelLoads:
-    """Carichi verticali stazionari. ay > 0 = curva a sinistra (carica le ruote destre)."""
+    """Steady-state vertical loads. ay > 0 = left-hand corner (loads the right wheels)."""
     w = v.mass * G
     vms = speed_kmh / 3.6
     q = 0.5 * v.air_density * vms * vms
@@ -105,11 +105,11 @@ def wheel_loads(v: VehicleParams, ay_g: float, ax_g: float, speed_kmh: float) ->
     front = w * v.weight_dist_f + df * v.aero_balance_f
     rear = w * (1 - v.weight_dist_f) + df * (1 - v.aero_balance_f)
 
-    d_long = v.mass * ax_g * G * v.cg_height / v.wheelbase   # ax > 0 = accelerazione
+    d_long = v.mass * ax_g * G * v.cg_height / v.wheelbase   # ax > 0 = acceleration
     front -= d_long
     rear += d_long
 
-    a = v.wheelbase * (1 - v.weight_dist_f)                 # distanza CG dall'asse anteriore
+    a = v.wheelbase * (1 - v.weight_dist_f)                 # CG distance from the front axle
     h_ra = v.rc_height_f + (v.rc_height_r - v.rc_height_f) * a / v.wheelbase
     fy = v.mass * ay_g * G
     roll_moment = fy * (v.cg_height - h_ra)
@@ -126,11 +126,11 @@ def wheel_loads(v: VehicleParams, ay_g: float, ax_g: float, speed_kmh: float) ->
     )
 
 
-# --------------------------------------------- cinematica quadrilatero (vista frontale)
+# --------------------------------------------- double-wishbone kinematics (front view)
 
 @dataclass
 class WishboneGeometry:
-    """Punti in mm, vista frontale, lato destro: y laterale dall'asse vettura, z verticale da terra."""
+    """Points in mm, front view, right side: y lateral from the car centreline, z vertical from the ground."""
 
     lower_in: tuple[float, float] = (230.0, 120.0)
     lower_out: tuple[float, float] = (720.0, 110.0)
@@ -143,8 +143,8 @@ class WishboneGeometry:
 class KinematicsResult:
     instant_center: tuple[float, float] | None
     roll_center_height: float | None    # mm
-    fvsa_length: float | None           # mm, braccio oscillante virtuale
-    camber_gain: float | None           # deg di camber per mm di scuotimento
+    fvsa_length: float | None           # mm, virtual swing arm
+    camber_gain: float | None           # deg of camber per mm of bump
 
 
 def _line_intersection(p1, p2, p3, p4):
@@ -162,7 +162,7 @@ def _line_intersection(p1, p2, p3, p4):
 
 def wishbone_kinematics(g: WishboneGeometry) -> KinematicsResult:
     ic = _line_intersection(g.lower_in, g.lower_out, g.upper_in, g.upper_out)
-    if ic is None:  # bracci paralleli: IC all'infinito, nessun recupero di camber
+    if ic is None:  # parallel arms: IC at infinity, no camber gain
         return KinematicsResult(None, None, None, 0.0)
     contact = (g.half_track, 0.0)
     rc = _line_intersection(contact, ic, (0.0, -1.0), (0.0, 1.0))

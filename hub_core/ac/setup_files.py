@@ -1,4 +1,4 @@
-"""File di setup di AC: Documenti\\Assetto Corsa\\setups\\<auto>\\<pista>\\*.ini."""
+"""AC setup files: Documents\\Assetto Corsa\\setups\\<car>\\<track>\\*.ini."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def documents_dir() -> Path:
-    """Cartella Documenti vera (spesso rediretta su OneDrive), come la usa AC."""
+    """The real Documents folder (often redirected to OneDrive), as AC uses it."""
     if hasattr(ctypes, "windll"):
         buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
         if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:   # CSIDL_PERSONAL
@@ -23,7 +23,7 @@ def setups_dir(car_id: str | None = None) -> Path:
 
 
 def read_setup(path: str | Path) -> dict[str, int]:
-    """{SEZIONE: VALUE} per le voci numeriche del file."""
+    """{SECTION: VALUE} for the numeric entries of the file."""
     cp = configparser.ConfigParser(strict=False, interpolation=None)
     cp.optionxform = str
     cp.read(path, encoding="utf-8")
@@ -40,14 +40,14 @@ def read_setup(path: str | Path) -> dict[str, int]:
 
 
 def latest_setup(car_id: str) -> Path | None:
-    """Setup salvato più di recente per l'auto (AC scrive 'last.ini' a ogni uscita dal box)."""
+    """Most recently saved setup for the car (AC writes 'last.ini' every time you leave the pits)."""
     d = setups_dir(car_id)
     files = list(d.rglob("*.ini")) if d.is_dir() else []
     return max(files, key=lambda f: f.stat().st_mtime) if files else None
 
 
 def write_setup(path: str | Path, base: str | Path | None, changes: dict[str, int], car_id: str) -> Path:
-    """Scrive un setup: copia di `base` con le voci di `changes` modificate (formato INI di AC)."""
+    """Write a setup: a copy of `base` with the entries in `changes` modified (AC INI format)."""
     cp = configparser.ConfigParser(strict=False, interpolation=None)
     cp.optionxform = str
     if base:

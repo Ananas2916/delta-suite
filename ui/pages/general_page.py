@@ -1,9 +1,9 @@
 """
-Generale: tutto insieme, come al muretto (o in direzione gara, ma per la squadra).
+Overview: everything at once, like on the pit wall (or in race control, but for the team).
 
-Onboard principale con grafica TV, classifica, GPS, stato vettura e avvisi, carburante e strategia,
-batteria delle ibride, radio e proposte dell'ingegnere da confermare. Il video usa lo stesso collegamento
-della pagina Onboard (`hub.onboard_feed`), solo mentre questa pagina si vede.
+Main onboard with TV graphics, standings, GPS, car status and alerts, fuel and strategy,
+hybrid battery, radio and the engineer's proposals to confirm. The video uses the same link
+as the Onboard page (`hub.onboard_feed`), only while this page is visible.
 """
 
 from __future__ import annotations
@@ -35,17 +35,17 @@ from ui.widgets.timing_table import TimingTable
 from ui.widgets.view_panel import ViewPanel
 
 SESSION_NAMES = {
-    ACSessionType.PRACTICE: "Prove libere", ACSessionType.QUALIFY: "Qualifica", ACSessionType.RACE: "Gara",
+    ACSessionType.PRACTICE: "Practice", ACSessionType.QUALIFY: "Qualifying", ACSessionType.RACE: "Race",
     ACSessionType.HOTLAP: "Hotlap", ACSessionType.TIME_ATTACK: "Time attack", ACSessionType.DRIFT: "Drift",
     ACSessionType.DRAG: "Drag",
 }
-FLAG_STYLES = {   # tipo di bandiera: (sfondo, testo scuro)
+FLAG_STYLES = {   # flag kind: (background, dark text)
     "yellow": (C["yellow"], True), "red": (C["red"], False), "blue": (C["blue"], False), "green": (C["green"], True),
     "black": ("#000000", False), "white": ("#ffffff", True), "checkered": ("#ffffff", True),
     "penalty": (C["red"], False),
 }
-WHO_COLORS = {"radio": C["blue"], "pilota": C["green"], "ingegnere": C["purple"], "sistema": C["dim"]}
-WHO_NAMES = {"radio": "Radio", "pilota": "Pilota", "ingegnere": "Ingegnere", "sistema": "Sistema"}
+WHO_COLORS = {"radio": C["blue"], "driver": C["green"], "engineer": C["purple"], "system": C["dim"]}
+WHO_NAMES = {"radio": "Radio", "driver": "Driver", "engineer": "Engineer", "system": "System"}
 RADIO_LINES = 60
 
 
@@ -82,9 +82,9 @@ class GeneralPage(QWidget):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
 
-        # --- testata: sessione, bandiera, comandi
+        # --- header: session, flag, controls
         head = QHBoxLayout()
-        head.addWidget(label("Generale", "h1"))
+        head.addWidget(label("Overview", "h1"))
         head.addSpacing(12)
         self.session = label("", "dim")
         head.addWidget(self.session)
@@ -94,33 +94,33 @@ class GeneralPage(QWidget):
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)
         self.video_btn.setChecked(hub.setting("onboard/video", True, bool))
-        self.video_btn.setToolTip("Video onboard da AC (stessa impostazione della pagina Onboard)")
+        self.video_btn.setToolTip("Onboard video from AC (same setting as the Onboard page)")
         self.video_btn.toggled.connect(self._on_video_toggled)
         self._video_label()
-        self.demo_btn = QPushButton("Avvia demo")
+        self.demo_btn = QPushButton("Start demo")
         self.demo_btn.clicked.connect(self.start_demo)
-        self.tele_btn = QPushButton("Telemetria")
+        self.tele_btn = QPushButton("Telemetry")
         self.tele_btn.setObjectName("primary")
-        self.tele_btn.setToolTip("Avvia o ferma l'acquisizione da AC, demo o replay")
+        self.tele_btn.setToolTip("Start or stop the acquisition from AC, demo or replay")
         self.tele_btn.clicked.connect(lambda: self.open_module.emit("telemetry"))
         for w in (self.video_btn, self.demo_btn, self.tele_btn):
             head.addWidget(w)
         root.addLayout(head)
         if hub.db_error:
-            root.addWidget(label(f"<span style='color:{C['yellow']}'>Archivio non disponibile ({hub.db_error}): "
-                                 "i dati di questa sessione restano solo in memoria.</span>"))
+            root.addWidget(label(f"<span style='color:{C['yellow']}'>Archive not available ({hub.db_error}): "
+                                 "this session's data stays in memory only.</span>"))
 
-        # --- numeri
+        # --- numbers
         tiles = QHBoxLayout()
-        self.t_pos = ValueTile("Posizione", "-", 20)
-        self.t_lap = ValueTile("Giro", "-", 20)
-        self.t_cur = LapTimeTile()          # tempo, delta live sul migliore e parziali
-        self.t_last = ValueTile("Ultimo", "--:--.---", 20)
-        self.t_best = ValueTile("Migliore", "--:--.---", 20)
-        self.t_fuel = ValueTile("Carburante", "-- L", 20)
-        self.t_left = ValueTile("Mancano", "—", 20)
+        self.t_pos = ValueTile("Position", "-", 20)
+        self.t_lap = ValueTile("Lap", "-", 20)
+        self.t_cur = LapTimeTile()          # time, live delta to the best and splits
+        self.t_last = ValueTile("Last", "--:--.---", 20)
+        self.t_best = ValueTile("Best", "--:--.---", 20)
+        self.t_fuel = ValueTile("Fuel", "-- L", 20)
+        self.t_left = ValueTile("To go", "—", 20)
         for t in (self.t_pos, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel, self.t_left):
-            if t is not self.t_cur:     # stessa altezza del riquadro del tempo, che ha i parziali sotto
+            if t is not self.t_cur:     # same height as the time tile, which has the splits below
                 t.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             tiles.addWidget(t, 2 if t is self.t_cur else 1)
         root.addLayout(tiles)
@@ -128,7 +128,7 @@ class GeneralPage(QWidget):
         body = QHBoxLayout()
         body.setSpacing(12)
 
-        # --- colonna 1: onboard principale, sotto stato vettura e avvisi
+        # --- column 1: main onboard, below it car status and alerts
         col1 = QVBoxLayout()
         col1.setSpacing(10)
         self.panel = ViewPanel(0)
@@ -137,7 +137,7 @@ class GeneralPage(QWidget):
         self.panel.changed.connect(self._on_panel_changed)
         self.panel.view.setMinimumSize(400, 225)
         col1.addWidget(self.panel, 3)
-        car_card, cl = _card("STATO VETTURA")
+        car_card, cl = _card("CAR STATUS")
         row = QHBoxLayout()
         self.car_view = CarStatusView()
         self.car_view.setMinimumSize(270, 250)
@@ -156,36 +156,36 @@ class GeneralPage(QWidget):
         col1.addWidget(car_card, 2)
         body.addLayout(col1, 5)
 
-        # --- colonna 2: classifica e GPS
+        # --- column 2: standings and GPS
         col2 = QVBoxLayout()
         col2.setSpacing(10)
-        timing_card, tl = _card("CLASSIFICA")
+        timing_card, tl = _card("STANDINGS")
         self.timing = TimingTable()
-        self.timing.setToolTip("Clic su un'auto per vederla nell'onboard")
+        self.timing.setToolTip("Click a car to watch it in the onboard")
         self.timing.car_clicked.connect(self._on_car_click)
         tl.addWidget(self.timing, 1)
         col2.addWidget(timing_card, 1)
-        gps_card, gl = _card("GPS · POSIZIONE IN PISTA")
+        gps_card, gl = _card("GPS · TRACK POSITION")
         self.gps = GPSView()
-        self.gps.setToolTip("Clic su un'auto per vederla nell'onboard")
+        self.gps.setToolTip("Click a car to watch it in the onboard")
         self.gps.car_clicked.connect(self._on_car_click)
         gl.addWidget(self.gps, 1)
         col2.addWidget(gps_card, 1)
         body.addLayout(col2, 3)
 
-        # --- colonna 3: strategia e batteria, proposte, radio
+        # --- column 3: strategy and battery, proposals, radio
         col3 = QVBoxLayout()
         col3.setSpacing(10)
-        strat_card, sl = _card("STRATEGIA")
+        strat_card, sl = _card("STRATEGY")
         self.strategy = label("", "dim")
         self.strategy.setTextFormat(Qt.TextFormat.RichText)
         sl.addWidget(self.strategy)
         col3.addWidget(strat_card)
-        self.hybrid = HybridCard("BATTERIA")
+        self.hybrid = HybridCard("BATTERY")
         col3.addWidget(self.hybrid)
-        prop_card, self._prop_lay = _card("PROPOSTE DELL'INGEGNERE")
+        prop_card, self._prop_lay = _card("ENGINEER PROPOSALS")
         self._prop_rows: list[QWidget] = []
-        self.no_props = label("Nessuna proposta in attesa", "dim")
+        self.no_props = label("No pending proposals", "dim")
         self._prop_lay.addWidget(self.no_props)
         col3.addWidget(prop_card)
         radio_card, rl = _card("RADIO")
@@ -213,13 +213,13 @@ class GeneralPage(QWidget):
         self.timer.timeout.connect(self._tick)
         self.timer.start(33)
 
-    # ------------------------------------------------------------- controlli
+    # ------------------------------------------------------------- controls
     @property
     def feed(self):
         return self.hub.onboard_feed
 
     def _video_label(self):
-        self.video_btn.setText("Video acceso" if self.video_btn.isChecked() else "Video spento")
+        self.video_btn.setText("Video on" if self.video_btn.isChecked() else "Video off")
 
     def _on_video_toggled(self, on: bool):
         self.hub.settings.setValue("onboard/video", on)
@@ -237,7 +237,7 @@ class GeneralPage(QWidget):
         self._on_panel_changed()
 
     def _fill_cars(self, rows):
-        others = [(r.index, f"P{r.pos}  {r.driver or 'auto ' + str(r.index)}") for r in rows if not r.is_player]
+        others = [(r.index, f"P{r.pos}  {r.driver or 'car ' + str(r.index)}") for r in rows if not r.is_player]
         if others == self._cars_key:
             return
         self._cars_key = others
@@ -256,7 +256,7 @@ class GeneralPage(QWidget):
         self.panel.fill_cameras(camera_menu(f6), self.panel.camera_index())
 
     def _push_request(self) -> bool:
-        """Una vista sola (la principale), con qualità e luminosità della pagina Onboard."""
+        """A single view (the main one), with the Onboard page's quality and brightness."""
         if not self.hub.ac_live or not self.isVisible():
             return False
         q = max(0, min(len(QUALITIES) - 1, self.hub.setting("onboard/quality", 1, int)))
@@ -269,10 +269,10 @@ class GeneralPage(QWidget):
         return self.feed.request(views, exposure, DEFAULT_TONEMAP)
 
     def hideEvent(self, e):
-        self.feed.disconnect()          # niente rendering in AC mentre la pagina non si vede
+        self.feed.disconnect()          # no rendering in AC while the page is hidden
         super().hideEvent(e)
 
-    # ------------------------------------------------------------- proposte e radio
+    # ------------------------------------------------------------- proposals and radio
     def _fill_proposals(self):
         for w in self._prop_rows:
             w.deleteLater()
@@ -285,10 +285,10 @@ class GeneralPage(QWidget):
             lay.setContentsMargins(0, 0, 0, 0)
             text = label(p.describe())
             text.setToolTip(p.reason)
-            ok = QPushButton("Conferma")
+            ok = QPushButton("Confirm")
             ok.setObjectName("primary")
             ok.clicked.connect(lambda _=False, pid=p.id: self.hub.apply_proposal(pid))
-            no = QPushButton("Scarta")
+            no = QPushButton("Discard")
             no.clicked.connect(lambda _=False, pid=p.id: self.hub.discard_proposal(pid))
             lay.addWidget(text, 1)
             lay.addWidget(ok)
@@ -304,7 +304,7 @@ class GeneralPage(QWidget):
             self.radio.takeItem(0)
         self.radio.scrollToBottom()
 
-    # ------------------------------------------------------------- aggiornamento
+    # ------------------------------------------------------------- refresh
     def _tick(self):
         if not self.isVisible():
             return
@@ -319,7 +319,7 @@ class GeneralPage(QWidget):
                     self.panel.img, self.panel.frame_t = img, now
         elif self.feed.connected:
             self.feed.disconnect()
-        if now - self._ui_t >= 0.066:       # grafica a 15 Hz, il video a ogni fotogramma
+        if now - self._ui_t >= 0.066:       # graphics at 15 Hz, video every frame
             self._ui_t = now
             self._refresh()
 
@@ -339,7 +339,7 @@ class GeneralPage(QWidget):
                                                            self.video_btn.isChecked())
         self.panel.view.set_hud(hud, placeholder)
 
-        # classifica, GPS, stato vettura
+        # standings, GPS, car status
         rings = rv.view_rings([self.panel.car_index()])
         rv.update_gps(self.hub, self.gps, s, rings)
         self.timing.fill(rv.timing_rows(self.hub, s, rings))
@@ -354,7 +354,7 @@ class GeneralPage(QWidget):
 
     def _fill_head(self, s, info):
         if not self.hub.running or not info:
-            self.session.setText("Acquisizione ferma: avvia una sessione in AC dalla Telemetria, oppure il demo.")
+            self.session.setText("Acquisition stopped: start an AC session from Telemetry, or the demo.")
             self.flag.setText("")
             return
         kind = SESSION_NAMES.get(s.session_type, "") if s is not None else ""
@@ -371,7 +371,7 @@ class GeneralPage(QWidget):
                                 "padding: 4px 10px; border-radius: 4px;")
         self.flag.ensurePolished()
         self.flag.setText(flag.text)
-        # larghezza dal testo: con la riga piena la QLabel restava un quadratino colorato senza scritta
+        # width from the text: with a full row the QLabel stayed a small coloured box with no text
         self.flag.setMinimumWidth(self.flag.fontMetrics().horizontalAdvance(flag.text) + 28)
 
     def _fill_tiles(self, s, fpl, prog):
@@ -389,7 +389,7 @@ class GeneralPage(QWidget):
 
     @staticmethod
     def _to_go(prog) -> tuple[str, str | None]:
-        """Giri che mancano (dal leader) o tempo rimasto; giallo all'ultimo giro."""
+        """Laps to go (from the leader) or time left; yellow on the last lap."""
         if prog is None:
             return "—", None
         if prog.to_go is not None:
@@ -402,31 +402,31 @@ class GeneralPage(QWidget):
     def _fill_strategy(self, s, fpl, prog):
         laps = self.hub.laps
         if s is None:
-            self.strategy.setText("Nessun dato")
+            self.strategy.setText("No data")
             return
         lines = []
         if fpl:
-            lines.append(f"Consumo {fpl:.2f} L/giro  ·  ~{s.fuel / fpl:.1f} giri")
+            lines.append(f"Fuel use {fpl:.2f} L/lap  ·  ~{s.fuel / fpl:.1f} laps")
             if prog is not None and prog.to_go:
-                # al traguardo: carburante rimasto dopo i giri che mancano (il giro in corso conta intero)
+                # at the finish: fuel left after the laps to go (the current lap counts in full)
                 margin = s.fuel - prog.to_go * fpl
                 col = C["green"] if margin >= fpl else C["yellow"] if margin >= 0 else C["red"]
-                verdict = (f"avanzano {margin:.1f} L" if margin >= 0 else
-                           f"mancano {-margin:.1f} L: serve una sosta")
-                lines.append(f"Al traguardo: <span style='color:{col}'>{verdict}</span>")
+                verdict = (f"{margin:.1f} L spare" if margin >= 0 else
+                           f"{-margin:.1f} L short: a stop is needed")
+                lines.append(f"At the finish: <span style='color:{col}'>{verdict}</span>")
         else:
-            lines.append("Consumo: serve un giro completo")
+            lines.append("Fuel use: needs a full lap")
         theo = rs.theoretical_best(laps) if laps else None
         if theo:
-            lines.append(f"Giro ideale <span style='color:{C['purple']}'>{rs.fmt_ms(theo)}</span>")
+            lines.append(f"Ideal lap <span style='color:{C['purple']}'>{rs.fmt_ms(theo)}</span>")
         stint = rs.current_stint(laps) if laps else []
         if stint:
             valid = [l.lap_time_ms for l in stint if l.valid]
             avg = sum(valid) / len(valid) if valid else None
-            lines.append(f"Stint: {len(stint)} {'giro' if len(stint) == 1 else 'giri'}"
-                         + (f"  ·  media {rs.fmt_ms(avg)}" if avg else ""))
-        age = f"  ·  {len(stint)} {'giro' if len(stint) == 1 else 'giri'}" if stint else ""
-        lines.append(f"Gomme {s.tyre_compound.strip() or '—'}{age}")
-        lines.append("Usura " + " / ".join(f"{x:.1f}" for x in s.tyre_wear))
-        lines.append(f"Aria {s.air_temp:.0f}°  ·  asfalto {s.road_temp:.0f}°")
+            lines.append(f"Stint: {len(stint)} {'lap' if len(stint) == 1 else 'laps'}"
+                         + (f"  ·  average {rs.fmt_ms(avg)}" if avg else ""))
+        age = f"  ·  {len(stint)} {'lap' if len(stint) == 1 else 'laps'}" if stint else ""
+        lines.append(f"Tyres {s.tyre_compound.strip() or '—'}{age}")
+        lines.append("Wear " + " / ".join(f"{x:.1f}" for x in s.tyre_wear))
+        lines.append(f"Air {s.air_temp:.0f}°  ·  track {s.road_temp:.0f}°")
         self.strategy.setText("<br>".join(lines))

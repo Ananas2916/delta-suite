@@ -1,9 +1,9 @@
 """
-Trascrizione del push-to-talk: Whisper locale (faster-whisper) oppure Tsukumo.
+Push-to-talk transcription: local Whisper (faster-whisper) or Tsukumo.
 
-Whisper usa i modelli nella cache di Hugging Face (%USERPROFILE%\\.cache\\huggingface\\hub), gli stessi
-di Tsukumo: se il modello scelto non c'è, lo scarica una volta. La lingua è quella della voce della
-radio e il prompt iniziale contiene il gergo da muretto, così "bias", "box" e "TC" escono giusti.
+Whisper uses the models in the Hugging Face cache (%USERPROFILE%\\.cache\\huggingface\\hub), the same
+as Tsukumo: if the chosen model is missing, it is downloaded once. The language is the radio voice's
+and the initial prompt contains pit-wall jargon, so "bias", "box" and "TC" come out right.
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ import numpy as np
 from ai_engine.lang import Language
 from ai_engine.voice import TSUKUMO_URL, transcribe_tsukumo
 
-# nome mostrato -> (modello faster-whisper, nota)
+# faster-whisper model -> note
 WHISPER_MODELS = {
-    "base": "veloce (~1 s), consigliato",
-    "small": "più preciso (~3 s), 480 MB da scaricare",
-    "large-v3-turbo": "molto preciso, lento senza GPU, 1,6 GB",
-    "tiny": "velocissimo, meno preciso",
-    "large-v3": "massima precisione, ~10 s su CPU",
+    "base": "fast (~1 s), recommended",
+    "small": "more accurate (~3 s), 480 MB download",
+    "large-v3-turbo": "very accurate, slow without a GPU, 1.6 GB",
+    "tiny": "fastest, less accurate",
+    "large-v3": "best accuracy, ~10 s on CPU",
 }
 DEFAULT_MODEL = "base"
 
@@ -40,16 +40,16 @@ def model_cached(name: str) -> bool:
 
 
 class STTEngine:
-    name = "nessuna"
+    name = "none"
 
     def available(self) -> tuple[bool, str]:
-        return False, "nessun motore di trascrizione"
+        return False, "no transcription engine"
 
     def preload(self) -> None:
         pass
 
     def transcribe(self, pcm16_mono_16k: bytes, lang: Language) -> str:
-        raise RuntimeError("trascrizione disattivata")
+        raise RuntimeError("transcription disabled")
 
 
 class WhisperSTT(STTEngine):
@@ -64,10 +64,10 @@ class WhisperSTT(STTEngine):
         try:
             import faster_whisper  # noqa: F401
         except ImportError:
-            return False, "pacchetto faster-whisper non installato"
+            return False, "faster-whisper package not installed"
         if model_cached(self.model_name):
-            return True, f"modello {self.model_name} pronto"
-        return True, f"modello {self.model_name} non ancora scaricato: lo scarico al primo uso"
+            return True, f"model {self.model_name} ready"
+        return True, f"model {self.model_name} not downloaded yet: it will be downloaded on first use"
 
     def _load(self):
         with self._lock:
@@ -79,7 +79,7 @@ class WhisperSTT(STTEngine):
             return self._model
 
     def preload(self) -> None:
-        """Da chiamare in un thread all'avvio: così la prima domanda alla radio non aspetta il caricamento."""
+        """Call from a thread at startup, so the first radio question does not wait for loading."""
         self._load()
 
     def transcribe(self, pcm16_mono_16k: bytes, lang: Language) -> str:
@@ -100,7 +100,7 @@ class TsukumoSTT(STTEngine):
         self.url = url
 
     def available(self) -> tuple[bool, str]:
-        return True, "usa il motore Ascolto di Tsukumo (va attivato lì)"
+        return True, "uses Tsukumo's listening engine (enable it there)"
 
     def transcribe(self, pcm16_mono_16k: bytes, lang: Language) -> str:
         return transcribe_tsukumo(pcm16_mono_16k, self.url)

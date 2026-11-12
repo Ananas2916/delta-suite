@@ -1,4 +1,4 @@
 """
-Calcoli sui dati, senza dipendenze da AC né dall'interfaccia: giri e settori, confronto curve,
-classifica e gap, strategia, dinamica del veicolo, stato vettura.
+Data calculations, with no dependency on AC or the UI: laps and sectors, corner comparison,
+standings and gaps, strategy, vehicle dynamics, car status.
 """

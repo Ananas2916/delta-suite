@@ -1,12 +1,12 @@
 """
-Acquisizione telemetria live da Assetto Corsa via shared memory.
+Live telemetry acquisition from Assetto Corsa via shared memory.
 
-Avvio da terminale (dalla cartella del progetto):
+Run from a terminal (in the project folder):
     python -m hub_core.ac.receiver            # 60 Hz
     python -m hub_core.ac.receiver --hz 100
 
-Stampa in tempo reale velocità, RPM, marcia e pedali. Si riaggancia da solo se AC
-viene avviato dopo lo script o se si torna ai menu.
+Prints speed, RPM, gear and pedals in real time. Reattaches by itself if AC
+is started after the script or when going back to the menus.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _quad(arr) -> Quad:
 
 
 def sample_from_pages(phy: SPageFilePhysics, gfx: SPageFileGraphic, t: float) -> TelemetrySample:
-    """Converte le pagine physics/graphics di AC in un TelemetrySample (usato da live e replay)."""
+    """Convert AC's physics/graphics pages into a TelemetrySample (used by live and replay)."""
     try:
         status = ACStatus(gfx.status)
     except ValueError:
@@ -113,7 +113,7 @@ def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
         "max_fuel": float(st.maxFuel),
         "sector_count": int(st.sectorCount),
         "player": f"{wstr(st.playerName)} {wstr(st.playerSurname)}".strip(),
-        "damage_rate": float(st.aidMechanicalDamage),   # 0 = danni disattivati
+        "damage_rate": float(st.aidMechanicalDamage),   # 0 = damage disabled
         "suspension_max_travel": list(st.suspensionMaxTravel),
         "has_kers": bool(st.hasKERS),
         "has_ers": bool(st.hasERS),
@@ -126,10 +126,10 @@ def session_info_from_static(st: SPageFileStatic, source: str) -> dict:
 
 
 class TelemetryReceiver:
-    """Legge la shared memory di AC e produce TelemetrySample."""
+    """Reads AC's shared memory and produces TelemetrySample."""
 
     name = "Assetto Corsa"
-    waiting_message = "In attesa di Assetto Corsa: avvia una sessione da Content Manager"
+    waiting_message = "Waiting for Assetto Corsa: start a session from Content Manager"
     finished = False
 
     def __init__(self):
@@ -137,7 +137,7 @@ class TelemetryReceiver:
         self.last_pages: tuple[SPageFilePhysics, SPageFileGraphic] | None = None
 
     def connect(self) -> bool:
-        """Prova ad agganciarsi ad AC. Ritorna False se AC non è in esecuzione."""
+        """Try to attach to AC. Returns False if AC is not running."""
         if self._sm is not None:
             return True
         try:
@@ -175,9 +175,9 @@ def _bar(value: float, width: int = 10) -> str:
 
 def _format_line(s: TelemetrySample) -> str:
     return (
-        f"{s.speed_kmh:6.1f} km/h | {s.rpm:5d} rpm | marcia {gear_label(s.gear):>2} | "
-        f"GAS [{_bar(s.gas)}] FRENO [{_bar(s.brake)}] FRIZ [{_bar(1.0 - s.clutch)}] | "
-        f"sterzo {s.steer_angle:+.2f} | giro {s.completed_laps + 1} {s.lap_time_ms / 1000:7.3f}s"
+        f"{s.speed_kmh:6.1f} km/h | {s.rpm:5d} rpm | gear {gear_label(s.gear):>2} | "
+        f"GAS [{_bar(s.gas)}] BRAKE [{_bar(s.brake)}] CLUTCH [{_bar(1.0 - s.clutch)}] | "
+        f"steer {s.steer_angle:+.2f} | lap {s.completed_laps + 1} {s.lap_time_ms / 1000:7.3f}s"
     )
 
 
@@ -190,13 +190,13 @@ def run_console(hz: float) -> None:
         while True:
             if not rx.connect():
                 if not waiting_msg_shown:
-                    print("In attesa di Assetto Corsa (avvia una sessione da Content Manager)...", flush=True)
+                    print("Waiting for Assetto Corsa (start a session from Content Manager)...", flush=True)
                     waiting_msg_shown = True
                 time.sleep(1.0)
                 continue
 
             car, track = rx.car_and_track()
-            print(f"Agganciato ad AC  ->  auto: {car or '?'}  |  pista: {track or '?'}", flush=True)
+            print(f"Attached to AC  ->  car: {car or '?'}  |  track: {track or '?'}", flush=True)
             waiting_msg_shown = False
 
             last_packet = None
@@ -209,15 +209,15 @@ def run_console(hz: float) -> None:
                     last_packet = s.packet_id
                     stale_since = s.t
                 elif s.t - stale_since > 5.0 and s.status == ACStatus.OFF:
-                    # AC chiuso o tornato ai menu: la mapping resta ma non viene più aggiornata.
-                    print("\nAC non sta più aggiornando i dati, riaggancio...")
+                    # AC closed or back to the menus: the mapping stays but is no longer updated.
+                    print("\nAC is no longer updating the data, reattaching...")
                     rx.disconnect()
                     break
 
                 if s.status == ACStatus.LIVE:
                     line = _format_line(s)
                 else:
-                    line = f"[{s.status.name}] in attesa di sessione di guida..."
+                    line = f"[{s.status.name}] waiting for a driving session..."
                 sys.stdout.write("\r" + line.ljust(140))
                 sys.stdout.flush()
 
@@ -228,14 +228,14 @@ def run_console(hz: float) -> None:
                 else:
                     next_tick = time.perf_counter()
     except KeyboardInterrupt:
-        print("\nInterrotto.")
+        print("\nInterrupted.")
     finally:
         rx.disconnect()
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Telemetria live da Assetto Corsa (shared memory)")
-    parser.add_argument("--hz", type=float, default=60.0, help="frequenza di campionamento (default 60)")
+    parser = argparse.ArgumentParser(description="Live telemetry from Assetto Corsa (shared memory)")
+    parser.add_argument("--hz", type=float, default=60.0, help="sampling rate (default 60)")
     args = parser.parse_args(argv)
     run_console(args.hz)
 

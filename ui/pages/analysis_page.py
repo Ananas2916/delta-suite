@@ -1,4 +1,4 @@
-"""Modulo 1b: Analisi giri (sovrapposizione canali, Delta-T, traiettoria) stile MoTeC i2."""
+"""Lap analysis (overlaid channels, Delta-T, racing line), MoTeC i2 style."""
 
 from __future__ import annotations
 
@@ -28,26 +28,26 @@ class AnalysisPage(QWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
 
-        # --- pannello sinistro
+        # --- left panel
         left = Card()
         left.setFixedWidth(330)
         ll = QVBoxLayout(left)
-        ll.addWidget(label("Analisi giri", "h2"))
-        ll.addWidget(label("Sessione", "dim"))
+        ll.addWidget(label("Lap analysis", "h2"))
+        ll.addWidget(label("Session", "dim"))
         self.picker = SessionPicker(hub)
         self.picker.currentIndexChanged.connect(self._load_laps)
         ll.addWidget(self.picker)
-        ll.addWidget(label(f"Giri (spunta fino a {MAX_LAPS}; il primo è il riferimento)", "dim"))
+        ll.addWidget(label(f"Laps (tick up to {MAX_LAPS}; the first is the reference)", "dim"))
         self.lap_list = QListWidget()
         self.lap_list.itemChanged.connect(self._on_check)
         ll.addWidget(self.lap_list, 1)
-        best_btn = QPushButton("Confronta miglior giro con l'ultimo")
+        best_btn = QPushButton("Compare best lap with the last")
         best_btn.clicked.connect(self._best_vs_last)
         ll.addWidget(best_btn)
-        exp = QPushButton("Esporta sessione in Parquet…")
+        exp = QPushButton("Export session to Parquet…")
         exp.clicked.connect(self._export)
         ll.addWidget(exp)
-        dele = QPushButton("Elimina sessione dall'archivio")
+        dele = QPushButton("Delete session from the archive")
         dele.clicked.connect(self._delete)
         ll.addWidget(dele)
         self.legend = label("", "dim")
@@ -55,12 +55,12 @@ class AnalysisPage(QWidget):
         ll.addWidget(self.legend)
         root.addWidget(left)
 
-        # --- grafici
+        # --- plots
         split = QSplitter(Qt.Orientation.Horizontal)
         glw = pg.GraphicsLayoutWidget()
         self.plots = {}
-        specs = [("speed", "Velocità km/h"), ("delta", "Delta-T s"), ("pedals", "Gas / Freno %"),
-                 ("rpm", "RPM"), ("steer", "Sterzo")]
+        specs = [("speed", "Speed km/h"), ("delta", "Delta-T s"), ("pedals", "Throttle / Brake %"),
+                 ("rpm", "RPM"), ("steer", "Steering")]
         for i, (key, title) in enumerate(specs):
             p = glw.addPlot(row=i, col=0)
             p.setLabel("left", title)
@@ -68,7 +68,7 @@ class AnalysisPage(QWidget):
             if i:
                 p.setXLink(self.plots["speed"])
             self.plots[key] = p
-        self.plots["steer"].setLabel("bottom", "Distanza m")
+        self.plots["steer"].setLabel("bottom", "Distance m")
         glw.ci.layout.setRowStretchFactor(0, 3)
         glw.ci.layout.setRowStretchFactor(1, 2)
         self.cursor = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(C["yellow"], width=1))
@@ -81,7 +81,7 @@ class AnalysisPage(QWidget):
             self.cursor_lines.append(ln)
         split.addWidget(glw)
 
-        self.map = make_plot("Traiettoria")
+        self.map = make_plot("Racing line")
         self.map.setAspectLocked(True)
         self.map.hideAxis("left")
         self.map.hideAxis("bottom")
@@ -111,8 +111,8 @@ class AnalysisPage(QWidget):
         valid = [l.lap_time_ms for l in laps if l.valid]
         best = min(valid) if valid else None
         for lap in laps:
-            tag = "  ★" if lap.lap_time_ms == best and lap.valid else ("" if lap.valid else "  (non valido)")
-            it = QListWidgetItem(f"Giro {lap.lap_no:>3}   {fmt_ms(lap.lap_time_ms)}{tag}")
+            tag = "  ★" if lap.lap_time_ms == best and lap.valid else ("" if lap.valid else "  (invalid)")
+            it = QListWidgetItem(f"Lap {lap.lap_no:>3}   {fmt_ms(lap.lap_time_ms)}{tag}")
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Unchecked)
             it.setData(Qt.ItemDataRole.UserRole, lap.lap_no)
@@ -180,9 +180,9 @@ class AnalysisPage(QWidget):
             ch = self._channels(lap_no)
             if ch is not None:
                 lap = next(l for l in self._laps if l.lap_no == lap_no)
-                self._loaded.append((f"Giro {lap_no} {fmt_ms(lap.lap_time_ms)}", ch, LAP_COLORS[i % len(LAP_COLORS)]))
+                self._loaded.append((f"Lap {lap_no} {fmt_ms(lap.lap_time_ms)}", ch, LAP_COLORS[i % len(LAP_COLORS)]))
         if not self._loaded:
-            self.legend.setText("Spunta uno o più giri per vederli sovrapposti.")
+            self.legend.setText("Tick one or more laps to overlay them.")
             return
 
         ref = self._loaded[0][1]
@@ -201,9 +201,9 @@ class AnalysisPage(QWidget):
             self.map.plot(ch["x"], ch["z"], pen=pg.mkPen(color, width=2))
             delta = np.interp(grid, d, ch["t"]) - t_ref
             self.plots["delta"].plot(grid, delta, pen=pen)
-            legend.append(f"<span style='color:{color}'>■</span> {name}  (Δ fine {delta[-1]:+.3f} s)")
-        self.legend.setText("<br>".join(legend) + "<br><br>Gas continuo, freno tratteggiato. "
-                            "Trascina la linea gialla per il cursore.")
+            legend.append(f"<span style='color:{color}'>■</span> {name}  (Δ at end {delta[-1]:+.3f} s)")
+        self.legend.setText("<br>".join(legend) + "<br><br>Throttle solid, brake dashed. "
+                            "Drag the yellow line to move the cursor.")
         self.plots["speed"].setXRange(0, end, padding=0.01)
         self._on_cursor()
 
@@ -219,26 +219,26 @@ class AnalysisPage(QWidget):
             if i == 0:
                 self.map_marker.setData([ch["x"][idx]], [ch["z"][idx]])
             rows.append(f"<span style='color:{color}'>■</span> {ch['speed'][idx]:.0f} km/h · "
-                        f"marcia {ch['gear'][idx]:.0f} · gas {ch['gas'][idx] * 100:.0f}% · "
-                        f"freno {ch['brake'][idx] * 100:.0f}%")
-        self.cursor_info.setText(f"Distanza {x:.0f} m<br>" + "<br>".join(rows))
+                        f"gear {ch['gear'][idx]:.0f} · throttle {ch['gas'][idx] * 100:.0f}% · "
+                        f"brake {ch['brake'][idx] * 100:.0f}%")
+        self.cursor_info.setText(f"Distance {x:.0f} m<br>" + "<br>".join(rows))
 
     def _export(self):
         sid = self.picker.selected()[2]
         if sid is None:
-            QMessageBox.information(self, "Esporta", "La sessione corrente non ha ancora giri salvati.")
+            QMessageBox.information(self, "Export", "The current session has no saved laps yet.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Esporta Parquet", f"sessione_{sid}.parquet", "Parquet (*.parquet)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Parquet", f"session_{sid}.parquet", "Parquet (*.parquet)")
         if path:
             self.hub.db.export_parquet(sid, path)
-            QMessageBox.information(self, "Esporta", f"Salvato in {path}")
+            QMessageBox.information(self, "Export", f"Saved to {path}")
 
     def _delete(self):
         sid = self.picker.currentData()
         if sid is None:
-            QMessageBox.information(self, "Elimina", "Seleziona una sessione dell'archivio (non quella live).")
+            QMessageBox.information(self, "Delete", "Select a session from the archive (not the live one).")
             return
-        if QMessageBox.question(self, "Elimina", f"Eliminare definitivamente la sessione #{sid}?") \
+        if QMessageBox.question(self, "Delete", f"Permanently delete session #{sid}?") \
                 == QMessageBox.StandardButton.Yes:
             self.hub.db.delete_session(sid)
             self.hub.db_changed.emit()

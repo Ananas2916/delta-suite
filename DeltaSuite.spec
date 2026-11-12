@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build: .\build_exe.ps1  (oppure: pyinstaller DeltaSuite.spec)
+# Build: .\build_exe.ps1  (or: pyinstaller DeltaSuite.spec)
 
 from PyInstaller.utils.hooks import collect_all
 
-# voce: kokoro-onnx + espeak-ng (dati di pronuncia) + phonemizer; trascrizione: faster-whisper
-# (CTranslate2, VAD silero). I modelli NON sono inclusi: Kokoro usa quelli di Tsukumo, Whisper la
-# cache di Hugging Face (scaricati al primo uso se mancano).
+# voice: kokoro-onnx + espeak-ng (pronunciation data) + phonemizer; transcription: faster-whisper
+# (CTranslate2, silero VAD). The models are NOT bundled: Kokoro uses Tsukumo's (or a folder you pick),
+# Whisper the Hugging Face cache (downloaded on first use if missing).
 datas, binaries, hidden = [("ac_app/DeltaSuiteBridge", "ac_app/DeltaSuiteBridge")], [], []
 for pkg in ("kokoro_onnx", "espeakng_loader", "phonemizer", "onnxruntime", "language_tags", "segments", "csvw",
             "faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"):

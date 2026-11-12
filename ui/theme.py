@@ -1,4 +1,4 @@
-"""Tema scuro stile muretto box."""
+"""Dark pit-wall theme."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def apply(app) -> None:
 
 
 def app_icon_pixmap(size: int = 256) -> QPixmap:
-    """Logo disegnato a runtime: quadrato rosso con bandiera a scacchi e 'Δ'."""
+    """Logo drawn at runtime: red square with a chequered flag and 'Δ'."""
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)

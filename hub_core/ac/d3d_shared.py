@@ -1,14 +1,14 @@
 """
-Lettura di una texture D3D11 condivisa da un altro processo (il canvas dell'app CSP, vedi onboard_feed).
+Reads a D3D11 texture shared by another process (the CSP app canvas, see onboard_feed).
 
-L'app pubblica l'handle "legacy" della texture; qui si crea un device D3D11 sulla stessa GPU di AC,
-la si apre con OpenSharedResource e a ogni fotogramma la si copia in una texture di staging da cui
-la CPU legge i pixel. Così la lettura dalla GPU la paga Delta Suite e non AC.
+The app publishes the texture's "legacy" handle; here a D3D11 device is created on the same GPU as AC,
+the texture is opened with OpenSharedResource and every frame it is copied into a staging texture
+from which the CPU reads the pixels. This way Delta Suite pays for the GPU readback, not AC.
 
-Un handle legacy si apre solo da un device sulla stessa scheda video che l'ha creato: sui portatili
-con due GPU (es. Intel + NVIDIA) si provano tutte finché una riesce.
+A legacy handle can only be opened by a device on the same graphics card that created it: on laptops
+with two GPUs (e.g. Intel + NVIDIA) all of them are tried until one succeeds.
 
-Solo ctypes, niente dipendenze: le chiamate COM passano dalla vtable con gli indici di d3d11.h/dxgi.h.
+ctypes only, no dependencies: COM calls go through the vtable with the indices from d3d11.h/dxgi.h.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ D3D11_USAGE_STAGING = 3
 D3D11_CPU_ACCESS_READ = 0x20000
 D3D11_MAP_READ = 1
 
-# indici nelle vtable (IUnknown 0-2)
+# vtable indices (IUnknown 0-2)
 _RELEASE = 2
 _FACTORY1_ENUM_ADAPTERS1 = 12
 _DEVICE_CREATE_TEXTURE2D = 5
@@ -33,7 +33,7 @@ _DEVICE_OPEN_SHARED_RESOURCE = 28
 _CONTEXT_MAP, _CONTEXT_UNMAP, _CONTEXT_COPY_RESOURCE = 14, 15, 47
 _TEXTURE2D_GET_DESC = 10
 
-FORMATS = {28: "rgba", 29: "rgba", 87: "bgra", 88: "bgra", 91: "bgra"}   # DXGI_FORMAT a 8 bit per canale
+FORMATS = {28: "rgba", 29: "rgba", 87: "bgra", 88: "bgra", 91: "bgra"}   # 8-bit-per-channel DXGI_FORMAT
 
 
 class GUID(ctypes.Structure):
@@ -61,7 +61,7 @@ class D3D11_MAPPED_SUBRESOURCE(ctypes.Structure):
 
 
 def _call(obj, index: int, restype, argtypes, *args):
-    """Chiama il metodo `index` della vtable dell'oggetto COM `obj` (puntatore come int)."""
+    """Call method `index` of the vtable of COM object `obj` (pointer as int)."""
     vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
     fn = ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)(vtbl[index])
     return fn(obj, *args)
@@ -78,7 +78,7 @@ def _check(hr: int, what: str) -> None:
 
 
 class SharedTextureReader:
-    """Apre la texture condivisa con un handle e ne legge i pixel. Da usare sempre dallo stesso thread."""
+    """Opens the shared texture from a handle and reads its pixels. Always use from the same thread."""
 
     def __init__(self):
         self._d3d = ctypes.WinDLL("d3d11")
@@ -96,9 +96,9 @@ class SharedTextureReader:
         self.kind = ""
         self.adapter_index = -1
 
-    # ------------------------------------------------------------------ apertura
+    # ------------------------------------------------------------------ opening
     def _devices(self):
-        """(indice adattatore, device, context) per ogni scheda video; il chiamante rilascia quelli che scarta."""
+        """(adapter index, device, context) for each graphics card; the caller releases the ones it discards."""
         factory = ctypes.c_void_p()
         _check(self._dxgi.CreateDXGIFactory1(ctypes.byref(IID_IDXGIFactory1), ctypes.byref(factory)),
                "CreateDXGIFactory1")
@@ -123,7 +123,7 @@ class SharedTextureReader:
             _release(factory.value)
 
     def open(self, handle: int) -> None:
-        """Apre la texture; OSError se nessuna scheda video ci riesce o il formato non è gestito."""
+        """Open the texture; OSError if no graphics card manages to or the format is not supported."""
         self.close()
         errors = []
         for i, dev, ctx in self._devices():
@@ -139,13 +139,13 @@ class SharedTextureReader:
             self.device, self.context, self.texture, self.adapter_index = dev, ctx, tex.value, i
             break
         if self.texture is None:
-            raise OSError("OpenSharedResource non riuscita su nessuna scheda video (" + ", ".join(errors) + ")")
+            raise OSError("OpenSharedResource failed on every graphics card (" + ", ".join(errors) + ")")
         desc = D3D11_TEXTURE2D_DESC()
         _call(self.texture, _TEXTURE2D_GET_DESC, None, [ctypes.POINTER(D3D11_TEXTURE2D_DESC)], ctypes.byref(desc))
         if desc.Format not in FORMATS:
             fmt = desc.Format
             self.close()
-            raise OSError(f"formato DXGI {fmt} della texture condivisa non gestito")
+            raise OSError(f"DXGI format {fmt} of the shared texture not supported")
         self.width, self.height, self.kind = desc.Width, desc.Height, FORMATS[desc.Format]
         staging = D3D11_TEXTURE2D_DESC(desc.Width, desc.Height, 1, 1, desc.Format, 1, 0, D3D11_USAGE_STAGING, 0,
                                        D3D11_CPU_ACCESS_READ, 0)
@@ -159,9 +159,9 @@ class SharedTextureReader:
         self.staging = out.value
         self.handle = handle
 
-    # ------------------------------------------------------------------ lettura
+    # ------------------------------------------------------------------ reading
     def read(self) -> tuple[bytes, int]:
-        """(pixel, byte per riga) del contenuto attuale della texture."""
+        """(pixels, bytes per row) of the current texture contents."""
         _call(self.context, _CONTEXT_COPY_RESOURCE, None, [ctypes.c_void_p, ctypes.c_void_p],
               self.staging, self.texture)
         mapped = D3D11_MAPPED_SUBRESOURCE()

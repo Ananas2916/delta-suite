@@ -1,8 +1,8 @@
-"""Ingegnere di pista: conversazione con l'agente AI, radio in cuffia e impostazioni di agente, voce e radio.
+"""Race engineer: conversation with the AI agent, headset radio and agent, voice and radio settings.
 
-Chat scritta e push-to-talk sono la stessa conversazione: le domande fatte via radio compaiono nella chat
-con 📻, mentre il pannello "Radio in cuffia" riporta quello che passa in radio (messaggi automatici,
-risposte lette, trascrizioni ed errori).
+Written chat and push-to-talk are the same conversation: questions asked over the radio show up in the chat
+with 📻, while the "Headset radio" panel shows what goes over the radio (automatic messages,
+spoken answers, transcriptions and errors).
 """
 
 from __future__ import annotations
@@ -30,17 +30,17 @@ from ui.theme import C
 from ui.widgets import Card, SessionPicker, dspin, label
 
 QUICK_QUESTIONS = {
-    "Dove perdo tempo": "Confronta il mio ultimo giro valido con il migliore, curva per curva, e dimmi dove e "
-                        "perché perdo tempo.",
-    "Pressioni gomme": "Analizza temperature e pressioni gomme. Le pressioni a caldo sono nella finestra giusta? "
-                       "Che pressioni a freddo imposto per il prossimo run, ruota per ruota?",
-    "Strategia gara": "Dammi la strategia per il resto della gara: lunghezza stint, giro di sosta, "
-                      "carburante da imbarcare e se conviene cambiare gomme.",
-    "Bilanciamento": "Dai dati di gomme, freni e curve, la macchina è sottosterzante o sovrasterzante? "
-                     "Proponi le modifiche di setup con proponi_modifica.",
+    "Where am I losing time": "Compare my last valid lap with the best one, corner by corner, and tell me where and "
+                              "why I am losing time.",
+    "Tyre pressures": "Analyse tyre temperatures and pressures. Are the hot pressures in the right window? "
+                      "Which cold pressures should I set for the next run, wheel by wheel?",
+    "Race strategy": "Give me the strategy for the rest of the race: stint length, pit lap, "
+                     "fuel to add and whether a tyre change is worth it.",
+    "Balance": "From the tyre, brake and corner data, is the car understeering or oversteering? "
+               "Propose the setup changes with propose_change.",
 }
-ENGINES = {"kokoro": "Kokoro integrato (locale)", "tsukumo": "Tsukumo (parla la sua finestra)", "none": "Nessuna voce"}
-WHO_COLORS = {"radio": C["blue"], "pilota": C["yellow"], "ingegnere": C["green"], "sistema": C["dim"]}
+ENGINES = {"kokoro": "Built-in Kokoro (local)", "tsukumo": "Tsukumo (its own window speaks)", "none": "No voice"}
+WHO_COLORS = {"radio": C["blue"], "driver": C["yellow"], "engineer": C["green"], "system": C["dim"]}
 
 
 def dot(color: str, text: str) -> str:
@@ -48,7 +48,7 @@ def dot(color: str, text: str) -> str:
 
 
 def compact(combo: QComboBox, chars: int = 18) -> QComboBox:
-    """Le voci lunghe non allargano la colonna delle impostazioni."""
+    """Long entries do not widen the settings column."""
     combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
     combo.setMinimumContentsLength(chars)
     return combo
@@ -63,16 +63,16 @@ class EngineerPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         head = QHBoxLayout()
-        head.addWidget(label("Ingegnere di pista", "h1"))
+        head.addWidget(label("Race engineer", "h1"))
         head.addStretch()
         self.overview = label("", "dim")
         head.addWidget(self.overview)
         root.addLayout(head)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_chat(), "Conversazione")
-        self.tabs.addTab(self._build_summary(), "Riepilogo stint")
-        self.tabs.addTab(self._build_settings(), "Impostazioni")
+        self.tabs.addTab(self._build_chat(), "Conversation")
+        self.tabs.addTab(self._build_summary(), "Stint summary")
+        self.tabs.addTab(self._build_settings(), "Settings")
         root.addWidget(self.tabs, 1)
 
         self.render_timer = QTimer(self)
@@ -85,14 +85,14 @@ class EngineerPage(QWidget):
         hub.engineer_done.connect(self._on_done)
         hub.engineer_failed.connect(self._on_failed)
         hub.radio_log.connect(self._log)
-        hub.voice_error.connect(lambda e: self._log("sistema", f"Voce: {e}"))
+        hub.voice_error.connect(lambda e: self._log("system", f"Voice: {e}"))
         hub.ptt_changed.connect(self._on_ptt)
         hub.mode_changed.connect(lambda _: self._update_status())
         self._regen()
         self._render()
         self._update_status()
 
-    # ------------------------------------------------------------ costruzione
+    # ------------------------------------------------------------ layout
     def _build_chat(self) -> QWidget:
         hub = self.hub
         w = QWidget()
@@ -100,16 +100,16 @@ class EngineerPage(QWidget):
         lay.setContentsMargins(10, 10, 10, 10)
 
         row = QHBoxLayout()
-        row.addWidget(label("Dati", "dim"))
+        row.addWidget(label("Data", "dim"))
         self.picker = SessionPicker(hub)
         row.addWidget(self.picker)
-        row.addWidget(label("Giri gara rimanenti", "dim"))
+        row.addWidget(label("Race laps left", "dim"))
         self.laps_left = QSpinBox()
         self.laps_left.setRange(0, 999)
-        self.laps_left.setSpecialValueText("n/d")
+        self.laps_left.setSpecialValueText("n/a")
         row.addWidget(self.laps_left)
         row.addStretch()
-        new_btn = QPushButton("Nuova conversazione")
+        new_btn = QPushButton("New conversation")
         new_btn.clicked.connect(self._new_chat)
         row.addWidget(new_btn)
         lay.addLayout(row)
@@ -129,9 +129,9 @@ class EngineerPage(QWidget):
         ll.addLayout(quick)
         ask_row = QHBoxLayout()
         self.question = QLineEdit()
-        self.question.setPlaceholderText("Chiedi all'ingegnere…")
+        self.question.setPlaceholderText("Ask the engineer…")
         self.question.returnPressed.connect(lambda: self._send(self.question.text()))
-        self.send_btn = QPushButton("Invia")
+        self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("primary")
         self.send_btn.clicked.connect(lambda: self._send(self.question.text()))
         ask_row.addWidget(self.question, 1)
@@ -144,20 +144,20 @@ class EngineerPage(QWidget):
         radio = Card()
         rl = QVBoxLayout(radio)
         rl.setContentsMargins(12, 10, 12, 12)
-        rl.addWidget(label("Radio in cuffia", "h2"))
+        rl.addWidget(label("Headset radio", "h2"))
         self.radio_state = label("", "dim")
         self.radio_state.setWordWrap(True)
         rl.addWidget(self.radio_state)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         rl.addWidget(self.log, 1)
-        self.ptt_btn = QPushButton("Tieni premuto e parla")
+        self.ptt_btn = QPushButton("Hold to talk")
         self.ptt_btn.setObjectName("primary")
         self.ptt_btn.pressed.connect(lambda: hub.set_ptt(True))
         self.ptt_btn.released.connect(lambda: hub.set_ptt(False))
         rl.addWidget(self.ptt_btn)
-        hint = label("Al volante: assegna il tasto 'Radio ingegnere' nella finestra dell'app Delta Suite Bridge "
-                     "in gioco. Tieni premuto, parla nella lingua della voce scelta, rilascia.", "dim")
+        hint = label("On the wheel: bind the 'Engineer radio' button in the Delta Suite Bridge app window "
+                     "in game. Hold it, speak in the language of the chosen voice, release.", "dim")
         hint.setWordWrap(True)
         rl.addWidget(hint)
         split.addWidget(radio)
@@ -173,7 +173,7 @@ class EngineerPage(QWidget):
         self.summary_note = label("", "dim")
         self.summary_note.setWordWrap(True)
         row.addWidget(self.summary_note, 1)
-        regen = QPushButton("Rigenera")
+        regen = QPushButton("Regenerate")
         regen.clicked.connect(self._regen)
         row.addWidget(regen)
         lay.addLayout(row)
@@ -191,49 +191,49 @@ class EngineerPage(QWidget):
         cols.setSpacing(14)
         c1, c2, c3 = QVBoxLayout(), QVBoxLayout(), QVBoxLayout()
 
-        # --- agente
-        g = QGroupBox("Agente AI")
+        # --- agent
+        g = QGroupBox("AI agent")
         f = QFormLayout(g)
         self.backend = compact(QComboBox())
         for k, v in BACKENDS.items():
             self.backend.addItem(v, k)
         self.backend.setCurrentIndex(max(0, self.backend.findData(hub.setting("engineer/backend", "claude"))))
         self.model = QLineEdit(hub.setting("engineer/model", ""))
-        self.model.setPlaceholderText("vuoto = predefinito dell'agente")
+        self.model.setPlaceholderText("empty = agent default")
         self.custom = QLineEdit(hub.setting("engineer/custom_cmd", ""))
-        self.custom.setPlaceholderText("es. mio_agente.exe --prompt {prompt}")
-        self.custom.setToolTip("Senza {prompt} la domanda arriva da stdin.")
+        self.custom.setPlaceholderText("e.g. my_agent.exe --prompt {prompt}")
+        self.custom.setToolTip("Without {prompt} the question arrives on stdin.")
         self.api_key = QLineEdit(hub.setting("api_key", ""))
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key.setPlaceholderText("solo per il backend API")
+        self.api_key.setPlaceholderText("only for the API backend")
         self.agent_status = label("", "dim")
         self.agent_status.setWordWrap(True)
-        f.addRow("Agente", self.backend)
-        f.addRow("Modello", self.model)
-        f.addRow("Comando", self.custom)
-        f.addRow("Chiave API", self.api_key)
+        f.addRow("Agent", self.backend)
+        f.addRow("Model", self.model)
+        f.addRow("Command", self.custom)
+        f.addRow("API key", self.api_key)
         f.addRow(self.agent_status)
         for w in (self.model, self.custom, self.api_key):
             w.editingFinished.connect(self._save_engineer)
         self.backend.currentIndexChanged.connect(self._save_engineer)
-        test_eng = QPushButton("Prova: chiedi il carburante via radio")
-        test_eng.clicked.connect(lambda: hub.ask_engineer("Quanti giri di carburante ho? Rispondi in una frase.", "RADIO"))
+        test_eng = QPushButton("Test: ask about fuel over the radio")
+        test_eng.clicked.connect(lambda: hub.ask_engineer("How many laps of fuel do I have? Answer in one sentence.", "RADIO"))
         f.addRow(test_eng)
         c1.addWidget(g)
 
-        g = QGroupBox("Agenti esterni (MCP)")
+        g = QGroupBox("External agents (MCP)")
         v = QVBoxLayout(g)
         self.mcp_info = label("", "dim")
         self.mcp_info.setWordWrap(True)
         self.mcp_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        copy = QPushButton("Copia configurazione MCP")
+        copy = QPushButton("Copy MCP configuration")
         copy.clicked.connect(self._copy_mcp)
         v.addWidget(self.mcp_info)
         v.addWidget(copy)
         c1.addWidget(g)
 
-        # --- voce
-        g = QGroupBox("Voce e lingua")
+        # --- voice
+        g = QGroupBox("Voice and language")
         f = QFormLayout(g)
         self.engine = compact(QComboBox())
         for k, v in ENGINES.items():
@@ -247,7 +247,7 @@ class EngineerPage(QWidget):
         self.voice_lang.setWordWrap(True)
         self.speed = dspin(0.6, 1.8, hub.setting("voice/speed", 1.1, float), 0.05, 2)
         self.model_dir = QLineEdit(hub.setting("voice/model_dir", ""))
-        self.model_dir.setPlaceholderText("vuoto = modelli di Tsukumo")
+        self.model_dir.setPlaceholderText("empty = Tsukumo models")
         browse = QPushButton("…")
         browse.setFixedWidth(34)
         browse.setStyleSheet("padding: 4px 0;")
@@ -257,39 +257,39 @@ class EngineerPage(QWidget):
         md.addWidget(browse)
         self.voice_status = label("", "dim")
         self.voice_status.setWordWrap(True)
-        f.addRow("Motore", self.engine)
-        f.addRow("Voce", self.voice)
+        f.addRow("Engine", self.engine)
+        f.addRow("Voice", self.voice)
         f.addRow(self.voice_lang)
-        f.addRow("Velocità", self.speed)
-        f.addRow("Modello Kokoro", md)
+        f.addRow("Speed", self.speed)
+        f.addRow("Kokoro model", md)
         f.addRow(self.voice_status)
         for w in (self.engine, self.voice):
             w.currentIndexChanged.connect(self._save_voice)
         self.speed.valueChanged.connect(self._save_voice)
         self.model_dir.editingFinished.connect(self._save_voice)
-        test = QPushButton("Prova voce")
+        test = QPushButton("Test voice")
         test.clicked.connect(lambda: hub.say(hub.phrase("radio_check"), PRIO_URGENT, 30))
         f.addRow(test)
         c2.addWidget(g)
 
         # --- push-to-talk
-        g = QGroupBox("Microfono e trascrizione")
+        g = QGroupBox("Microphone and transcription")
         f = QFormLayout(g)
         self.mic = compact(QComboBox())
-        self.mic.addItem("Microfono predefinito", b"")
+        self.mic.addItem("Default microphone", b"")
         for d in input_devices():
             self.mic.addItem(d.description(), bytes(d.id()))
         saved = hub.settings.value("voice/mic", b"")
         self.mic.setCurrentIndex(max(0, self.mic.findData(bytes(saved) if saved else b"")))
         self.mic.currentIndexChanged.connect(self._save_mic)
         self.stt_engine = compact(QComboBox())
-        self.stt_engine.addItem("Whisper locale (integrato)", "whisper")
-        self.stt_engine.addItem("Tsukumo (motore Ascolto)", "tsukumo")
-        self.stt_engine.addItem("Disattivata", "none")
+        self.stt_engine.addItem("Local Whisper (built in)", "whisper")
+        self.stt_engine.addItem("Tsukumo (listening engine)", "tsukumo")
+        self.stt_engine.addItem("Off", "none")
         self.stt_engine.setCurrentIndex(max(0, self.stt_engine.findData(hub.setting("stt/engine", "whisper"))))
         self.stt_model = compact(QComboBox())
         for name, note in WHISPER_MODELS.items():
-            self.stt_model.addItem(f"{name} — {note}" + ("  ✓ già scaricato" if model_cached(name) else ""), name)
+            self.stt_model.addItem(f"{name} — {note}" + ("  ✓ downloaded" if model_cached(name) else ""), name)
         self.stt_model.setCurrentIndex(max(0, self.stt_model.findData(hub.setting("stt/model", DEFAULT_MODEL))))
         self.stt_status = label("", "dim")
         self.stt_status.setWordWrap(True)
@@ -297,25 +297,25 @@ class EngineerPage(QWidget):
         for w in (self.stt_engine, self.stt_model):
             w.currentIndexChanged.connect(self._save_stt)
         self.tsukumo_url.editingFinished.connect(self._save_stt)
-        f.addRow("Microfono", self.mic)
-        f.addRow("Trascrizione", self.stt_engine)
-        f.addRow("Modello Whisper", self.stt_model)
+        f.addRow("Microphone", self.mic)
+        f.addRow("Transcription", self.stt_engine)
+        f.addRow("Whisper model", self.stt_model)
         f.addRow("Tsukumo", self.tsukumo_url)
         f.addRow(self.stt_status)
         c2.addWidget(g)
 
-        # --- regole radio
-        g = QGroupBox("Radio automatica (senza AI, immediata)")
+        # --- radio rules
+        g = QGroupBox("Automatic radio (no AI, instant)")
         f = QFormLayout(g)
         cfg = hub.radio_rules.cfg
         self.rule_boxes = {}
-        for key, text in (("lap_times", "Tempo sul giro, delta, giri alla fine e tempo della sessione"), ("fuel", "Carburante (5, 3, 2, 1 giri)"),
-                          ("tyres", "Gomme fuori finestra (una volta per stint)"), ("gaps", "Distacchi in gara, con la tendenza"),
-                          ("flags", "Bandiere, gialle davanti con la distanza, pista libera"),
-                          ("positions", "Posizioni: primo giro, sorpassi, giro più veloce, arrivo"),
-                          ("rivals", "Avversari: auto vicina davanti o dietro, soste"),
-                          ("car", "Auto: forature, danni, gomme finite, limitatore"),
-                          ("hybrid", "Batteria delle ibride (20%, scarica, energia del giro)")):
+        for key, text in (("lap_times", "Lap time, delta, laps to go and session time"), ("fuel", "Fuel (5, 3, 2, 1 laps)"),
+                          ("tyres", "Tyres out of the window (once per stint)"), ("gaps", "Race gaps, with the trend"),
+                          ("flags", "Flags, yellows ahead with the distance, track clear"),
+                          ("positions", "Positions: first lap, overtakes, fastest lap, finish"),
+                          ("rivals", "Rivals: close car ahead or behind, pit stops"),
+                          ("car", "Car: punctures, damage, worn tyres, limiter"),
+                          ("hybrid", "Hybrid battery (20%, empty, lap energy)")):
             cb = QCheckBox(text)
             cb.setChecked(getattr(cfg, key))
             cb.toggled.connect(self._save_rules)
@@ -332,9 +332,9 @@ class EngineerPage(QWidget):
         row_t.addWidget(self.t_hi)
         row_p.addWidget(self.p_lo)
         row_p.addWidget(self.p_hi)
-        f.addRow("Temperatura gomme", row_t)
-        f.addRow("Pressione a caldo", row_p)
-        self.always = QCheckBox("Attiva anche fuori dalla modalità Pilota")
+        f.addRow("Tyre temperature", row_t)
+        f.addRow("Hot pressure", row_p)
+        self.always = QCheckBox("Also on outside Driver mode")
         self.always.setChecked(hub.setting("radio/always", False, bool))
         self.always.toggled.connect(self._save_always)
         f.addRow(self.always)
@@ -353,7 +353,7 @@ class EngineerPage(QWidget):
         self._update_status()
         super().showEvent(e)
 
-    # ------------------------------------------------------------ conversazione
+    # ------------------------------------------------------------ conversation
     def _regen(self):
         info, laps, _ = self.picker.selected()
         live = self.picker.currentData() is None and self.hub.last_sample is not None
@@ -371,19 +371,19 @@ class EngineerPage(QWidget):
             return
         sid = self.picker.currentData()
         if sid is not None:
-            question += f" (sessione in archivio: session_id={sid})"
+            question += f" (archived session: session_id={sid})"
         if self.laps_left.value():
-            question += f" Giri di gara rimanenti: {self.laps_left.value()}."
-        if not self.hub.ask_engineer(question, "ANALISI"):
-            self.status.setText("L'ingegnere sta già rispondendo.")
+            question += f" Race laps left: {self.laps_left.value()}."
+        if not self.hub.ask_engineer(question, "ANALYSIS"):
+            self.status.setText("The engineer is already answering.")
             return
         self.question.clear()
 
     def _on_started(self, question: str, mode: str):
         tag = "📻 " if mode == "RADIO" else ""
-        self._transcript += f"\n\n---\n\n**{tag}Tu:** {question}\n\n**Ingegnere:** "
+        self._transcript += f"\n\n---\n\n**{tag}You:** {question}\n\n**Engineer:** "
         self.send_btn.setEnabled(False)
-        self.status.setText("L'ingegnere sta analizzando i dati…")
+        self.status.setText("The engineer is analysing the data…")
         self.render_timer.start(150)
 
     def _on_text(self, chunk: str):
@@ -391,12 +391,12 @@ class EngineerPage(QWidget):
 
     def _on_done(self, final: str):
         if final and not self._transcript.rstrip().endswith(final.strip()[-40:]):
-            self._transcript += final      # backend senza streaming
-        self._finish("Risposta completata.")
+            self._transcript += final      # backend without streaming
+        self._finish("Answer complete.")
 
     def _on_failed(self, err: str):
-        self._transcript += f"\n\n*Errore: {err}*"
-        self._finish("Errore nella richiesta.")
+        self._transcript += f"\n\n*Error: {err}*"
+        self._finish("Request failed.")
 
     def _finish(self, msg: str):
         self.render_timer.stop()
@@ -405,16 +405,16 @@ class EngineerPage(QWidget):
         self._render()
 
     def _render(self):
-        intro = ("*Chiedi un'analisi: l'ingegnere legge telemetria, giri, setup e classifica da Delta Suite e può "
-                 "proporre modifiche, che confermi tu (pagina Box & Assetto o tasto al volante). Le domande fatte "
-                 "via radio compaiono qui con 📻.*")
+        intro = ("*Ask for an analysis: the engineer reads telemetry, laps, setup and standings from Delta Suite and "
+                 "can propose changes, which you confirm (Pit & Setup page or wheel button). Questions asked over "
+                 "the radio show up here with 📻.*")
         self.chat.setMarkdown(intro + self._transcript)
         sb = self.chat.verticalScrollBar()
         sb.setValue(sb.maximum())
 
     # ------------------------------------------------------------ radio
     def _on_ptt(self, down: bool):
-        self.ptt_btn.setText("Sto ascoltando… rilascia per inviare" if down else "Tieni premuto e parla")
+        self.ptt_btn.setText("Listening… release to send" if down else "Hold to talk")
 
     def _log(self, who: str, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -422,7 +422,7 @@ class EngineerPage(QWidget):
         self.log.appendHtml(f"<span style='color:{C['dim']}'>{ts}</span> "
                             f"<b style='color:{col}'>{who.upper()}</b> {html.escape(text)}")
 
-    # ------------------------------------------------------------ salvataggi
+    # ------------------------------------------------------------ saving
     def _save_engineer(self):
         st = self.hub.settings
         st.setValue("engineer/backend", self.backend.currentData())
@@ -464,7 +464,7 @@ class EngineerPage(QWidget):
         self._update_status()
 
     def _browse_model(self):
-        d = QFileDialog.getExistingDirectory(self, "Cartella con kokoro-v1.0.onnx e voices-v1.0.bin",
+        d = QFileDialog.getExistingDirectory(self, "Folder with kokoro-v1.0.onnx and voices-v1.0.bin",
                                              self.model_dir.text())
         if d:
             self.model_dir.setText(d)
@@ -472,9 +472,9 @@ class EngineerPage(QWidget):
 
     def _copy_mcp(self):
         QGuiApplication.clipboard().setText(json.dumps(self.hub.mcp.client_config(), indent=2))
-        self._log("sistema", "Configurazione MCP copiata negli appunti (vale finché l'hub resta aperto)")
+        self._log("system", "MCP configuration copied to the clipboard (valid while the hub stays open)")
 
-    # ------------------------------------------------------------ stato
+    # ------------------------------------------------------------ status
     def _update_status(self):
         b = self.backend.currentData()
         exe = {"claude": "claude", "codex": "codex", "antigravity": "agy"}.get(b)
@@ -483,44 +483,44 @@ class EngineerPage(QWidget):
             found = find_executable(exe) or (find_executable("antigravity") if b == "antigravity" else None)
             agent_ok = found is not None
             self.agent_status.setText(dot(C["green"], found) if found else
-                                      dot(C["red"], f"'{exe}' non trovato nel PATH"))
+                                      dot(C["red"], f"'{exe}' not found in PATH"))
         elif b == "api":
             agent_ok = bool(self.api_key.text().strip())
-            self.agent_status.setText("Usa il riepilogo dello stint (senza strumenti MCP). Costi a consumo.")
+            self.agent_status.setText("Uses the stint summary (no MCP tools). Pay-as-you-go costs.")
         else:
-            self.agent_status.setText("Il comando riceve URL e token MCP nelle variabili DELTASUITE_MCP_URL e "
-                                      "DELTASUITE_MCP_TOKEN.")
+            self.agent_status.setText("The command receives the MCP URL and token in the DELTASUITE_MCP_URL and "
+                                      "DELTASUITE_MCP_TOKEN variables.")
         for w, on in ((self.model, b != "custom"), (self.custom, b == "custom"), (self.api_key, b == "api")):
             w.setEnabled(on)
         self.summary_note.setText(
-            "Con l'API un riepilogo come questo viene allegato alla prima domanda." if b == "api" else
-            "L'agente legge i dati da solo con gli strumenti di Delta Suite (MCP): il riepilogo è solo per te.")
+            "With the API a summary like this is attached to the first question." if b == "api" else
+            "The agent reads the data by itself with Delta Suite's tools (MCP): the summary is just for you.")
 
         voice = self.voice.currentData()
         lang = language_of(voice)
-        self.voice_lang.setText(f"Lingua parlata: {lang.name}. Radio, risposte via radio e trascrizione "
-                                "seguono la voce; l'analisi scritta resta in italiano.")
+        self.voice_lang.setText(f"Spoken language: {lang.name}. Radio, radio answers and transcription "
+                                "follow the voice; the written analysis stays in English.")
         voice_ok, why = make_backend(self.engine.currentData(), voice, self.speed.value(),
                                      self.model_dir.text() or None).available()
-        self.voice_status.setText(dot(C["green"], "pronta") if voice_ok else dot(C["red"], why))
+        self.voice_status.setText(dot(C["green"], "ready") if voice_ok else dot(C["red"], why))
         stt_ok, stt_why = self.hub.stt.available()
-        self.stt_status.setText(dot(C["green"] if stt_ok else C["red"], f"{stt_why} · lingua {lang.code}"))
+        self.stt_status.setText(dot(C["green"] if stt_ok else C["red"], f"{stt_why} · language {lang.code}"))
         self.stt_model.setEnabled(self.stt_engine.currentData() == "whisper")
         self.tsukumo_url.setEnabled(self.stt_engine.currentData() == "tsukumo")
 
         m = self.hub.mcp
         self.mcp_info.setText(
-            f"Server MCP attivo su {m.url} (porta solo locale, token nuovo a ogni avvio). L'agente scelto sopra "
-            "lo usa da solo; puoi collegare anche una sessione interattiva di Claude Code, Codex o Antigravity "
-            "incollando la configurazione." if m.error is None else f"Server MCP non avviato: {m.error}")
+            f"MCP server running on {m.url} (local-only port, new token at every start). The agent chosen above "
+            "uses it by itself; you can also connect an interactive Claude Code, Codex or Antigravity session "
+            "by pasting the configuration." if m.error is None else f"MCP server not started: {m.error}")
 
-        voice_name = voice_label(voice).split(" — ")[0] if self.engine.currentData() != "none" else "spenta"
+        voice_name = voice_label(voice).split(" — ")[0] if self.engine.currentData() != "none" else "off"
         self.overview.setText(("&nbsp;" * 5).join((
             dot(C["green"] if agent_ok else C["red"], BACKENDS.get(b, b)),
-            dot(C["green"] if voice_ok else C["red"], f"voce {voice_name} ({lang.name})"),
+            dot(C["green"] if voice_ok else C["red"], f"voice {voice_name} ({lang.name})"),
             dot(C["green"] if stt_ok else C["red"], "push-to-talk"))))
         mode = MODES.get(self.hub.mode, self.hub.mode)
         self.radio_state.setText(
-            dot(C["green"], f"Radio automatica attiva · modalità {mode}") if self.hub.radio_active else
-            dot(C["yellow"], f"Radio automatica spenta in modalità {mode}: si accende in modalità Pilota o da "
-                             "Impostazioni. Il push-to-talk risponde comunque."))
+            dot(C["green"], f"Automatic radio on · {mode} mode") if self.hub.radio_active else
+            dot(C["yellow"], f"Automatic radio off in {mode} mode: it turns on in Driver mode or from "
+                             "Settings. Push-to-talk answers anyway."))

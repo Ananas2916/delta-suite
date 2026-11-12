@@ -1,4 +1,4 @@
-"""Grafica TV sopra il video onboard e conversione dei fotogrammi in immagini Qt."""
+"""TV graphics over the onboard video and conversion of frames into Qt images."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ def frame_image(f: Frame) -> QImage:
     if f.kind == "jpg":
         return QImage.fromData(f.data, "JPG")
     fmt = QImage.Format.Format_RGBX8888 if f.kind == "rgba" else QImage.Format.Format_RGB32
-    return QImage(f.data, f.width, f.height, f.stride, fmt).copy()   # copia: i byte non restano vivi
+    return QImage(f.data, f.width, f.height, f.stride, fmt).copy()   # copy: the bytes do not stay alive
 
 
 class OnboardView(QWidget):
-    """Fotogramma onboard (o segnaposto) con sopra la grafica stile diretta TV."""
+    """Onboard frame (or placeholder) with TV-broadcast-style graphics on top."""
 
     def __init__(self):
         super().__init__()
@@ -73,7 +73,7 @@ class OnboardView(QWidget):
             self._paint_hud(p, vr)
         p.end()
 
-    # ------------------------------------------------------------------ grafica
+    # ------------------------------------------------------------------ graphics
     def _box(self, p: QPainter, r: QRectF, alpha: int = 170):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(10, 12, 16, alpha))
@@ -81,10 +81,10 @@ class OnboardView(QWidget):
 
     def _paint_hud(self, p: QPainter, vr: QRectF):
         h = self.hud
-        k = max(0.7, min(1.6, vr.width() / 960))      # la grafica scala con il video
+        k = max(0.7, min(1.6, vr.width() / 960))      # graphics scale with the video
         m = 14 * k
 
-        # in alto a sinistra: diretta, pilota, telecamera
+        # top left: live, driver, camera
         tl = QRectF(vr.left() + m, vr.top() + m, 300 * k, 54 * k)
         self._box(p, tl)
         p.setBrush(QColor(C["accent"] if self.live else C["dim"]))
@@ -97,7 +97,7 @@ class OnboardView(QWidget):
         p.drawText(QRectF(tl.left() + 12 * k, tl.top() + 27 * k, tl.width() - 20 * k, 22 * k),
                    Qt.AlignmentFlag.AlignVCenter, h.get("title", ""))
 
-        # in alto a destra: giro e tempi
+        # top right: lap and times
         rows = h.get("times", [])
         if rows:
             tr = QRectF(vr.right() - m - 230 * k, vr.top() + m, 230 * k, (12 + 21 * len(rows)) * k)
@@ -112,7 +112,7 @@ class OnboardView(QWidget):
                 p.drawText(QRectF(tr.left(), y, tr.width() - 12 * k, 21 * k),
                            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, value)
             sectors = h.get("sectors") or []
-            if sectors:                     # parziali sotto i tempi: striscia del colore e tempo
+            if sectors:                     # splits below the times: colour strip and time
                 n, gap = len(sectors), 4 * k
                 sw = (tr.width() - gap * (n - 1)) / n
                 for i, (name, text, color) in enumerate(sectors):
@@ -129,7 +129,7 @@ class OnboardView(QWidget):
                     p.drawText(r.adjusted(0, 0, -6 * k, -3 * k),
                                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, text)
 
-        # in basso a sinistra: velocità, marcia, giri motore
+        # bottom left: speed, gear, RPM
         if "speed" in h:
             bl = QRectF(vr.left() + m, vr.bottom() - m - 92 * k, 250 * k, 92 * k)
             self._box(p, bl)
@@ -159,7 +159,7 @@ class OnboardView(QWidget):
                 p.drawText(QRectF(bar.left(), bar.bottom() + 1 * k, bar.width(), 14 * k), Qt.AlignmentFlag.AlignRight,
                            f"{h.get('rpm', 0)} RPM")
 
-        # in basso a destra: pedali, batteria delle ibride e sterzo
+        # bottom right: pedals, hybrid battery and steering
         if "gas" in h:
             bars = [("brake", C["red"]), ("gas", C["green"])]
             if "battery" in h:
@@ -176,7 +176,7 @@ class OnboardView(QWidget):
                 p.setBrush(QColor(color))
                 p.drawRoundedRect(QRectF(bar.left(), bar.bottom() - bar.height() * v, bar.width(), bar.height() * v),
                                   3, 3)
-                if key == "battery":    # fulmine sopra la barra: verde mentre spinge
+                if key == "battery":    # lightning bolt above the bar: green while deploying
                     p.setPen(QColor(C["green"] if h.get("battery_deploy") else C["dim"]))
                     p.setFont(paint_font(7 * k))
                     p.drawText(QRectF(bar.left() - 4 * k, br.top(), bar.width() + 8 * k, 12 * k),
@@ -193,7 +193,7 @@ class OnboardView(QWidget):
             p.drawLine(QPointF(0, -rad), QPointF(0, -rad + 12 * k))
             p.restore()
 
-        # al centro in basso: l'avviso più grave
+        # bottom centre: the most severe alert
         alert = h.get("alert")
         if alert is not None:
             lvl, text = alert
@@ -201,7 +201,7 @@ class OnboardView(QWidget):
             w = p.fontMetrics().horizontalAdvance(text) + 36 * k
             ar = QRectF(vr.center().x() - w / 2, vr.bottom() - m - 34 * k, w, 30 * k)
             if "speed" in h and ar.left() < vr.left() + m + 260 * k:
-                ar.moveTop(ar.top() - 104 * k)          # video stretto: sopra i riquadri in basso
+                ar.moveTop(ar.top() - 104 * k)          # narrow video: above the bottom boxes
             col = QColor(LEVEL_COLORS[lvl])
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(col.red(), col.green(), col.blue(), 215))

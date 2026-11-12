@@ -1,12 +1,12 @@
 """
-Lato Delta Suite del ponte con l'app Lua di CSP (ac_app/DeltaSuiteBridge).
+Delta Suite side of the bridge with the CSP Lua app (ac_app/DeltaSuiteBridge).
 
-L'app scrive DeltaSuite_Bridge_Out_v1 (regolazioni, setup, pit stop, avversari, tasti radio) e
-legge DeltaSuite_Bridge_In_v1, dove qui si scrive un comando alla volta: prima i campi, poi `seq`.
-L'app lo esegue nel frame successivo e ne riporta l'esito in ackSeq/ackOk/ackMsg.
+The app writes DeltaSuite_Bridge_Out_v1 (adjustments, setup, pit stop, opponents, radio buttons) and
+reads DeltaSuite_Bridge_In_v1, where one command at a time is written from here: first the fields, then `seq`.
+The app runs it on the next frame and reports the outcome in ackSeq/ackOk/ackMsg.
 
-I layout sono gli stessi dichiarati in DeltaSuiteBridge.lua: se si cambia uno, va cambiato l'altro
-(e la versione nel nome delle mapping).
+The layouts are the same as declared in DeltaSuiteBridge.lua: if you change one, change the other
+(and the version in the mapping names).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from hub_core.model import CarEntry
 
 try:
     import winreg
-except ImportError:          # fuori da Windows: niente registro, AC non si trova
+except ImportError:          # outside Windows: no registry, AC cannot be found
     winreg = None
 
 OUT_TAG = "Local\\DeltaSuite_Bridge_Out_v1"
@@ -91,9 +91,9 @@ class SetupItem:
         return self.value * self.mult
 
     def as_dict(self) -> dict:
-        return {"nome": self.name, "etichetta": self.label or self.name, "valore": self.value,
-                "valore_mostrato": round(self.display, 4), "unita": self.units, "min": self.min, "max": self.max,
-                "passo": self.step, "moltiplicatore": self.mult, "sola_lettura": self.read_only}
+        return {"name": self.name, "label": self.label or self.name, "value": self.value,
+                "display_value": round(self.display, 4), "units": self.units, "min": self.min, "max": self.max,
+                "step": self.step, "multiplier": self.mult, "read_only": self.read_only}
 
 
 @dataclass
@@ -154,10 +154,10 @@ def state_from_struct(o: BridgeOut) -> BridgeState:
     )
 
 
-# ----------------------------------------------------------------------- ponte
+# ---------------------------------------------------------------------- bridge
 
 class CSPBridge:
-    """Collegamento all'app Lua. Tutti i metodi sono non bloccanti."""
+    """Link to the Lua app. All methods are non-blocking."""
 
     def __init__(self):
         self._out: MappedView | None = None
@@ -190,23 +190,23 @@ class CSPBridge:
         self._out = self._in = None
 
     def read(self) -> BridgeState | None:
-        """Copia lo stato pubblicato dall'app; None se non collegata o layout diverso."""
+        """Copy the state published by the app; None if not connected or the layout differs."""
         if not self.connect():
             return None
         snap = BridgeOut()
         ctypes.memmove(ctypes.addressof(snap), self._out.ptr, ctypes.sizeof(BridgeOut))
         if snap.version == 0:
-            return None   # mapping appena creata, l'app non ha ancora scritto
+            return None   # mapping just created, the app has not written yet
         if snap.version != VERSION or snap.endMarker != END_MARKER:
-            self.layout_error = (f"app CSP versione {snap.version} / layout diverso: "
-                                 "reinstalla l'app da Delta Suite")
+            self.layout_error = (f"CSP app version {snap.version} / different layout: "
+                                 "reinstall the app from Delta Suite")
             return None
         self.layout_error = None
         self._in.struct.hostBeat = (self._in.struct.hostBeat + 1) & 0x7FFFFFFF
         return state_from_struct(snap)
 
     def send(self, cmd: int, value: float = 0.0, name: str = "", text: str = "") -> int | None:
-        """Scrive un comando e ritorna il suo numero di sequenza (l'esito arriva in BridgeState.ack_*)."""
+        """Write a command and return its sequence number (the outcome arrives in BridgeState.ack_*)."""
         if not self.connect():
             return None
         s = self._in.struct
@@ -217,11 +217,11 @@ class CSPBridge:
         s.name = name.encode("utf-8")[:31]
         s.text = text.encode("utf-8")[:511]
         seq = (s.seq + 1) & 0x7FFFFFFF or 1
-        s.seq = seq      # per ultimo: l'app esegue quando vede cambiare seq
+        s.seq = seq      # last: the app runs the command when it sees seq change
         return seq
 
 
-# -------------------------------------------------------------- installazione
+# -------------------------------------------------------------- installation
 
 APP_NAME = "DeltaSuiteBridge"
 
@@ -232,7 +232,7 @@ def bundled_app_dir() -> Path:
 
 
 def find_ac_root() -> Path | None:
-    """Cartella di installazione di AC: librerie di Steam dal registro, poi percorso standard."""
+    """AC install folder: Steam libraries from the registry, then the standard path."""
     candidates: list[Path] = []
     if winreg is None:
         return None
@@ -262,10 +262,10 @@ def installed_app_dir(ac_root: Path | None = None) -> Path | None:
 
 
 def install_app(ac_root: Path | None = None) -> Path:
-    """Copia l'app Lua in <AC>/apps/lua/DeltaSuiteBridge. Va riavviata la sessione di AC per caricarla."""
+    """Copy the Lua app to <AC>/apps/lua/DeltaSuiteBridge. Restart the AC session to load it."""
     target = installed_app_dir(ac_root)
     if target is None:
-        raise FileNotFoundError("Cartella di Assetto Corsa non trovata")
+        raise FileNotFoundError("Assetto Corsa folder not found")
     src = bundled_app_dir()
     target.mkdir(parents=True, exist_ok=True)
     for f in src.iterdir():
@@ -275,7 +275,7 @@ def install_app(ac_root: Path | None = None) -> Path:
 
 
 def app_needs_update(ac_root: Path | None = None) -> bool:
-    """Vero se un file dell'app (ponte, modulo onboard, manifest...) manca o è diverso da quello incluso."""
+    """True if an app file (bridge, onboard module, manifest...) is missing or differs from the bundled one."""
     target = installed_app_dir(ac_root)
     if target is None:
         return False

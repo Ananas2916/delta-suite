@@ -1,4 +1,4 @@
-"""Confini tra i pacchetti: chi può importare chi (vedi ARCHITECTURE.md)."""
+"""Package boundaries: who may import whom (see ARCHITECTURE.md)."""
 
 import ast
 from pathlib import Path
@@ -23,7 +23,7 @@ def violations(folder: str, forbidden: tuple[str, ...]) -> list[str]:
     for path in [base] if base.is_file() else sorted(base.rglob("*.py")):
         for mod in imported_modules(path):
             if any(mod == f or mod.startswith(f + ".") for f in forbidden):
-                bad.append(f"{path.relative_to(ROOT).as_posix()} importa {mod}")
+                bad.append(f"{path.relative_to(ROOT).as_posix()} imports {mod}")
     return bad
 
 
@@ -32,7 +32,7 @@ def test_hub_core_has_no_ui():
 
 
 def test_analysis_does_not_touch_ac():
-    # i calcoli girano uguali su dati veri, demo e replay: niente shared memory né app CSP
+    # calculations run the same on real data, demo and replay: no shared memory or CSP app
     assert violations("hub_core/analysis", ("hub_core.ac", "ctypes")) == []
 
 
@@ -45,7 +45,7 @@ def test_ai_engine_has_no_ui():
 
 
 def test_widgets_do_not_know_pages():
-    # i widget (classifica, GPS, schema dell'auto...) li usano più pagine: non dipendono da nessuna
+    # widgets (standings, GPS, car diagram...) are used by several pages: they depend on none
     assert violations("ui/widgets", ("ui.pages", "ui.hub_state", "ui.main_dashboard")) == []
 
 
@@ -57,5 +57,5 @@ def test_pages_do_not_import_each_other():
         own = f"ui.pages.{rel.parts[0].removesuffix('.py')}"
         for mod in imported_modules(path):
             if mod.startswith("ui.pages.") and not (mod == own or mod.startswith(own + ".")):
-                bad.append(f"{rel.as_posix()} importa {mod}")
+                bad.append(f"{rel.as_posix()} imports {mod}")
     assert bad == []

@@ -1,17 +1,17 @@
 """
-Lettura della shared memory di Assetto Corsa (originale, 2014).
+Reads the shared memory of Assetto Corsa (original, 2014).
 
-AC (acs.exe) espone tre file mapping con nome:
-    Local\\acpmf_physics   -> SPageFilePhysics  (aggiornata a ogni step fisico, ~333 Hz)
-    Local\\acpmf_graphics  -> SPageFileGraphic  (aggiornata a ogni frame)
-    Local\\acpmf_static    -> SPageFileStatic   (scritta una volta a inizio sessione)
+AC (acs.exe) exposes three named file mappings:
+    Local\\acpmf_physics   -> SPageFilePhysics  (updated every physics step, ~333 Hz)
+    Local\\acpmf_graphics  -> SPageFileGraphic  (updated every frame)
+    Local\\acpmf_static    -> SPageFileStatic   (written once at session start)
 
-I layout qui sotto seguono la documentazione ufficiale della shared memory di AC 1.x
-(pack 4, wchar a 2 byte). NON sono compatibili con ACC o AC EVO.
+The layouts below follow the official AC 1.x shared memory documentation
+(pack 4, 2-byte wchar). They are NOT compatible with ACC or AC EVO.
 
-Le mapping vengono aperte con OpenFileMappingW (sola lettura) e mai create: se usassimo
-mmap.mmap(-1, size, tagname) e AC non fosse ancora avviato, Python creerebbe una mapping
-con la nostra dimensione e acs.exe si aggancerebbe a quella.
+The mappings are opened with OpenFileMappingW (read only) and never created: if we used
+mmap.mmap(-1, size, tagname) while AC was not running yet, Python would create a mapping
+with our size and acs.exe would attach to it.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ from hub_core.ac.win32 import FILE_MAP_READ, MappedView
 
 c_float = ctypes.c_float
 c_int = ctypes.c_int
-# wchar di Windows a 2 byte: fuori da Windows c_wchar ne ha 4 e il layout non tornerebbe (registrazioni
-# lette nei test); lì si usano interi a 16 bit e wstr() li riporta a stringa
+# Windows wchar is 2 bytes: outside Windows c_wchar has 4 and the layout would not match (recordings
+# read in tests); there 16-bit integers are used and wstr() turns them back into a string
 c_wchar = ctypes.c_wchar if ctypes.sizeof(ctypes.c_wchar) == 2 else ctypes.c_uint16
 
 
 def wstr(value) -> str:
-    """Testo di un campo wchar[] delle pagine di AC, su qualunque sistema."""
+    """Text of a wchar[] field of AC pages, on any OS."""
     if isinstance(value, str):
         return value
     chars = []
@@ -40,7 +40,7 @@ def wstr(value) -> str:
 
 
 def put_wstr(struct: ctypes.Structure, name: str, text: str) -> None:
-    """Scrive un campo wchar[] (per test e registrazioni create a mano), su qualunque sistema."""
+    """Write a wchar[] field (for tests and hand-made recordings), on any OS."""
     if c_wchar is ctypes.c_wchar:
         setattr(struct, name, text)
         return
@@ -50,7 +50,7 @@ def put_wstr(struct: ctypes.Structure, name: str, text: str) -> None:
         arr[i] = codes[i] if i < len(codes) else 0
 
 
-# ---------------------------------------------------------------------- strutture
+# ---------------------------------------------------------------------- structures
 
 class SPageFilePhysics(ctypes.Structure):
     _pack_ = 4
@@ -59,13 +59,13 @@ class SPageFilePhysics(ctypes.Structure):
         ("gas", c_float),
         ("brake", c_float),
         ("fuel", c_float),
-        ("gear", c_int),                      # 0 = R, 1 = N, 2 = 1a, ...
+        ("gear", c_int),                      # 0 = R, 1 = N, 2 = 1st, ...
         ("rpms", c_int),
         ("steerAngle", c_float),
         ("speedKmh", c_float),
         ("velocity", c_float * 3),
-        ("accG", c_float * 3),                # x laterale, y verticale, z longitudinale
-        ("wheelSlip", c_float * 4),           # ordine ruote: FL, FR, RL, RR
+        ("accG", c_float * 3),                # x lateral, y vertical, z longitudinal
+        ("wheelSlip", c_float * 4),           # wheel order: FL, FR, RL, RR
         ("wheelLoad", c_float * 4),
         ("wheelsPressure", c_float * 4),
         ("wheelAngularSpeed", c_float * 4),
@@ -87,7 +87,7 @@ class SPageFilePhysics(ctypes.Structure):
         ("kersCharge", c_float),
         ("kersInput", c_float),
         ("autoShifterOn", c_int),
-        ("rideHeight", c_float * 2),          # anteriore, posteriore
+        ("rideHeight", c_float * 2),          # front, rear
         ("turboBoost", c_float),
         ("ballast", c_float),
         ("airDensity", c_float),
@@ -141,7 +141,7 @@ class SPageFileGraphic(ctypes.Structure):
         ("numberOfLaps", c_int),
         ("tyreCompound", c_wchar * 33),
         ("replayTimeMultiplier", c_float),
-        ("normalizedCarPosition", c_float),   # 0..1 lungo il giro
+        ("normalizedCarPosition", c_float),   # 0..1 along the lap
         ("carCoordinates", c_float * 3),
         ("penaltyTime", c_float),
         ("flag", c_int),                      # ACFlag
@@ -208,33 +208,33 @@ STATIC_TAG = "Local\\acpmf_static"
 
 
 class SharedMemoryNotAvailable(RuntimeError):
-    """La mapping non esiste: AC non è in esecuzione (o non è ancora in sessione)."""
+    """The mapping does not exist: AC is not running (or not in a session yet)."""
 
 
 class _MappedPage:
-    """Vista in sola lettura su una file mapping di AC, letta come struttura ctypes."""
+    """Read-only view of an AC file mapping, read as a ctypes structure."""
 
     def __init__(self, tag: str, struct_type: type[ctypes.Structure]):
         self._struct_type = struct_type
         try:
-            self._map = MappedView(tag, struct_type, FILE_MAP_READ, size=0)   # 0 = tutta la mapping
+            self._map = MappedView(tag, struct_type, FILE_MAP_READ, size=0)   # 0 = the whole mapping
         except FileNotFoundError as exc:
             raise SharedMemoryNotAvailable(str(exc)) from None
         self._view = self._map.ptr
-        # Non leggere mai oltre la dimensione reale della mapping.
+        # Never read past the real size of the mapping.
         self._read_size = min(self._map.region_size(), ctypes.sizeof(struct_type))
 
     def read(self) -> ctypes.Structure:
-        """Copia la pagina corrente in una nuova struttura (snapshot indipendente)."""
+        """Copy the current page into a new structure (independent snapshot)."""
         out = self._struct_type()
         ctypes.memmove(ctypes.addressof(out), self._view, self._read_size)
         return out
 
     def read_consistent(self, tries: int = 4) -> ctypes.Structure:
-        """Come read(), ma scarta le copie fatte mentre AC stava scrivendo la pagina.
+        """Like read(), but discards copies made while AC was writing the page.
 
-        Il primo campo è packetId: se vale lo stesso prima e dopo la copia (e nella copia),
-        nessuna scrittura si è sovrapposta.
+        The first field is packetId: if it is the same before and after the copy (and in the copy),
+        no write overlapped.
         """
         packet = ctypes.c_int.from_address(self._view)
         out = self._struct_type()
@@ -256,9 +256,9 @@ class _MappedPage:
 
 
 class ACSharedMemory:
-    """Accesso alle tre pagine di shared memory di AC.
+    """Access to AC's three shared memory pages.
 
-    Uso:
+    Usage:
         with ACSharedMemory() as sm:
             phy = sm.physics()
             print(phy.speedKmh, phy.rpms)
@@ -274,7 +274,7 @@ class ACSharedMemory:
             raise
 
     def physics(self) -> SPageFilePhysics:
-        # AC (333 Hz) può scrivere la pagina mentre la copiamo: snapshot verificato su packetId.
+        # AC (333 Hz) may write the page while we copy it: snapshot checked on packetId.
         return self._physics.read_consistent()
 
     def graphics(self) -> SPageFileGraphic:

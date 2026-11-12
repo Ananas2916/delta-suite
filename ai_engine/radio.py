@@ -1,12 +1,12 @@
 """
-Radio immediata: regole locali che parlano senza modello AI (latenza < 1 s, zero token).
+Instant radio: local rules that speak without an AI model (latency < 1 s, zero tokens).
 
-Giro e delta, carburante, gomme fuori finestra (una volta per stint), distacchi con la tendenza, bandiere,
-batteria delle ibride; le chiamate di gara stile giochi F1 (posizioni, avversari, gialle, danni, fine gara) sono in
-ai_engine.race_calls. Le frasi con più varianti ("a|b") cambiano a ogni chiamata.
-Il ragionamento vero (setup, strategia, "dove perdo tempo") lo fa l'agente, a richiesta:
-come l'ingegnere dei giochi di F1, più un'AI dove lo script non arriva.
-La lingua è quella della voce scelta (ai_engine.lang).
+Lap and delta, fuel, tyres out of the window (once per stint), gaps with their trend, flags,
+hybrid battery; the F1-game-style race calls (positions, rivals, yellows, damage, race end) are in
+ai_engine.race_calls. Phrases with several variants ("a|b") change on every call.
+The real reasoning (setup, strategy, "where am I losing time") is done by the agent, on request:
+like the engineer in F1 games, plus an AI where the script cannot reach.
+The language is the one of the chosen voice (ai_engine.lang).
 """
 
 from __future__ import annotations
@@ -38,12 +38,12 @@ class RadioConfig:
     gaps: bool = True
     flags: bool = True
     hybrid: bool = True
-    positions: bool = True          # primo giro, posizioni guadagnate/perse, giro veloce, arrivo
-    rivals: bool = True             # auto vicina davanti/dietro, avversari ai box
-    car: bool = True                # forature, danni, gomme finite, limitatore
+    positions: bool = True          # first lap, positions gained/lost, fastest lap, finish
+    rivals: bool = True             # close car ahead/behind, rivals in the pits
+    car: bool = True                # punctures, damage, worn tyres, limiter
     tyre_temp_lo: float = 75.0
     tyre_temp_hi: float = 100.0
-    tyre_press_lo: float = 25.5     # psi a caldo
+    tyre_press_lo: float = 25.5     # hot psi
     tyre_press_hi: float = 28.5
 
 
@@ -58,9 +58,9 @@ _FLAGS = {
 
 class RadioRules:
     def __init__(self, cfg: RadioConfig | None = None, lang: Language | None = None, seed: int | None = None):
-        from ai_engine.race_calls import RaceCalls      # qui: race_calls usa Msg di questo modulo
+        from ai_engine.race_calls import RaceCalls      # here: race_calls uses this module's Msg
         self.cfg = cfg or RadioConfig()
-        self.lang = lang or LANGUAGES["it"]
+        self.lang = lang or LANGUAGES["en-us"]
         self.rng = random.Random(seed)
         self.race = RaceCalls(self)
         self.reset()
@@ -75,18 +75,18 @@ class RadioRules:
         self.race.reset()
 
     def _p(self, key: str, **kw) -> str:
-        """Frase nella lingua della voce; se ha varianti ("a|b|c") ne sceglie una."""
+        """Phrase in the voice's language; if it has variants ("a|b|c") one is picked."""
         text = self.lang.phrases[key]
         if "|" in text:
             text = self.rng.choice(text.split("|"))
         return text.format(**kw)
 
-    # ------------------------------------------------------------- per giro
+    # ------------------------------------------------------------- per lap
     def on_lap(self, lap: LapData, laps: list[LapData], neighbours=None, race: bool = False,
                to_go: int | None = None, position: int | None = None, field_best_ms: int | None = None) -> list[Msg]:
-        """`laps` sono i giri della sessione, con `lap` (appena completato) in fondo; `to_go` i giri che mancano
-        alla fine della gara (dal leader, compreso quello appena iniziato); `field_best_ms` il miglior giro degli
-        avversari, per il giro più veloce della gara."""
+        """`laps` are the session laps, with `lap` (just completed) last; `to_go` the laps left until the end
+        of the race (from the leader, including the one just started); `field_best_ms` the rivals' best lap,
+        for the race's fastest lap."""
         out: list[Msg] = []
         c, lg = self.cfg, self.lang
         previous = laps[-2] if len(laps) >= 2 else None
@@ -146,7 +146,7 @@ class RadioRules:
         if self._stint_first != stint[0].lap_no:
             self._stint_first = stint[0].lap_no
             self._tyre_said.clear()
-        if len(stint) < 2:          # primo giro di stint: gomme ancora in temperatura
+        if len(stint) < 2:          # first stint lap: tyres still warming up
             return []
         c, last, lg = self.cfg, stint[-1], self.lang
         out = []
@@ -170,9 +170,9 @@ class RadioRules:
                 out.append(Msg(self._p("press_lo", wheel=wheels[i], p=speak_number(p, lg)), PRIO_LOW, 60))
         return out
 
-    # --------------------------------------------------------- per campione
+    # --------------------------------------------------------- per sample
     def on_sample(self, s, info: dict | None = None, ctx=None) -> list[Msg]:
-        """`ctx` (RaceContext) porta classifica, gialle e giri alla fine: senza, solo bandiere e batteria."""
+        """`ctx` (RaceContext) carries standings, yellows and laps to go: without it, only flags and battery."""
         out = self._flag_messages(s, ctx) if self.cfg.flags else []
         if self.cfg.hybrid:
             out += self._hybrid_messages(s, info)
@@ -189,7 +189,7 @@ class RadioRules:
             return []
         self._flag = flag
         if flag == ACFlag.YELLOW and ctx is not None and ctx.cars_known:
-            return []           # con le auto note la gialla la chiama race_calls, con la distanza
+            return []           # with the cars known, race_calls calls the yellow, with the distance
         if flag == ACFlag.CHECKERED and ctx is not None and ctx.race and s.position > 0:
             key = "finish_win" if s.position == 1 else "finish_podium" if s.position <= 3 else "finish"
             return [Msg(self._p(key, pos=s.position), PRIO_HIGH, 15, "flag")]
@@ -199,8 +199,8 @@ class RadioRules:
         return []
 
     def _hybrid_messages(self, s, info: dict | None) -> list[Msg]:
-        """Batteria al 20% e scarica: una volta, finché non si ricarica. Energia del giro finita: una volta per
-        stint (con un limite per giro succede quasi a ogni giro, basta saperlo)."""
+        """Battery at 20% and empty: once, until it recharges. Lap energy used up: once per
+        stint (with a per-lap limit it happens almost every lap, knowing once is enough)."""
         h = cs.hybrid_state(s, info)
         if h is None:
             return []
@@ -209,7 +209,7 @@ class RadioRules:
             return []
         out = []
         if h.charge >= cs.BATTERY_WARN + 0.15:
-            self._battery_said.clear()          # ricaricata: si può riavvisare
+            self._battery_said.clear()          # recharged: may warn again
         if h.charge < cs.BATTERY_CRIT and "empty" not in self._battery_said:
             self._battery_said.update(("empty", "low"))
             out.append(Msg(self._p("battery_empty"), PRIO_HIGH, 15, "battery"))

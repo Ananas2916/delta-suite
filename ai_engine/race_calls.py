@@ -1,9 +1,9 @@
 """
-Chiamate di gara dell'ingegnere senza AI, come nei giochi F1: posizioni guadagnate o perse, auto vicina davanti o
-dietro, avversari ai box, leader all'ultimo giro, forature, danni, gomme finite, limitatore, gialle davanti e
-pista libera, tempo della sessione; a fine giro: primo giro, tendenza dei distacchi, carburante per finire.
+The engineer's race calls without AI, as in F1 games: positions gained or lost, close car ahead or
+behind, rivals in the pits, leader on the last lap, punctures, damage, worn tyres, limiter, yellows ahead and
+track clear, session time; at the end of a lap: first lap, gap trends, fuel to finish.
 
-Ogni chiamata ha una soglia d'isteresi o un "già detto": la radio deve parlare quando serve, non a ogni campione.
+Every call has a hysteresis threshold or an "already said": the radio must speak when needed, not every sample.
 """
 
 from __future__ import annotations
@@ -17,33 +17,33 @@ from ai_engine.lang import speak_amount, speak_number
 from ai_engine.radio import Msg
 from ai_engine.voice import PRIO_HIGH, PRIO_LOW, PRIO_NORMAL, PRIO_URGENT
 
-POS_CONFIRM_S = 2.5          # la posizione nuova deve restare per qualche istante (sorpassi a metà curva)
-POS_GAP_S = 8.0              # al massimo una chiamata di posizione ogni tot secondi
-PIT_QUIET_S = 30.0           # dopo la sosta le posizioni ballano: niente chiamate
-CLOSE_S, FAR_S = 1.0, 1.5    # auto vicina sotto il secondo; si riavvisa solo dopo che si è allontanata
+POS_CONFIRM_S = 2.5          # the new position must hold for a moment (mid-corner overtakes)
+POS_GAP_S = 8.0              # at most one position call every few seconds
+PIT_QUIET_S = 30.0           # after a stop positions shuffle: no calls
+CLOSE_S, FAR_S = 1.0, 1.5    # close car under a second; warn again only after it has dropped away
 CLOSE_REPEAT_S = 45.0
 CAR_CHECK_S = 0.5
 LIMITER_KMH = 70.0
-CLEAR_AFTER_S = 4.0          # pista libera: dopo qualche secondo senza zone davanti
-TREND_MIN_S = 0.1            # tendenza dei distacchi detta da un decimo al giro in su
+CLEAR_AFTER_S = 4.0          # track clear: after a few seconds with no zones ahead
+TREND_MIN_S = 0.1            # gap trend called from a tenth per lap upwards
 FUEL_SHORT_LAPS, FUEL_OK_LAPS = 0.3, 0.5
 
 
 @dataclass
 class RaceContext:
-    """Quello che la radio sa della gara oltre al campione: classifica, zone gialle, giri alla fine."""
+    """What the radio knows about the race beyond the sample: standings, yellow zones, laps to go."""
 
     now: float
     race: bool = False
-    rows: list = field(default_factory=list)       # classifica (StandingRow)
-    zone_ahead: tuple | None = None                # (Zone, metri) dalla TrackWatch
-    to_go: int | None = None                       # giri alla fine, dal leader
-    cars_known: bool = False                       # dati degli avversari dall'app CSP
+    rows: list = field(default_factory=list)       # standings (StandingRow)
+    zone_ahead: tuple | None = None                # (Zone, metres) from TrackWatch
+    to_go: int | None = None                       # laps to go, from the leader
+    cars_known: bool = False                       # rivals' data from the CSP app
 
 
 class RaceCalls:
     def __init__(self, rules):
-        self.rules = rules          # RadioRules: lingua, configurazione e scelta delle frasi
+        self.rules = rules          # RadioRules: language, configuration and phrase picking
         self.reset()
 
     def reset(self):
@@ -66,7 +66,7 @@ class RaceCalls:
         self._clear_t: float | None = None
         self._time_prev: float | None = None
         self._fuel_short = False
-        self._gaps: dict[str, tuple[int, float]] = {}   # "ahead"/"behind" → (auto, distacco al giro scorso)
+        self._gaps: dict[str, tuple[int, float]] = {}   # "ahead"/"behind" → (car, gap on the previous lap)
 
     def p(self, key: str, **kw) -> str:
         return self.rules._p(key, **kw)
@@ -75,12 +75,12 @@ class RaceCalls:
         one, many = self.rules.lang.phrases["places"]
         return one if n == 1 else many
 
-    # ------------------------------------------------------------- per campione
+    # ------------------------------------------------------------- per sample
     def on_sample(self, s, info: dict | None, ctx: RaceContext) -> list[Msg]:
         c, now = self.rules.cfg, ctx.now
         if s.is_in_pit and not self._was_in_pit:
             self._pit_t0, self._limiter_said = now, False
-            self._car_said = {k for k in self._car_said if k.startswith("damage_")}   # gomme nuove ai box
+            self._car_said = {k for k in self._car_said if k.startswith("damage_")}   # new tyres in the pits
         elif not s.is_in_pit and self._was_in_pit:
             self._pit_exit_t = now
         self._was_in_pit = s.is_in_pit
@@ -118,7 +118,7 @@ class RaceCalls:
         old, self.pos, self._cand = self.pos, s.position, None
         if (s.completed_laps < 1 or s.is_in_pit or now - self._pit_exit_t < PIT_QUIET_S
                 or s.flag == ACFlag.CHECKERED or now - self._last_pos_call < POS_GAP_S):
-            return []           # primo giro (lo riassume la chiamata di fine giro), soste, arrivo
+            return []           # first lap (summed up by the end-of-lap call), stops, finish
         self._last_pos_call = now
         key = "pos_gained" if self.pos < old else "pos_lost"
         return [Msg(self.p(key, pos=self.pos), PRIO_NORMAL, 10, "position")]
@@ -154,7 +154,7 @@ class RaceCalls:
             return []
         if ctx.to_go == 1 and not self._leader_last_said:
             self._leader_last_said = True
-            if s.position != 1:         # se il leader sei tu, l'ultimo giro lo dice la chiamata di fine giro
+            if s.position != 1:         # if you are the leader, the end-of-lap call says it is the last lap
                 return [Msg(self.p("leader_last_lap"), PRIO_NORMAL, 20, "to_go")]
         return []
 
@@ -197,7 +197,7 @@ class RaceCalls:
             if key in self._yellow_said:
                 return []
             self._yellow_said.add(key)
-            d = max(50, int(round(dist / 50.0)) * 50)       # metri, arrotondati come li direbbe un ingegnere
+            d = max(50, int(round(dist / 50.0)) * 50)       # metres, rounded the way an engineer would say them
             phrase = "double_yellow" if zone.kind == "red" else "yellow_ahead"
             return [Msg(self.p(phrase, d=d), PRIO_URGENT, 6, "yellow")]
         if not self._yellow_said:
@@ -220,9 +220,9 @@ class RaceCalls:
                 return [Msg(self.p(key), PRIO_NORMAL, 20, "session_time")]
         return []
 
-    # ------------------------------------------------------------- a fine giro
+    # ------------------------------------------------------------- end of lap
     def lap1(self, position: int) -> Msg:
-        """Fine del primo giro: posizione e quante se ne sono guadagnate o perse dalla griglia."""
+        """End of the first lap: position and how many places gained or lost from the grid."""
         n = (self.start_pos or position) - position
         if n > 0:
             text = self.p("lap1_gained", pos=position, n=n, places=self._places(n))
@@ -233,7 +233,7 @@ class RaceCalls:
         return Msg(text, PRIO_HIGH, 25, "lap1")
 
     def gap_parts(self, ahead, me, behind) -> list[str]:
-        """Distacchi davanti e dietro con la tendenza rispetto al giro scorso (stessa auto)."""
+        """Gaps ahead and behind with the trend versus the previous lap (same car)."""
         lg = self.rules.lang
         parts = []
         for side, car, gap in (("ahead", ahead, me.interval_s if me is not None else None),
@@ -244,7 +244,7 @@ class RaceCalls:
             text = self.p(side, g=speak_number(gap, lg))
             prev = self._gaps.get(side)
             if prev is not None and prev[0] == car.index:
-                change = prev[1] - gap          # > 0: il distacco si accorcia
+                change = prev[1] - gap          # > 0: the gap is shrinking
                 amount = speak_amount(change, lg)
                 if abs(change) >= TREND_MIN_S and amount:
                     if side == "ahead":
@@ -256,7 +256,7 @@ class RaceCalls:
         return parts
 
     def fuel(self, fuel_end: float, fpl: float, to_go: int) -> list[Msg]:
-        """Carburante per finire: risparmio se non basta, via libera quando torna a bastare."""
+        """Fuel to finish: save if it is not enough, all clear once it is enough again."""
         margin = fuel_end - to_go * fpl
         if margin < -FUEL_SHORT_LAPS * fpl and not self._fuel_short:
             self._fuel_short = True

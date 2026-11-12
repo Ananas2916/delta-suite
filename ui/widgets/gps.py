@@ -1,7 +1,7 @@
 """
-GPS della pista: la linea della pista disegnata come un tracciato (fascia scura con bordo chiaro), traguardo,
-corsia box, tratti colorati per gialla (auto lenta), rossa (auto ferma) e blu, e le auto come cerchi con la
-posizione. Clic su un'auto → segnale car_clicked.
+Track GPS: the track line drawn like a circuit (dark band with a light edge), finish line,
+pit lane, coloured stretches for yellow (slow car), red (stopped car) and blue, and the cars as circles with
+their position. Click on a car → car_clicked signal.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ def _pen(color: str, width: float, alpha: int = 255, style=Qt.PenStyle.SolidLine
 
 
 class GPSView(QWidget):
-    """Mappa della pista con le auto. La linea viene dalla linea AI del tracciato (o è imparata girando); finché
-    non c'è si disegna il percorso fatto dalla tua auto."""
+    """Track map with the cars. The line comes from the track AI line (or is learned while driving); until
+    it exists, the path driven by your car is drawn."""
 
     car_clicked = pyqtSignal(int)
 
@@ -45,7 +45,7 @@ class GPSView(QWidget):
         self.cars: list[dict] = []       # {idx, pos, x, z, num, me, leader, ring, pit}
         self._screen: list[tuple[int, QPointF]] = []
 
-    # ------------------------------------------------------------- dati
+    # ------------------------------------------------------------- data
     def set_track(self, line: TrackLine | None, pit: list[tuple[float, float]] | None = None):
         if line is not self.line or pit is not self._pit_src:
             self.line, self._pit_src, self.pit = line, pit, list(pit or [])
@@ -56,7 +56,7 @@ class GPSView(QWidget):
         self.update()
 
     def add_trail(self, x: float, z: float):
-        if not self.trail or (x - self.trail[-1][0]) ** 2 + (z - self.trail[-1][1]) ** 2 > 9.0:   # un punto ogni 3 m
+        if not self.trail or (x - self.trail[-1][0]) ** 2 + (z - self.trail[-1][1]) ** 2 > 9.0:   # one point every 3 m
             self.trail.append((x, z))
 
     def set_zones(self, zones: list[Zone]):
@@ -66,7 +66,7 @@ class GPSView(QWidget):
         self.cars = cars
         self.update()
 
-    # ------------------------------------------------------------- disegno
+    # ------------------------------------------------------------- painting
     def _car_xy(self, c: dict) -> tuple[float, float] | None:
         if self.line is not None and c.get("pos") is not None:
             return self.line.point(c["pos"])
@@ -75,7 +75,7 @@ class GPSView(QWidget):
         return None
 
     def _mapper(self, area: QRectF):
-        """Funzione mondo (x, z) → punto nel widget: tutta la pista (o il percorso fatto) al centro."""
+        """World (x, z) → widget point function: the whole track (or the driven path) centred."""
         if self.line is not None:
             pts = list(zip(self.line.xs, self.line.zs)) + self.pit
         else:
@@ -103,15 +103,15 @@ class GPSView(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor(C["panel2"]))
         size = min(self.width(), self.height())
-        r = max(7.0, min(11.0, size / 34))            # raggio delle auto
-        edge, fill = r * 1.6, r * 1.1                 # spessore della pista: bordo e fascia
+        r = max(7.0, min(11.0, size / 34))            # car radius
+        edge, fill = r * 1.6, r * 1.1                 # track thickness: edge and band
         area = QRectF(self.rect()).adjusted(r * 2.2, r * 2.2, -r * 2.2, -r * 2.2)
         to_px = self._mapper(area)
         self._screen = []
         if to_px is None:
             p.setPen(QColor(C["dim"]))
             p.setFont(paint_font(9, QFont.Weight.Normal))
-            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "La pista compare qui\nappena l'auto si muove")
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "The track appears here\nas soon as the car moves")
             p.end()
             return
 
@@ -126,7 +126,7 @@ class GPSView(QWidget):
             p.drawPath(track)
             for z in self.zones:
                 seg = self._path(to_px, self.line.points(z.start, z.end))
-                p.setPen(_pen(ZONE_FILL[z.kind], edge * 1.9, 70))     # alone
+                p.setPen(_pen(ZONE_FILL[z.kind], edge * 1.9, 70))     # halo
                 p.drawPath(seg)
                 p.setPen(_pen(ZONE_FILL[z.kind], fill))
                 p.drawPath(seg)
@@ -138,7 +138,7 @@ class GPSView(QWidget):
             p.setPen(_pen(TRACK_FILL, fill))
             p.drawPath(trail)
 
-        # in ordine: avversari, leader, auto inquadrate, la tua sopra a tutte
+        # in order: rivals, leader, cars on screen, yours on top
         order = sorted(self.cars, key=lambda c: (c.get("me", False), bool(c.get("ring")), c.get("leader", False)))
         for c in order:
             xy = self._car_xy(c)
@@ -153,11 +153,11 @@ class GPSView(QWidget):
         a, b = to_px(*self.line.point(0.0)), to_px(*self.line.point(0.004))
         dx, dy = b.x() - a.x(), b.y() - a.y()
         n = math.hypot(dx, dy) or 1.0
-        nx, ny = -dy / n, dx / n                       # perpendicolare alla pista
+        nx, ny = -dy / n, dx / n                       # perpendicular to the track
         half = edge * 0.9
         p.setPen(QPen(QColor("#ff3b3b"), max(3.0, edge * 0.28), Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
         p.drawLine(QPointF(a.x() - nx * half, a.y() - ny * half), QPointF(a.x() + nx * half, a.y() + ny * half))
-        # bandierina a scacchi fuori dalla pista
+        # small chequered flag outside the track
         sq = max(3.5, edge * 0.3)
         ox, oy = a.x() + nx * (half + sq * 1.6), a.y() + ny * (half + sq * 1.6)
         p.setPen(Qt.PenStyle.NoPen)

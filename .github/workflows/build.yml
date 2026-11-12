@@ -1,5 +1,5 @@
-# Test + exe su Windows a ogni push. Con un tag v*, o lanciato a mano con "release" = v0.5.1, crea una BOZZA di
-# release con l'exe: la pubblicazione resta manuale (GitHub → Releases → Edit → Publish).
+# Tests + exe on Windows at every push. With a v* tag, or run by hand with "release" = v0.6.0, it creates a DRAFT
+# release with the exe: publishing stays manual (GitHub → Releases → Edit → Publish).
 name: Build
 
 on:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Bozza di release da creare con l'exe di questa build (es. v0.5.1); vuoto = solo build"
+        description: "Draft release to create with this build's exe (e.g. v0.6.0); empty = build only"
         required: false
         default: ""
 
@@ -30,7 +30,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
 
-      - name: Dipendenze
+      - name: Dependencies
         run: python -m pip install -r requirements-dev.txt
 
       - name: Test
@@ -43,16 +43,16 @@ jobs:
           python tools/make_icon.py
           python -m PyInstaller DeltaSuite.spec --noconfirm --clean --distpath dist
 
-      - name: Autotest dell'exe
+      - name: Exe self-test
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP "selftest"
           $env:DELTA_SELFTEST = $out
           $p = Start-Process dist\DeltaSuite.exe -PassThru
-          if (-not $p.WaitForExit(240000)) { $p.Kill(); throw "autotest bloccato" }
+          if (-not $p.WaitForExit(240000)) { $p.Kill(); throw "self-test hung" }
           Get-Content (Join-Path $out "selftest.txt")
           if (-not (Select-String -Path (Join-Path $out "selftest.txt") -Pattern "^mcp=ok" -Quiet)) {
-            throw "autotest fallito"
+            throw "self-test failed"
           }
 
       - uses: actions/upload-artifact@v4
@@ -68,9 +68,9 @@ jobs:
           path: ${{ runner.temp }}/selftest
           retention-days: 14
 
-      # con un tag v* o con "release" nel lancio manuale (il tag lo crea GitHub quando la bozza si pubblica);
-      # se la release c'è già (bozza creata a mano, o pubblicata e quindi taggata) si aggiorna solo l'exe
-      - name: Bozza di release
+      # with a v* tag or with "release" in a manual run (GitHub creates the tag when the draft is published);
+      # if the release already exists (draft created by hand, or published and so tagged) only the exe is updated
+      - name: Draft release
         if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release, 'v')
         env:
           GH_TOKEN: ${{ github.token }}

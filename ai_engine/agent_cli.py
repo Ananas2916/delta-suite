@@ -1,9 +1,9 @@
 """
-Ingegnere di pista tramite agenti a riga di comando (abbonamento invece di chiave API).
+Race engineer through command-line agents (subscription instead of an API key).
 
-Claude Code è il backend principale: modalità -p con output stream-json, sessione ripresa con
---resume, nessuno strumento integrato (niente comandi o file), solo gli strumenti MCP di Delta Suite.
-Codex e Antigravity usano la stessa idea con i loro comandi non interattivi.
+Claude Code is the main backend: -p mode with stream-json output, session resumed with
+--resume, no built-in tools (no commands or files), only Delta Suite's MCP tools.
+Codex and Antigravity use the same idea with their non-interactive commands.
 """
 
 from __future__ import annotations
@@ -17,32 +17,32 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-ENGINEER_PROMPT = """Sei l'ingegnere di pista di un pilota che corre in Assetto Corsa (simulatore con fisica \
-realistica). Lavori come al muretto di un team GT/WEC: asciutto, preciso, in italiano.
+ENGINEER_PROMPT = """You are the race engineer of a driver racing in Assetto Corsa (a simulator with realistic \
+physics). You work like on the pit wall of a GT/WEC team: dry, precise.
 
-Dati: li leggi SOLO dagli strumenti MCP "deltasuite" (stato_live, giri_sessione, confronta_giri, \
-setup_attuale, classifica, archivio_sessioni). Non inventare numeri: se un dato non c'è, dillo. \
-Ordine ruote: anteriore sinistra, anteriore destra, posteriore sinistra, posteriore destra. \
-Pressioni in psi a caldo, temperature in gradi, usura in % (100 = gomma nuova).
+Data: you read it ONLY from the "deltasuite" MCP tools (live_state, session_laps, compare_laps, \
+current_setup, standings, session_archive). Never make numbers up: if a piece of data is missing, say so. \
+Wheel order: front left, front right, rear left, rear right. \
+Hot pressures in psi, temperatures in degrees, wear in % (100 = new tyre).
 
-Modifiche: non cambi nulla direttamente. Usi proponi_modifica (bias freni, ABS, TC, freno motore, \
-voci di setup con il loro nome interno e valore in click); il pilota conferma con un tasto al volante. \
-Le voci di setup si applicano solo ai box: proponile comunque se servono.
+Changes: you never change anything directly. You use propose_change (brake bias, ABS, TC, engine brake, \
+setup items with their internal name and value in clicks); the driver confirms with a wheel button. \
+Setup items only apply in the pits: propose them anyway if needed.
 
-Il messaggio inizia con la modalità e la lingua, es. "[RADIO] [English]": rispondi SEMPRE in quella lingua (è la lingua della voce che il pilota ha scelto), anche se la domanda è scritta in un'altra.
-Modalità:
-[RADIO] il pilota sta guidando e ti sente in cuffia: al massimo due frasi brevi, parlate, senza \
-elenchi, simboli, markdown o abbreviazioni (scrivi "gradi", "psi", "decimi"). Numeri arrotondati. \
-Prima il dato più utile adesso.
-[ANALISI] il pilota è fermo e legge: risposta completa in markdown, cita i dati che giustificano \
-ogni raccomandazione, chiudi con le azioni in ordine di priorità."""
+The message starts with the mode and the language, e.g. "[RADIO] [English]": ALWAYS reply in that language (it is the language of the voice the driver chose), even if the question is written in another one.
+Modes:
+[RADIO] the driver is driving and hears you in the headset: two short spoken sentences at most, no \
+lists, symbols, markdown or abbreviations (write "degrees", "psi", "tenths"). Rounded numbers. \
+The most useful piece of information right now first.
+[ANALYSIS] the driver is stopped and reading: a complete markdown answer, quote the data behind \
+every recommendation, finish with the actions in order of priority."""
 
 BACKENDS = {
-    "claude": "Claude Code (abbonamento)",
-    "codex": "Codex CLI (non verificato)",
-    "antigravity": "Antigravity CLI (non verificato)",
-    "custom": "Comando personalizzato",
-    "api": "API Anthropic (chiave)",
+    "claude": "Claude Code (subscription)",
+    "codex": "Codex CLI (untested)",
+    "antigravity": "Antigravity CLI (untested)",
+    "custom": "Custom command",
+    "api": "Anthropic API (key)",
 }
 
 CREATE_NO_WINDOW = 0x08000000
@@ -51,7 +51,7 @@ CREATE_NO_WINDOW = 0x08000000
 def engineer_workdir() -> Path:
     d = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DeltaSuite" / "engineer"
     d.mkdir(parents=True, exist_ok=True)
-    # istruzioni anche come file di progetto, per gli agenti che li leggono (Codex, Antigravity)
+    # instructions also as project files, for the agents that read them (Codex, Antigravity)
     for name in ("AGENTS.md", "GEMINI.md"):
         p = d / name
         if not p.is_file() or p.read_text(encoding="utf-8") != ENGINEER_PROMPT:
@@ -75,7 +75,7 @@ class AgentError(RuntimeError):
 
 
 class CLIAgent:
-    """Una conversazione con l'agente scelto; ask() è bloccante (chiamarla da un thread)."""
+    """A conversation with the chosen agent; ask() blocks (call it from a thread)."""
 
     def __init__(self, backend: str, mcp_config: dict, custom_command: str = "", model: str = ""):
         self.backend = backend
@@ -94,20 +94,20 @@ class CLIAgent:
         if p is not None and p.poll() is None:
             p.kill()
 
-    # ------------------------------------------------------------ comandi
+    # ------------------------------------------------------------ commands
     def _mcp_file(self) -> Path:
         p = self.workdir / "mcp.json"
         p.write_text(json.dumps(self.mcp_config, indent=2), encoding="utf-8")
         return p
 
     def command(self) -> tuple[list[str], bool, dict]:
-        """(argv, prompt_da_stdin, env aggiuntive)."""
+        """(argv, prompt_via_stdin, extra env)."""
         server = self.mcp_config["mcpServers"]["deltasuite"]
         token = server["headers"]["Authorization"].split(" ", 1)[1]
         if self.backend == "claude":
             exe = find_executable("claude")
             if not exe:
-                raise AgentError("Claude Code non trovato: installalo e fai il login con `claude`")
+                raise AgentError("Claude Code not found: install it and log in with `claude`")
             cmd = [exe, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                    "--mcp-config", str(self._mcp_file()), "--strict-mcp-config",
                    "--tools", "", "--allowedTools", "mcp__deltasuite",
@@ -120,7 +120,7 @@ class CLIAgent:
         if self.backend == "codex":
             exe = find_executable("codex")
             if not exe:
-                raise AgentError("Codex CLI non trovato")
+                raise AgentError("Codex CLI not found")
             cmd = [exe, "exec", "--skip-git-repo-check",
                    "-c", f'mcp_servers.deltasuite.url="{server["url"]}"',
                    "-c", 'mcp_servers.deltasuite.bearer_token_env_var="DELTASUITE_MCP_TOKEN"']
@@ -130,25 +130,25 @@ class CLIAgent:
         if self.backend == "antigravity":
             exe = find_executable("agy") or find_executable("antigravity")
             if not exe:
-                raise AgentError("Antigravity CLI (agy) non trovato")
-            # l'MCP va configurato in ~/.gemini/config/mcp_config.json (pulsante "Copia configurazione MCP")
+                raise AgentError("Antigravity CLI (agy) not found")
+            # the MCP must be configured in ~/.gemini/config/mcp_config.json ("Copy MCP configuration" button)
             return [exe, "-p", "{prompt}"], False, {}
         if self.backend == "custom":
             if not self.custom_command.strip():
-                raise AgentError("Comando personalizzato vuoto")
+                raise AgentError("Custom command is empty")
             parts = shlex.split(self.custom_command, posix=False)
             return parts, "{prompt}" not in parts, {"DELTASUITE_MCP_URL": server["url"], "DELTASUITE_MCP_TOKEN": token}
-        raise AgentError(f"backend sconosciuto: {self.backend}")
+        raise AgentError(f"unknown backend: {self.backend}")
 
-    # --------------------------------------------------------------- chiamata
-    def ask(self, text: str, mode: str = "ANALISI", on_text: Callable[[str], None] | None = None,
-            timeout_s: float = 600.0, language: str = "italiano") -> str:
+    # --------------------------------------------------------------- call
+    def ask(self, text: str, mode: str = "ANALYSIS", on_text: Callable[[str], None] | None = None,
+            timeout_s: float = 600.0, language: str = "English") -> str:
         prompt = f"[{mode}] [{language}] {text}"
         cmd, via_stdin, extra_env = self.command()
         if not via_stdin:
             cmd = [prompt if a == "{prompt}" else a for a in cmd]
         env = {**os.environ, **extra_env}
-        env.pop("CLAUDECODE", None)     # se l'hub è lanciato da dentro Claude Code
+        env.pop("CLAUDECODE", None)     # if the hub is launched from inside Claude Code
         self._proc = proc = subprocess.Popen(
             cmd, cwd=self.workdir, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
@@ -173,7 +173,7 @@ class CLIAgent:
             self._proc = None
         if proc.returncode not in (0, None) and not result:
             err = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
-            raise AgentError(err[-800:] or f"l'agente è uscito con codice {proc.returncode}")
+            raise AgentError(err[-800:] or f"the agent exited with code {proc.returncode}")
         return result
 
     def _read_claude(self, proc: subprocess.Popen, on_text) -> str:
@@ -193,17 +193,17 @@ class CLIAgent:
                     on_text(d.get("text", ""))
                     streamed = True
                 elif e.get("type") == "message_start" and streamed and on_text:
-                    on_text("\n\n")      # nuovo messaggio dopo una chiamata a strumento
+                    on_text("\n\n")      # new message after a tool call
             elif kind == "result":
                 self.session_id = ev.get("session_id") or self.session_id
                 if ev.get("is_error"):
-                    raise AgentError(str(ev.get("result") or ev.get("subtype") or "errore dell'agente"))
+                    raise AgentError(str(ev.get("result") or ev.get("subtype") or "agent error"))
                 result = ev.get("result") or ""
         return result
 
 
 class APIAgent:
-    """Adattatore del RaceEngineer via API alla stessa interfaccia (usa il riepilogo dello stint)."""
+    """Adapter of the API RaceEngineer to the same interface (uses the stint summary)."""
 
     def __init__(self, engineer, summary_provider: Callable[[], str]):
         self.engineer = engineer
@@ -217,8 +217,8 @@ class APIAgent:
     def cancel(self):
         pass
 
-    def ask(self, text: str, mode: str = "ANALISI", on_text=None, timeout_s: float = 600.0,
-            language: str = "italiano") -> str:
+    def ask(self, text: str, mode: str = "ANALYSIS", on_text=None, timeout_s: float = 600.0,
+            language: str = "English") -> str:
         summary = None if self._sent else self.summary_provider()
         self._sent = True
         return self.engineer.ask(f"[{mode}] [{language}] {text}", summary, on_text=on_text)

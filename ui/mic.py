@@ -1,4 +1,4 @@
-"""Registrazione dal microfono per il push-to-talk (Qt Multimedia, nessuna libreria extra)."""
+"""Microphone recording for push-to-talk (Qt Multimedia, no extra libraries)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def input_devices() -> list[QAudioDevice]:
 
 
 def to_pcm16_mono_16k(raw: bytes, fmt: QAudioFormat) -> bytes:
-    """Converte quello che dà il dispositivo in PCM 16 bit, mono, 16 kHz (formato di Tsukumo)."""
+    """Convert what the device gives into 16-bit mono 16 kHz PCM (Tsukumo's format)."""
     sf = fmt.sampleFormat()
     if sf == QAudioFormat.SampleFormat.Int16:
         a = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
@@ -79,7 +79,7 @@ class MicRecorder(QObject):
             self._buf += bytes(self._io.readAll())
 
     def stop(self) -> bytes:
-        """Ferma e ritorna l'audio come PCM 16 bit mono 16 kHz."""
+        """Stop and return the audio as 16-bit mono 16 kHz PCM."""
         if self._source is None:
             return b""
         self._read()

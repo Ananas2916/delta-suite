@@ -1,8 +1,8 @@
 """
-kernel32 per le file mapping (shared memory di AC e app CSP), caricato solo al primo uso.
+kernel32 for file mappings (AC shared memory and CSP app), loaded only on first use.
 
-Così il resto di hub_core si importa anche fuori da Windows (test, analisi offline): lì aprire una
-mapping dà FileNotFoundError, come se AC non fosse avviato.
+This way the rest of hub_core can be imported outside Windows too (tests, offline analysis): there
+opening a mapping raises FileNotFoundError, as if AC were not running.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class MEMORY_BASIC_INFORMATION(ctypes.Structure):
 @lru_cache(maxsize=1)
 def kernel32():
     if not hasattr(ctypes, "WinDLL"):
-        raise FileNotFoundError("file mapping disponibili solo su Windows")   # come AC non avviato
+        raise FileNotFoundError("file mappings are only available on Windows")   # same as AC not running
     k = ctypes.WinDLL("kernel32", use_last_error=True)
     k.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
     k.OpenFileMappingW.restype = wintypes.HANDLE
@@ -46,27 +46,27 @@ def kernel32():
 
 
 class MappedView:
-    """Vista su una mapping creata da un altro processo (AC o l'app CSP): qui non si crea mai nulla.
+    """View of a mapping created by another process (AC or the CSP app): nothing is ever created here.
 
-    Se la si creasse e AC non fosse ancora avviato, AC si aggancerebbe alla nostra, con la nostra
-    dimensione. FileNotFoundError se la mapping non c'è.
+    If we created it while AC was not running yet, AC would attach to ours, with our size.
+    FileNotFoundError if the mapping does not exist.
     """
 
     def __init__(self, tag: str, struct_type, access: int = FILE_MAP_READ, size: int | None = None):
         k = kernel32()
         self.handle = k.OpenFileMappingW(access, False, tag)
         if not self.handle:
-            raise FileNotFoundError(f"{tag} non trovata (errore {ctypes.get_last_error()})")
+            raise FileNotFoundError(f"{tag} not found (error {ctypes.get_last_error()})")
         self.ptr = k.MapViewOfFile(self.handle, access, 0, 0, ctypes.sizeof(struct_type) if size is None else size)
         if not self.ptr:
             err = ctypes.get_last_error()
             k.CloseHandle(self.handle)
             self.handle = None
-            raise OSError(err, f"MapViewOfFile fallita su {tag}")
+            raise OSError(err, f"MapViewOfFile failed on {tag}")
         self.struct = struct_type.from_address(self.ptr)
 
     def region_size(self) -> int:
-        """Byte davvero mappati: non si legge mai oltre (le pagine di AC possono essere più corte)."""
+        """Bytes actually mapped: never read past them (AC pages can be shorter)."""
         mbi = MEMORY_BASIC_INFORMATION()
         kernel32().VirtualQuery(self.ptr, ctypes.byref(mbi), ctypes.sizeof(mbi))
         return mbi.RegionSize

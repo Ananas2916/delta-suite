@@ -1,4 +1,4 @@
-"""Widget riutilizzati dalle pagine dell'hub."""
+"""Widgets reused by the hub pages."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ class Card(QFrame):
 
 
 class ValueTile(Card):
-    """Riquadro con titolo piccolo e valore grande."""
+    """Tile with a small title and a big value."""
 
     def __init__(self, title: str, value: str = "--", big: int = 20):
         super().__init__()
@@ -87,7 +87,7 @@ class ValueTile(Card):
         self.title = label(title.upper(), "dim")
         self.title.setStyleSheet("font-size: 8pt; letter-spacing: 1px;")
         self.value = QLabel(value)
-        # via stylesheet: lo stylesheet globale ha la precedenza su setFont
+        # via stylesheet: the global stylesheet takes precedence over setFont
         self._base_style = f"font-size: {big}pt; font-weight: 700;"
         self.value.setStyleSheet(self._base_style)
         lay.addWidget(self.title)
@@ -100,7 +100,7 @@ class ValueTile(Card):
 
 
 class Bar(QWidget):
-    """Barra verticale (pedali) o orizzontale centrata (sterzo)."""
+    """Vertical bar (pedals) or centred horizontal bar (steering)."""
 
     def __init__(self, name: str, color: str, centered: bool = False):
         super().__init__()
@@ -141,7 +141,7 @@ class Bar(QWidget):
 
 
 def temp_color(t: float, cold: float = 70.0, ideal: float = 88.0, hot: float = 105.0) -> QColor:
-    """Blu (freddo) -> verde (finestra) -> rosso (caldo)."""
+    """Blue (cold) -> green (window) -> red (hot)."""
     blue, green, red = QColor(C["blue"]), QColor(C["green"]), QColor(C["red"])
 
     def mix(a: QColor, b: QColor, k: float) -> QColor:
@@ -179,12 +179,12 @@ class TyreBox(QFrame):
             self.info.setText("")
             return
         self.temp.setText(f"{temp:.0f}°")
-        extra = f"\nfreno {brake:.0f}°" if brake is not None else ""
+        extra = f"\nbrake {brake:.0f}°" if brake is not None else ""
         self.info.setText(f"{press:.1f} psi · {wear:.1f}%{extra}")
 
 
 class TyreGrid(Card):
-    NAMES = ("ANT SX", "ANT DX", "POST SX", "POST DX")
+    NAMES = ("FRONT L", "FRONT R", "REAR L", "REAR R")
 
     def __init__(self):
         super().__init__()
@@ -201,7 +201,7 @@ class TyreGrid(Card):
 
 
 class SessionPicker(QComboBox):
-    """Scelta della sorgente dati: sessione live corrente o una sessione dell'archivio."""
+    """Data source picker: the current live session or a session from the archive."""
 
     def __init__(self, hub):
         super().__init__()
@@ -214,16 +214,16 @@ class SessionPicker(QComboBox):
         current = self.currentData()
         self.blockSignals(True)
         self.clear()
-        self.addItem("Sessione corrente (live)", None)
+        self.addItem("Current session (live)", None)
         for s in self.hub.db.sessions():
-            self.addItem(f"#{s['id']}  {s['started']:%d/%m %H:%M}  {s['car']} @ {s['track']}  ({s['laps']} giri)",
+            self.addItem(f"#{s['id']}  {s['started']:%d/%m %H:%M}  {s['car']} @ {s['track']}  ({s['laps']} laps)",
                          s["id"])
         idx = self.findData(current)
         self.setCurrentIndex(max(0, idx))
         self.blockSignals(False)
 
     def selected(self):
-        """Ritorna (info, laps, session_id)."""
+        """Return (info, laps, session_id)."""
         sid = self.currentData()
         if sid is None:
             return self.hub.session_info, list(self.hub.laps), self.hub.session_id
@@ -232,7 +232,7 @@ class SessionPicker(QComboBox):
 
 
 def paint_font(size: float, weight=QFont.Weight.Bold) -> QFont:
-    """Font per i widget disegnati a mano (grafica TV, GPS, schema dell'auto)."""
+    """Font for hand-painted widgets (TV graphics, GPS, car diagram)."""
     f = QFont("Segoe UI")
     f.setPointSizeF(size)
     f.setWeight(weight)

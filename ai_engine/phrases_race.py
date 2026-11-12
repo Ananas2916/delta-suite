@@ -1,16 +1,16 @@
 """
-Frasi della radio di gara senza AI, nello stile degli ingegneri dei giochi F1 (Codemasters) e della radio vera:
-posizioni, avversari, giro veloce, distacchi, carburante, gomme e danni, gialle, fine gara, tempo della sessione.
+Race radio phrases without AI, in the style of the engineers of F1 games and of real team radio:
+positions, rivals, fastest lap, gaps, fuel, tyres and damage, yellows, race end, session time.
 
-Una voce per frase con tutte le lingue affiancate. "a|b|c" sono varianti: la radio ne sceglie una a caso, così
-non ripete sempre le stesse parole. Segnaposto: {pos} posizione, {n} numero, {places} "posizione/i",
-{g} distacco parlato, {d} distanza in metri o decimi parlati, {wheel} ruota, {zone} zona dell'auto.
+One entry per phrase with all languages side by side. "a|b|c" are variants: the radio picks one at random, so
+it does not always repeat the same words. Placeholders: {pos} position, {n} number, {places} "place/s",
+{g} spoken gap, {d} distance in metres or spoken tenths, {wheel} wheel, {zone} car zone.
 """
 
 from __future__ import annotations
 
 RACE_PHRASES: dict[str, dict[str, object]] = {
-    # ---------------------------------------------------------------- posizioni
+    # ---------------------------------------------------------------- positions
     "lap1": {
         "it": "Fine del primo giro, sei P{pos}.|Primo giro completato, P{pos}.",
         "en": "End of lap one, you're P{pos}.|That's lap one done, P{pos}.",
@@ -57,7 +57,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "fr": "Meilleur tour en course !|C'est le meilleur tour de la course !",
         "pt": "Volta mais rápida da corrida!|É a volta mais rápida da prova!",
     },
-    # ---------------------------------------------------------------- distacchi e avversari
+    # ---------------------------------------------------------------- gaps and rivals
     "closing": {
         "it": "recuperi {d} al giro", "en": "closing {d} a lap", "es": "recuperas {d} por vuelta",
         "fr": "tu reprends {d} au tour", "pt": "recuperando {d} por volta",
@@ -102,7 +102,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "fr": "La voiture derrière est rentrée au stand.",
         "pt": "O carro de trás entrou nos boxes.",
     },
-    # ---------------------------------------------------------------- fine gara
+    # ---------------------------------------------------------------- race end
     "leader_last_lap": {
         "it": "Il leader è all'ultimo giro.", "en": "Leader is on the final lap.",
         "es": "El líder está en la última vuelta.", "fr": "Le leader est dans le dernier tour.",
@@ -128,7 +128,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "fr": "Drapeau à damier, P{pos}. Bon travail, rentre au stand.",
         "pt": "Bandeira quadriculada, P{pos}. Bom trabalho, volte aos boxes.",
     },
-    # ---------------------------------------------------------------- carburante
+    # ---------------------------------------------------------------- fuel
     "fuel_save": {
         "it": "Il carburante non basta per finire: risparmia, alza prima delle frenate.|Dobbiamo risparmiare "
               "carburante, lift and coast.",
@@ -143,7 +143,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "es": "Combustible suficiente hasta el final, puedes apretar.",
         "fr": "Carburant OK jusqu'à la fin, tu peux attaquer.", "pt": "Combustível ok até o fim, pode acelerar.",
     },
-    # ---------------------------------------------------------------- auto
+    # ---------------------------------------------------------------- car
     "puncture": {
         "it": "Foratura {wheel}! Box, box.", "en": "Puncture, {wheel}! Box, box.", "es": "¡Pinchazo {wheel}! Box, box.",
         "fr": "Crevaison {wheel} ! Box, box.", "pt": "Furo no {wheel}! Box, box.",
@@ -177,7 +177,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "it": "Limitatore!|Inserisci il limitatore!", "en": "Pit limiter!|Limiter, limiter!",
         "es": "¡Limitador!", "fr": "Limiteur !", "pt": "Limitador!",
     },
-    # ---------------------------------------------------------------- pista
+    # ---------------------------------------------------------------- track
     "yellow_ahead": {
         "it": "Gialla davanti, auto lenta a {d} metri.|Attenzione, gialla tra {d} metri.",
         "en": "Yellow flag ahead, slow car in {d} metres.|Careful, yellow in {d} metres.",
@@ -196,7 +196,7 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
         "en": "Track is clear, green flag.|Green, green, track is clear.",
         "es": "Pista libre, bandera verde.", "fr": "Piste dégagée, drapeau vert.", "pt": "Pista livre, bandeira verde.",
     },
-    # ---------------------------------------------------------------- sessione
+    # ---------------------------------------------------------------- session
     "time_5min": {
         "it": "Mancano 5 minuti alla fine della sessione.", "en": "Five minutes left in the session.",
         "es": "Quedan 5 minutos de sesión.", "fr": "Il reste 5 minutes de session.", "pt": "Faltam 5 minutos de sessão.",
@@ -210,5 +210,5 @@ RACE_PHRASES: dict[str, dict[str, object]] = {
 
 
 def phrases_for(code: str) -> dict[str, object]:
-    """Le frasi di gara di una lingua ("it", "en", "es", "fr", "pt")."""
+    """The race phrases of one language ("it", "en", "es", "fr", "pt")."""
     return {key: texts[code] for key, texts in RACE_PHRASES.items()}

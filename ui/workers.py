@@ -1,4 +1,4 @@
-"""Thread dell'hub: acquisizione (AC, demo o replay) e lavori bloccanti fuori dal thread della UI."""
+"""Hub threads: acquisition (AC, demo or replay) and blocking jobs off the UI thread."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class TelemetryWorker(QThread):
             try:
                 connected = src.connect()
             except (OSError, ValueError) as exc:
-                self.status.emit(f"Sorgente non disponibile: {exc}", False)
+                self.status.emit(f"Source not available: {exc}", False)
                 break
             if not connected:
                 if not waiting:
@@ -80,8 +80,8 @@ class TelemetryWorker(QThread):
                     last_packet, stale_since = s.packet_id, s.t
                 elif s.t - stale_since > 5.0 and s.status == ACStatus.OFF:
                     src.disconnect()
-                    self.status.emit("Replay terminato" if src.finished else
-                                     "AC non aggiorna più i dati, riaggancio...", False)
+                    self.status.emit("Replay finished" if src.finished else
+                                     "AC is no longer updating the data, reattaching...", False)
                     break
                 if recorder is not None and src.last_pages is not None and s.status != ACStatus.OFF:
                     recorder.write(*src.last_pages, s.t)
@@ -92,7 +92,7 @@ class TelemetryWorker(QThread):
                     self.lap_completed.emit(lap)
                 self.sample_ready.emit(s)
                 if src.finished:
-                    self.status.emit("Replay terminato", False)
+                    self.status.emit("Replay finished", False)
                     break
 
                 now = time.perf_counter()
@@ -114,11 +114,11 @@ class TelemetryWorker(QThread):
             self.bridge.disconnect()
             self.bridge_state.emit(None)
         if not src.finished:
-            self.status.emit("Acquisizione ferma", False)
+            self.status.emit("Acquisition stopped", False)
 
 
 class Job(QThread):
-    """Esegue una funzione bloccante fuori dal thread della UI."""
+    """Runs a blocking function off the UI thread."""
 
     text = pyqtSignal(str)
     done = pyqtSignal(object)

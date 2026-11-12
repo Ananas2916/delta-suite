@@ -1,12 +1,12 @@
 """
-Registrazione e replay delle pagine grezze della shared memory di AC.
+Recording and replay of the raw pages of AC's shared memory.
 
-Formato .dsr (Delta Suite Recording), compresso gzip:
-    b"DSR1", uint32 dim. physics, uint32 dim. graphics, uint32 dim. static, pagina static
-    poi, per ogni campione: float64 t (s dall'inizio), pagina physics, pagina graphics
+.dsr format (Delta Suite Recording), gzip compressed:
+    b"DSR1", uint32 physics size, uint32 graphics size, uint32 static size, static page
+    then, for each sample: float64 t (s from start), physics page, graphics page
 
-Si registra esattamente ciò che l'hub legge, quindi il replay ripassa dallo stesso codice
-(sample_from_pages) e una sessione vera diventa un test ripetibile senza AC acceso.
+Exactly what the hub reads is recorded, so replay goes through the same code
+(sample_from_pages) and a real session becomes a repeatable test without AC running.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def recording_path(info: dict) -> Path:
 
 
 class SessionRecorder:
-    """Scrive le pagine grezze lette dall'hub in un file .dsr."""
+    """Writes the raw pages read by the hub to a .dsr file."""
 
     def __init__(self, path: str | Path, static: SPageFileStatic):
         self.path = Path(path)
@@ -71,14 +71,14 @@ class SessionRecorder:
 
 
 class RecordingReader:
-    """Lettura sequenziale di un file .dsr."""
+    """Sequential reading of a .dsr file."""
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self._f = gzip.open(self.path, "rb")
         magic, phy, gfx, st = _HEADER.unpack(self._read(_HEADER.size))
         if magic != MAGIC:
-            raise ValueError(f"{self.path.name} non è una registrazione Delta Suite")
+            raise ValueError(f"{self.path.name} is not a Delta Suite recording")
         self._phy_size, self._gfx_size = phy, gfx
         self.static = self._page(SPageFileStatic, self._read(st))
 
@@ -90,7 +90,7 @@ class RecordingReader:
 
     @staticmethod
     def _page(cls, data: bytes):
-        # pagine registrate da versioni con struttura più corta/lunga: si copia la parte comune
+        # pages recorded by versions with a shorter/longer structure: copy the common part
         out = cls()
         n = min(len(data), ctypes.sizeof(cls))
         ctypes.memmove(ctypes.addressof(out), data, n)
@@ -114,7 +114,7 @@ class RecordingReader:
 
 
 def read_samples(path: str | Path) -> tuple[dict, list[TelemetrySample]]:
-    """Tutta la registrazione in memoria (per test e analisi offline)."""
+    """The whole recording in memory (for tests and offline analysis)."""
     r = RecordingReader(path)
     try:
         info = session_info_from_static(r.static, "Replay")
@@ -124,13 +124,13 @@ def read_samples(path: str | Path) -> tuple[dict, list[TelemetrySample]]:
 
 
 class ReplaySource:
-    """Sorgente con la stessa interfaccia di TelemetryReceiver che rilegge un file .dsr.
+    """Source with the same interface as TelemetryReceiver that plays back a .dsr file.
 
-    speed_factor > 1 accelera; i campioni intermedi vengono saltati per restare in tempo reale.
+    speed_factor > 1 speeds up; intermediate samples are skipped to stay in real time.
     """
 
     name = "Replay"
-    waiting_message = "Apertura della registrazione..."
+    waiting_message = "Opening the recording..."
 
     def __init__(self, path: str | Path, speed_factor: float = 1.0):
         self.path = Path(path)
@@ -178,6 +178,6 @@ class ReplaySource:
         self.last_pages = (phy, gfx)
         s = sample_from_pages(phy, gfx, time.perf_counter())
         if self.finished:
-            # fine registrazione: come AC che torna ai menu
+            # end of recording: like AC going back to the menus
             s = TelemetrySample(**{**s.__dict__, "status": ACStatus.OFF})
         return s

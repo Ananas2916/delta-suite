@@ -14,7 +14,7 @@ def lap(n, ms, valid=True, fuel_start=50.0, fuel_end=47.0, wear=(99.0,) * 4, tem
 
 def test_stint_resets_on_tyre_change_without_fuel():
     laps = [lap(1, 90000, wear=(99,) * 4), lap(2, 90100, wear=(98,) * 4),
-            lap(3, 120000, valid=False, wear=(100,) * 4),       # sosta: solo gomme
+            lap(3, 120000, valid=False, wear=(100,) * 4),       # stop: tyres only
             lap(4, 89900, wear=(99.5,) * 4)]
     assert [l.lap_no for l in rs.current_stint(laps)] == [4]
 
@@ -49,7 +49,7 @@ def test_voice_picks_language():
     assert all(is_supported(v) for v in KOKORO_VOICES)
     assert not is_supported("jf_alpha")
     keys = set(LANGUAGES["it"].phrases)
-    for lg in LANGUAGES.values():           # ogni lingua ha tutte le frasi
+    for lg in LANGUAGES.values():           # every language has every phrase
         assert set(lg.phrases) == keys, lg.name
 
 
@@ -61,7 +61,7 @@ def test_radio_speaks_voice_language():
 
 
 def test_radio_lap_and_fuel():
-    r = RadioRules(RadioConfig(tyres=False, gaps=False))
+    r = RadioRules(RadioConfig(tyres=False, gaps=False), IT)
     laps = [lap(1, 90500, fuel_start=15.0, fuel_end=12.0)]
     msgs = r.on_lap(laps[0], laps)
     assert msgs[0].text.startswith("Giro migliore")
@@ -75,7 +75,7 @@ def test_radio_lap_and_fuel():
 
 
 def test_radio_laps_to_go():
-    r = RadioRules(RadioConfig(tyres=False, gaps=False, fuel=False))
+    r = RadioRules(RadioConfig(tyres=False, gaps=False, fuel=False), IT)
     laps = [lap(1, 90500), lap(2, 90700)]
     said = lambda to_go, race=True: [m.text for m in r.on_lap(laps[1], laps, race=race, to_go=to_go)][1:]  # noqa: E731
     assert said(5) == ["Mancano 5 giri."]
@@ -84,11 +84,11 @@ def test_radio_laps_to_go():
 
 
 def test_radio_tyres_once_per_stint():
-    r = RadioRules(RadioConfig(lap_times=False, fuel=False, gaps=False))
+    r = RadioRules(RadioConfig(lap_times=False, fuel=False, gaps=False), IT)
     cold = (60.0, 61.0, 85.0, 85.0)
     laps = [lap(1, 90000, temps=cold)]
-    assert r.on_lap(laps[0], laps) == []          # primo giro di stint: gomme ancora fredde, si tace
+    assert r.on_lap(laps[0], laps) == []          # first stint lap: tyres still cold, stay quiet
     laps.append(lap(2, 90000, temps=cold))
     assert [m.text for m in r.on_lap(laps[1], laps)] == ["Anteriori fredde, 60 gradi."]
     laps.append(lap(3, 90000, temps=cold))
-    assert r.on_lap(laps[2], laps) == []          # già detto in questo stint
+    assert r.on_lap(laps[2], laps) == []          # already said in this stint

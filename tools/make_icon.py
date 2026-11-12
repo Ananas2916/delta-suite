@@ -1,4 +1,4 @@
-"""Genera assets/deltasuite.ico dal logo disegnato in ui/theme.py."""
+"""Generate assets/deltasuite.ico from the logo drawn in ui/theme.py."""
 
 import sys
 from pathlib import Path

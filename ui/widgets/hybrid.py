@@ -1,4 +1,4 @@
-"""Riquadro delle ibride: batteria, spinta o ricarica, energia del giro, mappa ERS. Si nasconde se l'auto non lo è."""
+"""Hybrid card: battery, deploy or charge, lap energy, ERS map. Hidden if the car is not a hybrid."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def state_color(h: cs.HybridState) -> str:
 
 
 class MeterBar(QWidget):
-    """Barra orizzontale piena da sinistra (0..1)."""
+    """Horizontal bar filled from the left (0..1)."""
 
     def __init__(self, height: int = 12):
         super().__init__()
@@ -49,7 +49,7 @@ class MeterBar(QWidget):
 
 
 class HybridCard(Card):
-    def __init__(self, title: str = "IBRIDO"):
+    def __init__(self, title: str = "HYBRID"):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 10)
@@ -68,7 +68,7 @@ class HybridCard(Card):
         lay.addWidget(self.lap)
         self.lap_bar = MeterBar(8)
         lay.addWidget(self.lap_bar)
-        self.modes = label("", "dim")      # niente a capo automatico: nelle QScrollArea allunga la pagina
+        self.modes = label("", "dim")      # no word wrap: inside QScrollArea it makes the page taller
         lay.addWidget(self.modes)
         self.hide()
 
@@ -78,19 +78,19 @@ class HybridCard(Card):
         if h is None:
             return
         col = battery_color(h.charge)
-        self.charge.setText(f"Batteria {h.charge * 100:.0f}%")
+        self.charge.setText(f"Battery {h.charge * 100:.0f}%")
         self.charge.setStyleSheet(f"font-size: 16pt; font-weight: 700; color: {col};")
         self.battery.set(h.charge, col)
         self.state.setText(h.mode_text)
         self.state.setStyleSheet(f"font-weight: 700; color: {state_color(h)};")
         if h.lap_limit_kj > 0:
             left = h.lap_left_kj
-            self.lap.setText(f"Giro {h.lap_used_kj:.0f} / {h.lap_limit_kj:.0f} kJ")
+            self.lap.setText(f"Lap {h.lap_used_kj:.0f} / {h.lap_limit_kj:.0f} kJ")
             self.lap_bar.set(h.lap_used_fraction or 0.0, C["red"] if left is not None and left <= 0.5 else C["blue"])
             self.lap_bar.show()
         else:
-            self.lap.setText(f"Giro {h.lap_used_kj:.0f} kJ")
+            self.lap.setText(f"Lap {h.lap_used_kj:.0f} kJ")
             self.lap_bar.hide()
         mode = f"{h.power_mode}/{h.power_modes}" if h.power_modes else f"{h.power_mode}"
-        self.modes.setText(f"Mappa {mode} · recupero {h.recovery}\n"
-                           f"MGU-H → {'batteria' if h.heat_to_battery else 'motore'}")
+        self.modes.setText(f"Map {mode} · recovery {h.recovery}\n"
+                           f"MGU-H → {'battery' if h.heat_to_battery else 'engine'}")

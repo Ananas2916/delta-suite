@@ -1,4 +1,4 @@
-"""Finestra principale dell'hub: barra laterale con i moduli e pagine impilate."""
+"""Main hub window: sidebar with the modules and stacked pages."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 
 APP_NAME = "Delta Suite"
-VERSION = "0.5.2"
+VERSION = "0.6.0"
 
-# pagina aperta da ogni modalità
-MODE_PAGES = {"pilota": "telemetry", "ingegnere": "box", "analisi": "analysis"}
+# page opened by each mode
+MODE_PAGES = {"driver": "telemetry", "engineer": "box", "analysis": "analysis"}
 
 
 class MainWindow(QMainWindow):
@@ -57,11 +57,11 @@ class MainWindow(QMainWindow):
         mode_box.setStyleSheet(f"background: {theme.C['panel']};")
         ml = QVBoxLayout(mode_box)
         ml.setContentsMargins(12, 6, 12, 8)
-        ml.addWidget(QLabel("MODALITÀ"))
+        ml.addWidget(QLabel("MODE"))
         self.mode = QComboBox()
         for k, v in MODES.items():
             self.mode.addItem(v, k)
-        self.mode.setToolTip("Pilota: radio e voce attive · Ingegnere: regolazioni e setup · Analisi: archivio")
+        self.mode.setToolTip("Driver: radio and voice on · Engineer: adjustments and setup · Analysis: archive")
         ml.addWidget(self.mode)
         sl.addWidget(mode_box)
         self.nav = QListWidget()
@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
             head.setForeground(QColor(theme.C["dim"]))
             self.nav.addItem(head)
             for key, name, desc, replaces in modules:
-                self._add_nav(key, name, f"{desc}\nAl posto di: {replaces}")
+                self._add_nav(key, name, f"{desc}\nReplaces: {replaces}")
         for key, page in self.pages.items():
             self.stack.addWidget(self._scrollable(key, page))
         self.nav.currentItemChanged.connect(self._on_nav)
@@ -109,17 +109,17 @@ class MainWindow(QMainWindow):
         self.mode.currentIndexChanged.connect(self._on_mode)
 
         self.general.open_module.connect(self.open_page)
-        self.general.start_demo.connect(self.telemetry.start_demo)     # il demo parte restando sulla Generale
+        self.general.start_demo.connect(self.telemetry.start_demo)     # the demo starts while staying on the Overview
 
-        self.status_label = QLabel("Pronto")
+        self.status_label = QLabel("Ready")
         self.statusBar().addWidget(self.status_label, 1)
         self.hub.status.connect(lambda text, ok: self.status_label.setText(text))
         self.hub.lap_completed.connect(
-            lambda lap: self.statusBar().showMessage(f"Giro {lap.lap_no} salvato in archivio", 4000))
+            lambda lap: self.statusBar().showMessage(f"Lap {lap.lap_no} saved to the archive", 4000))
 
     def _scrollable(self, key: str, page: QWidget) -> QScrollArea:
-        """Pagina in un'area scorrevole: su uno schermo stretto (o scalato al 150%) la finestra non chiede più
-        larghezza dello schermo, al massimo compare una barra di scorrimento."""
+        """Page in a scroll area: on a narrow screen (or scaled to 150%) the window never asks for more
+        width than the screen, at most a scroll bar appears."""
         area = QScrollArea()
         area.setWidget(page)
         area.setWidgetResizable(True)
@@ -148,9 +148,9 @@ class MainWindow(QMainWindow):
         mode = self.mode.currentData()
         self.hub.set_mode(mode)
         self.open_page(MODE_PAGES[mode])
-        tips = {"pilota": "Modalità Pilota: radio e voce dell'ingegnere attive",
-                "ingegnere": "Modalità Ingegnere: regolazioni in diretta e setup dalla pagina Box & Assetto",
-                "analisi": "Modalità Analisi: confronto giri e archivio, radio spenta"}
+        tips = {"driver": "Driver mode: radio and engineer voice on",
+                "engineer": "Engineer mode: live adjustments and setup from the Pit & Setup page",
+                "analysis": "Analysis mode: lap comparison and archive, radio off"}
         self.statusBar().showMessage(tips[mode], 5000)
 
     def _start_demo(self):
@@ -163,17 +163,17 @@ class MainWindow(QMainWindow):
 
 
 def _voice_check() -> str:
-    """Sintesi di prova con Kokoro (senza riprodurla): verifica che modello ed espeak siano a posto."""
+    """Test synthesis with Kokoro (not played): checks that the model and espeak are fine."""
     from ai_engine.voice import KokoroBackend
     k = KokoroBackend()
     ok, why = k.available()
     if not ok:
-        return f"voce=non disponibile ({why})"
+        return f"voice=not available ({why})"
     try:
         samples, sr = k.synth("Radio check.")
-        return f"voce=ok ({len(samples) / sr:.1f} s di audio)"
+        return f"voice=ok ({len(samples) / sr:.1f} s of audio)"
     except Exception as exc:
-        return f"voce=errore {type(exc).__name__}: {exc}"
+        return f"voice=error {type(exc).__name__}: {exc}"
 
 
 def _mcp_check(win: MainWindow) -> str:
@@ -184,13 +184,13 @@ def _mcp_check(win: MainWindow) -> str:
                                                           "Authorization": f"Bearer {win.hub.mcp.token}"})
     try:
         with urllib.request.urlopen(req, timeout=5) as r:
-            return f"ok, {len(json.loads(r.read())['result']['tools'])} strumenti su {win.hub.mcp.url}"
+            return f"ok, {len(json.loads(r.read())['result']['tools'])} tools on {win.hub.mcp.url}"
     except Exception as exc:
-        return f"errore {exc}"
+        return f"error {exc}"
 
 
 def _self_test(win: MainWindow, out_dir: str):
-    """DELTA_SELFTEST=<cartella>: demo veloce, giro di tutte le pagine con screenshot, poi uscita."""
+    """DELTA_SELFTEST=<folder>: fast demo, tour of every page with screenshots, then exit."""
     from pathlib import Path
 
     out = Path(out_dir)
@@ -199,7 +199,7 @@ def _self_test(win: MainWindow, out_dir: str):
     win._start_demo()
 
     shots = [(f"{i}_{key}", lambda key=key: win.open_page(key)) for i, key in enumerate(win.pages)]
-    for i, tab in enumerate(("riepilogo", "impostazioni"), 1):
+    for i, tab in enumerate(("summary", "settings"), 1):
         shots.append((f"engineer_{tab}", lambda i=i: (win.open_page("engineer"), win.engineer.tabs.setCurrentIndex(i))))
 
     def tour(i=0):
@@ -209,7 +209,7 @@ def _self_test(win: MainWindow, out_dir: str):
             QTimer.singleShot(1200, lambda: (win.grab().save(str(out / f"page_{name}.png")), tour(i + 1)))
         else:
             (out / "selftest.txt").write_text(
-                f"ok\ngiri={len(win.hub.laps)}\n{_voice_check()}\n"
+                f"ok\nlaps={len(win.hub.laps)}\n{_voice_check()}\n"
                 f"app_csp={csp_bridge.bundled_app_dir().is_dir()}\nmcp={_mcp_check(win)}\n",
                 encoding="utf-8")
             win.close()

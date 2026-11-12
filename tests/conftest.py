@@ -13,13 +13,13 @@ from hub_core.model import ACSessionType, ACStatus, TelemetrySample  # noqa: E40
 
 DATA = ROOT / "tests" / "data"
 
-# prove con file mapping vere (come quelle di AC e dell'app CSP): solo su Windows
-windows_only = pytest.mark.skipif(sys.platform != "win32", reason="file mapping di Windows")
+# tests with real file mappings (like those of AC and the CSP app): Windows only
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows file mappings")
 
 
 def create_mapping(tag: str, struct_type):
-    """Crea una mapping come farebbe l'app Lua (INVALID_HANDLE_VALUE = file di paging) e la restituisce
-    come struttura ctypes. Resta aperta fino alla fine del processo di test."""
+    """Create a mapping as the Lua app would (INVALID_HANDLE_VALUE = paging file) and return it
+    as a ctypes structure. It stays open until the end of the test process."""
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateFileMappingW.restype = ctypes.c_void_p
     k32.CreateFileMappingW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,

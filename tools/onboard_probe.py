@@ -1,16 +1,16 @@
 """
-Prova del video onboard senza interfaccia: con AC in pista e l'app CSP caricata, chiede all'app
-curve di colore, trasporti, qualità e telecamere diverse e salva un fotogramma per ciascuna prova.
+Headless onboard video test: with AC on track and the CSP app loaded, asks the app for different
+colour curves, transports, qualities and cameras and saves one frame per test.
 
-    python tools/onboard_probe.py <cartella di uscita> [secondi per prova] [trasporti|riquadri]
+    python tools/onboard_probe.py <output folder> [seconds per test] [transports|views]
 
-Con "trasporti" come terzo argomento si provano solo condivisa/memoria/file per ogni qualità, con
-"riquadri" solo 1-4 onboard insieme (FPS di AC con più viste).
+With "transports" as the third argument only shared/memory/file are tested for each quality, with
+"views" only 1-4 onboards at once (AC FPS with more views).
 
-Stampa per ogni prova i fotogrammi al secondo ricevuti, gli FPS del gioco, il tempo di render
-dichiarato dall'app, il peso del fotogramma e lo stato dell'app (via usata: condivisa, memoria o file;
-texture yebis/hdr/ldr; shader). Le immagini finiscono nella cartella come PNG.
-Meglio farlo girare mentre si guida: gli FPS da fermi ai box dicono poco.
+For each test it prints the frames per second received, the game FPS, the render time reported
+by the app, the frame size and the app status (path used: shared, memory or file;
+yebis/hdr/ldr texture; shader). The images end up in the folder as PNG.
+Best run while driving: FPS while parked in the pits say little.
 """
 
 import os
@@ -27,8 +27,8 @@ from hub_core.ac.onboard_feed import (  # noqa: E402
     ViewRequest, onboard_dir,
 )
 
-TONE_NAMES = {0: "nessuna", 1: "gamma", 2: "filmica+gamma", 3: "yebis"}
-TRANSPORT_NAMES = {TRANSPORT_FILE: "file", TRANSPORT_MEMORY: "memoria", TRANSPORT_SHARED: "condivisa"}
+TONE_NAMES = {0: "none", 1: "gamma", 2: "filmic+gamma", 3: "yebis"}
+TRANSPORT_NAMES = {TRANSPORT_FILE: "file", TRANSPORT_MEMORY: "memory", TRANSPORT_SHARED: "shared"}
 
 
 def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0, quality: int = 1,
@@ -49,7 +49,7 @@ def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0
             last = frame
             sizes.append(len(frame.data))
         inf = feed.info()
-        if inf is not None and time.monotonic() - t0 > seconds / 3:   # FPS a regime
+        if inf is not None and time.monotonic() - t0 > seconds / 3:   # steady-state FPS
             game_fps.append(inf.game_fps)
         time.sleep(0.01)
     avg = lambda v: sum(v) / len(v) if v else -1  # noqa: E731
@@ -58,7 +58,7 @@ def run(feed: OnboardFeed, seconds: float, enabled: bool = True, camera: int = 0
 
 def line(label: str, rate: float, inf, game_fps: float, kb: float) -> str:
     return (f"{label:44s} {rate:5.1f} fps video  AC {game_fps:5.0f} FPS  render "
-            f"{inf.render_ms if inf else -1:5.1f} ms  {kb:6.0f} KB  stato: {inf.status if inf else '-'}")
+            f"{inf.render_ms if inf else -1:5.1f} ms  {kb:6.0f} KB  status: {inf.status if inf else '-'}")
 
 
 def save(out: Path, name: str, frame) -> None:
@@ -69,40 +69,40 @@ def save(out: Path, name: str, frame) -> None:
         return
     try:
         from PyQt6.QtGui import QImage
-    except ImportError:         # python di sistema senza il venv: niente PNG, le misure restano
+    except ImportError:         # system python without the venv: no PNG, the measurements remain
         return
     fmt = QImage.Format.Format_RGBX8888 if frame.kind == "rgba" else QImage.Format.Format_RGB32
     QImage(frame.data, frame.width, frame.height, frame.stride, fmt).save(str(out / f"{name}.png"))
 
 
 def main():
-    # %LOCALAPPDATA% lo espande cmd ma non PowerShell: lo si espande qui, sennò finisce nel progetto
+    # cmd expands %LOCALAPPDATA% but PowerShell does not: expand it here, otherwise it lands in the project
     out = Path(os.path.expandvars(sys.argv[1])) if len(sys.argv) > 1 else onboard_dir().parent / "onboard_probe"
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
     only = sys.argv[3] if len(sys.argv) > 3 else ""
-    only_transports = only in ("trasporti", "riquadri")
+    only_transports = only in ("transports", "views")
     out.mkdir(parents=True, exist_ok=True)
     feed = OnboardFeed()
     t0 = time.monotonic()
     while not feed.connect():
         if time.monotonic() - t0 > 20:
-            sys.exit("Mapping DeltaSuite_Onboard_v6 assente: AC non in pista o app CSP non aggiornata/caricata")
+            sys.exit("DeltaSuite_Onboard_v6 mapping missing: AC not on track or CSP app not updated/loaded")
         time.sleep(1)
-    print(f"collegato (cartella per la via su file: {feed.folder})")
+    print(f"connected (folder for the file path: {feed.folder})")
 
     rate, _, inf, gfps, kb = run(feed, seconds, enabled=False)
-    print(line("video spento", rate, inf, gfps, kb))
+    print(line("video off", rate, inf, gfps, kb))
 
     for tonemap, exposure in () if only_transports else ((TONEMAP_FILMIC, 1.6), (TONEMAP_FILMIC, 1.3), (TONEMAP_GAMMA, 1.6),
                               (TONEMAP_YEBIS, 1.0), (TONEMAP_YEBIS, 1.6)):
         rate, frame, inf, gfps, kb = run(feed, seconds, exposure=exposure, tonemap=tonemap)
-        print(line(f"T-cam {TONE_NAMES[tonemap]} esp. {exposure}", rate, inf, gfps, kb))
+        print(line(f"T-cam {TONE_NAMES[tonemap]} exp. {exposure}", rate, inf, gfps, kb))
         save(out, f"tone{tonemap}_{exposure}", frame)
 
-    for n in range(1, VIEWS + 1) if only != "trasporti" else ():
+    for n in range(1, VIEWS + 1) if only != "transports" else ():
         rate, frame, inf, gfps, kb = run(feed, seconds, views=n)
-        print(line(f"{n} {'riquadro' if n == 1 else 'riquadri'} insieme", rate, inf, gfps, kb))
-    if only == "riquadri":
+        print(line(f"{n} {'view' if n == 1 else 'views'} at once", rate, inf, gfps, kb))
+    if only == "views":
         feed.disconnect()
         return
 
@@ -111,21 +111,21 @@ def main():
             rate, frame, inf, gfps, kb = run(feed, seconds, quality=q, transport=transport)
             print(line(f"{name} {TRANSPORT_NAMES[transport]}", rate, inf, gfps, kb))
             if transport == TRANSPORT_SHARED and feed.shared_error:
-                print(f"  texture condivisa non usabile: {feed.shared_error}")
+                print(f"  shared texture unusable: {feed.shared_error}")
             elif transport == TRANSPORT_SHARED and feed._shared[0] is not None:
-                print(f"  texture condivisa aperta sulla GPU {feed._shared[0].adapter_index}")
+                print(f"  shared texture opened on GPU {feed._shared[0].adapter_index}")
             save(out, f"q{q}_{TRANSPORT_NAMES[transport]}", frame)
 
-    f6 = feed.f6_cameras()      # l'app le conta ogni 2 s, anche a video spento
+    f6 = feed.f6_cameras()      # the app counts them every 2 s, even with the video off
     names = [key for key, _name in CAMERAS] + [f"f6 {name}" for name in f6]
-    print(f"telecamere F6 trovate sull'auto: {', '.join(f6) or 'nessuna'}")
+    print(f"F6 cameras found on the car: {', '.join(f6) or 'none'}")
     for cam, key in enumerate([] if only_transports else names):
         rate, frame, inf, gfps, kb = run(feed, seconds, camera=cam)
-        print(line(f"telecamera {cam} {key}", rate, inf, gfps, kb))
+        print(line(f"camera {cam} {key}", rate, inf, gfps, kb))
         save(out, f"cam{cam}_{key}", frame)
 
     feed.disconnect()
-    print(f"fatto: immagini in {out.resolve()}")
+    print(f"done: images in {out.resolve()}")
 
 
 if __name__ == "__main__":

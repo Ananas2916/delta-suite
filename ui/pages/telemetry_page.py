@@ -1,4 +1,4 @@
-"""Modulo 1a: Telemetria live (cruscotto in tempo reale)."""
+"""Live telemetry (real-time dashboard)."""
 
 from __future__ import annotations
 
@@ -36,16 +36,16 @@ class TelemetryPage(QWidget):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 
-        # --- barra controlli
+        # --- control bar
         bar = QHBoxLayout()
-        # titolo su una riga sua: con lo schermo scalato al 150% titolo + comandi non stavano in larghezza
-        root.addWidget(label("Telemetria live", "h1"))
+        # title on its own row: with the screen scaled to 150% title + controls did not fit
+        root.addWidget(label("Live telemetry", "h1"))
         self.source = QComboBox()
         self.source.addItem("Assetto Corsa (shared memory)", SOURCE_AC)
-        self.source.addItem("Demo (simulatore)", SOURCE_DEMO)
-        self.source.addItem("Replay di una sessione registrata…", SOURCE_REPLAY)
-        self.record = QCheckBox("Registra sessione")
-        self.record.setToolTip("Salva i dati grezzi di AC in un file .dsr, da rivedere poi come replay")
+        self.source.addItem("Demo (simulator)", SOURCE_DEMO)
+        self.source.addItem("Replay a recorded session…", SOURCE_REPLAY)
+        self.record = QCheckBox("Record session")
+        self.record.setToolTip("Save AC's raw data to a .dsr file, to watch later as a replay")
         self.record.setChecked(hub.setting("record_sessions", True, bool))
         self.record.toggled.connect(lambda v: hub.settings.setValue("record_sessions", v))
         self.hz = QSpinBox()
@@ -55,65 +55,65 @@ class TelemetryPage(QWidget):
         self.demo_speed = QComboBox()
         for f in (1, 2, 5, 10, 30):
             self.demo_speed.addItem(f"{f}x", float(f))
-        self.start_btn = QPushButton("Avvia acquisizione")
+        self.start_btn = QPushButton("Start acquisition")
         self.start_btn.setObjectName("primary")
         self.start_btn.clicked.connect(self._toggle)
-        for w in (label("Sorgente", "dim"), self.source, self.record, self.hz, label("Velocità demo/replay", "dim"),
+        for w in (label("Source", "dim"), self.source, self.record, self.hz, label("Demo/replay speed", "dim"),
                   self.demo_speed, self.start_btn):
             bar.addWidget(w)
         bar.addStretch()
         root.addLayout(bar)
 
-        self.status = label("Acquisizione ferma", "dim")
+        self.status = label("Acquisition stopped", "dim")
         root.addWidget(self.status)
 
-        # --- riquadri valori
+        # --- value tiles
         tiles = QHBoxLayout()
-        self.t_speed = ValueTile("Velocità", "0", 26)
-        self.t_gear = ValueTile("Marcia", "N", 26)
+        self.t_speed = ValueTile("Speed", "0", 26)
+        self.t_gear = ValueTile("Gear", "N", 26)
         self.t_rpm = ValueTile("RPM", "0", 20)
         self.rpm_bar = QProgressBar()
         self.rpm_bar.setRange(0, 9000)
         self.t_rpm.layout().addWidget(self.rpm_bar)
-        self.t_lap = ValueTile("Giro", "-", 20)
+        self.t_lap = ValueTile("Lap", "-", 20)
         self.t_cur = LapTimeTile()
-        self.t_last = ValueTile("Ultimo", "--:--.---", 20)
-        self.t_best = ValueTile("Migliore", "--:--.---", 20)
-        self.t_fuel = ValueTile("Carburante", "-- L", 20)
+        self.t_last = ValueTile("Last", "--:--.---", 20)
+        self.t_best = ValueTile("Best", "--:--.---", 20)
+        self.t_fuel = ValueTile("Fuel", "-- L", 20)
         for t in (self.t_speed, self.t_gear, self.t_rpm, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel):
-            if t is not self.t_cur:     # stessa altezza del riquadro del tempo, che ha i parziali sotto
+            if t is not self.t_cur:     # same height as the time tile, which has the splits below
                 t.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             tiles.addWidget(t, 2 if t is self.t_cur else 1)
         root.addLayout(tiles)
 
-        # --- riga centrale: input pilota | grafici | gomme + G-G
+        # --- middle row: driver inputs | plots | tyres + G-G
         mid = QHBoxLayout()
         pedals = Card()
         pl = QVBoxLayout(pedals)
-        pl.addWidget(label("INPUT PILOTA", "dim"))
+        pl.addWidget(label("DRIVER INPUTS", "dim"))
         row = QHBoxLayout()
-        self.b_gas = Bar("GAS", C["green"])
-        self.b_brake = Bar("FRENO", C["red"])
-        self.b_clutch = Bar("FRIZ", C["blue"])
+        self.b_gas = Bar("THR", C["green"])
+        self.b_brake = Bar("BRK", C["red"])
+        self.b_clutch = Bar("CLU", C["blue"])
         for b in (self.b_gas, self.b_brake, self.b_clutch):
             row.addWidget(b)
         pl.addLayout(row, 1)
-        self.b_steer = Bar("STERZO", C["yellow"], centered=True)
+        self.b_steer = Bar("STEERING", C["yellow"], centered=True)
         pl.addWidget(self.b_steer)
         self.aids = label("TC 0  ABS 0", "dim")
         pl.addWidget(self.aids)
         left = QVBoxLayout()
         left.addWidget(pedals, 1)
-        self.hybrid = HybridCard()           # solo per le ibride
+        self.hybrid = HybridCard()           # hybrids only
         left.addWidget(self.hybrid)
         for w in (pedals, self.hybrid):
             w.setFixedWidth(200)
         mid.addLayout(left)
 
         plots = QVBoxLayout()
-        self.p_speed = make_plot("Velocità (ultimi 20 s)", "km/h")
+        self.p_speed = make_plot("Speed (last 20 s)", "km/h")
         self.c_speed = self.p_speed.plot(pen=pg.mkPen(C["blue"], width=2))
-        self.p_ped = make_plot("Gas / Freno", "%")
+        self.p_ped = make_plot("Throttle / Brake", "%")
         self.p_ped.setYRange(0, 100)
         self.c_gas = self.p_ped.plot(pen=pg.mkPen(C["green"], width=2))
         self.c_brake = self.p_ped.plot(pen=pg.mkPen(C["red"], width=2))
@@ -141,9 +141,9 @@ class TelemetryPage(QWidget):
         mid.addLayout(right)
         root.addLayout(mid, 1)
 
-        # --- tabella giri
-        self.table = readonly_table(["Giro", "Tempo", "S1", "S2", "S3", "Δ migliore", "Carb. L",
-                                     "T gomme (AS/AD/PS/PD)", "Valido"])
+        # --- lap table
+        self.table = readonly_table(["Lap", "Time", "S1", "S2", "S3", "Δ best", "Fuel L",
+                                     "Tyre T (FL/FR/RL/RR)", "Valid"])
         self.table.setMaximumHeight(210)
         root.addWidget(self.table)
 
@@ -165,8 +165,8 @@ class TelemetryPage(QWidget):
         src = self.source.currentData()
         path = None
         if src == SOURCE_REPLAY:
-            path, _ = QFileDialog.getOpenFileName(self, "Apri registrazione", str(recordings_dir()),
-                                                  "Registrazioni Delta Suite (*.dsr)")
+            path, _ = QFileDialog.getOpenFileName(self, "Open recording", str(recordings_dir()),
+                                                  "Delta Suite recordings (*.dsr)")
             if not path:
                 return
         self.hub.start(src, self.hz.value(), self.demo_speed.currentData(), path,
@@ -178,7 +178,7 @@ class TelemetryPage(QWidget):
             self._toggle()
 
     def _on_running(self, running: bool):
-        self.start_btn.setText("Ferma acquisizione" if running else "Avvia acquisizione")
+        self.start_btn.setText("Stop acquisition" if running else "Start acquisition")
         for w in (self.source, self.hz, self.demo_speed, self.record):
             w.setEnabled(not running)
 
@@ -223,7 +223,7 @@ class TelemetryPage(QWidget):
         self.b_brake.set_value(s.brake)
         self.b_clutch.set_value(1.0 - s.clutch)
         self.b_steer.set_value(s.steer_angle)
-        self.aids.setText(f"TC {s.tc:.1f}   ABS {s.abs:.1f}\naria {s.air_temp:.0f}°   asfalto {s.road_temp:.0f}°")
+        self.aids.setText(f"TC {s.tc:.1f}   ABS {s.abs:.1f}\nair {s.air_temp:.0f}°   track {s.road_temp:.0f}°")
         self.tyres.update_from(s)
         self.hybrid.update_from(s, self.hub.session_info)
 
@@ -258,4 +258,4 @@ class TelemetryPage(QWidget):
             self.table.setItem(row, 5, table_item(f"+{delta:.3f}" if delta else "-" if delta is None else "0.000"))
             self.table.setItem(row, 6, table_item(f"{lap.fuel_used:.2f}"))
             self.table.setItem(row, 7, table_item(" / ".join(f"{t:.0f}" for t in lap.tyre_temp_avg)))
-            self.table.setItem(row, 8, table_item("sì" if lap.valid else "no", None if lap.valid else C["red"]))
+            self.table.setItem(row, 8, table_item("yes" if lap.valid else "no", None if lap.valid else C["red"]))

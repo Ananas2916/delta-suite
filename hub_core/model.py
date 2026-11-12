@@ -1,7 +1,7 @@
 """
-Tipi comuni a tutto Delta Suite: stato di AC, campione di telemetria, etichette.
+Types shared by all of Delta Suite: AC status, telemetry sample, labels.
 
-Niente Windows né Qt: lo importano sorgenti dati, analisi, interfaccia e test.
+No Windows and no Qt: imported by data sources, analysis, UI and tests.
 """
 
 from __future__ import annotations
@@ -38,35 +38,35 @@ class ACFlag(IntEnum):
     PENALTY = 6
 
 
-Quad = tuple[float, float, float, float]   # valori per ruota: FL, FR, RL, RR
+Quad = tuple[float, float, float, float]   # per-wheel values: FL, FR, RL, RR
 
 
 @dataclass(frozen=True)
 class TelemetrySample:
-    """Un campione di telemetria, indipendente dalla sorgente (AC o simulatore)."""
+    """One telemetry sample, independent of the source (AC or simulator)."""
 
-    t: float                    # time.perf_counter() al momento della lettura
+    t: float                    # time.perf_counter() at read time
     packet_id: int
     status: ACStatus
     session_type: ACSessionType
-    # guida
+    # driving
     speed_kmh: float
     rpm: int
-    gear: int                   # convenzione AC: 0=R, 1=N, 2=1a
+    gear: int                   # AC convention: 0=R, 1=N, 2=1st
     gas: float                  # 0..1
     brake: float                # 0..1
-    clutch: float               # 0..1 (1 = frizione rilasciata)
+    clutch: float               # 0..1 (1 = clutch released)
     steer_angle: float
-    fuel: float                 # litri
-    acc_g: tuple[float, float, float]   # laterale, verticale, longitudinale
-    # gomme / freni / telaio
+    fuel: float                 # litres
+    acc_g: tuple[float, float, float]   # lateral, vertical, longitudinal
+    # tyres / brakes / chassis
     tyre_core_temp: Quad        # °C
     tyre_pressure: Quad         # psi
     tyre_wear: Quad
     wheel_slip: Quad
     brake_temp: Quad            # °C
     suspension_travel: Quad     # m
-    ride_height: tuple[float, float]    # anteriore, posteriore (m)
+    ride_height: tuple[float, float]    # front, rear (m)
     tc: float
     abs: float
     drs: float
@@ -79,35 +79,35 @@ class TelemetrySample:
     last_lap_ms: int
     best_lap_ms: int
     completed_laps: int
-    lap_position: float         # 0..1 lungo il giro
+    lap_position: float         # 0..1 along the lap
     sector_index: int
     last_sector_ms: int
     is_in_pit: bool
     position: int
     car_x: float
     car_z: float
-    # campi aggiunti dopo: hanno un default così le sorgenti più vecchie (demo) restano valide
+    # fields added later: they have a default so older sources (demo) stay valid
     flag: int = 0               # ACFlag
-    session_time_left: float = -1.0   # ms, negativo se la sessione non ha limite
-    brake_bias: float = 0.0     # 0..1 quota anteriore
+    session_time_left: float = -1.0   # ms, negative if the session has no time limit
+    brake_bias: float = 0.0     # 0..1 front share
     engine_brake: int = 0
-    car_damage: tuple[float, ...] = (0.0,) * 5   # zone: anteriore, posteriore, sinistra, destra, centro
+    car_damage: tuple[float, ...] = (0.0,) * 5   # zones: front, rear, left, right, centre
     tyre_dirt: Quad = (0.0,) * 4
     pit_limiter: bool = False
-    # ibride (solo se la pagina statica dice hasKERS/hasERS)
-    kers_input: float = 0.0     # spinta elettrica 0..1
-    kers_lap_kj: float = 0.0    # energia usata nel giro (kJ)
-    ers_recovery: int = 0       # livello di recupero
-    ers_power: int = 0          # livello di potenza (mappa di spinta)
-    ers_heat_charging: bool = False   # MGU-H verso la batteria (altrimenti verso il motore)
+    # hybrids (only if the static page says hasKERS/hasERS)
+    kers_input: float = 0.0     # electric deploy 0..1
+    kers_lap_kj: float = 0.0    # energy used this lap (kJ)
+    ers_recovery: int = 0       # recovery level
+    ers_power: int = 0          # power level (deploy map)
+    ers_heat_charging: bool = False   # MGU-H to the battery (otherwise to the engine)
     ers_charging: bool = False
-    session_laps: int = 0       # giri della sessione (numberOfLaps), 0 se a tempo o senza limite
-    tyre_compound: str = ""     # mescola montata, come la chiama l'auto (es. "Medium (M)")
+    session_laps: int = 0       # session laps (numberOfLaps), 0 if timed or unlimited
+    tyre_compound: str = ""     # fitted compound, as the car names it (e.g. "Medium (M)")
 
 
 @dataclass
 class CarEntry:
-    """Un'auto in pista come la descrive l'app CSP (classifica e gap)."""
+    """A car on track as described by the CSP app (standings and gaps)."""
     index: int
     connected: bool
     race_pos: int
@@ -129,7 +129,7 @@ class CarEntry:
 
 
 def gear_label(gear: int) -> str:
-    """Converte la marcia di AC (0=R, 1=N, 2=1a...) in etichetta leggibile."""
+    """Convert AC's gear (0=R, 1=N, 2=1st...) into a readable label."""
     if gear == 0:
         return "R"
     if gear == 1:

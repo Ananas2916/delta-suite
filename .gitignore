@@ -10,5 +10,5 @@ dist/
 assets/*.ico
 .claude/settings.local.json
 
-# cartella creata da PowerShell quando non espande %LOCALAPPDATA%
+# folder created by PowerShell when it does not expand %LOCALAPPDATA%
 %LOCALAPPDATA%/

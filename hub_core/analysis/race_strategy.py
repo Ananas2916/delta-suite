@@ -1,4 +1,4 @@
-"""Strategia: carburante, finestra pit, timing a settori, previsione degrado gomme."""
+"""Strategy: fuel, pit window, sector timing, tyre degradation forecast."""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ def fmt_ms(ms: float | None) -> str:
     return f"{ms // 60000}:{(ms % 60000) / 1000:06.3f}"
 
 
-# ----------------------------------------------------------------- carburante
+# ----------------------------------------------------------------------- fuel
 
 def fuel_per_lap(laps: list[LapData]) -> float | None:
-    """Media robusta del consumo sui giri validi (scarta outlier oltre ±25% dalla mediana)."""
+    """Robust average fuel use over valid laps (drops outliers beyond ±25% of the median)."""
     used = np.array([l.fuel_used for l in laps if l.valid and l.fuel_used > 0.05])
     if used.size == 0:
         return None
@@ -32,11 +32,11 @@ def fuel_per_lap(laps: list[LapData]) -> float | None:
 @dataclass
 class FuelPlan:
     laps_remaining: int
-    fuel_needed: float          # per arrivare in fondo con margine
+    fuel_needed: float          # to reach the end with a margin
     fuel_to_add: float
     laps_on_current_fuel: float
     stops_needed: int
-    pit_window: tuple[int, int] | None   # (primo, ultimo) giro di gara utile per fermarsi
+    pit_window: tuple[int, int] | None   # (first, last) race lap on which to stop
     laps_per_tank: float
 
 
@@ -45,19 +45,19 @@ def race_laps_remaining(race_laps: int | None, laps_done: int, time_left_s: floa
     if race_laps:
         return max(0, race_laps - laps_done)
     if time_left_s is not None and avg_lap_s:
-        # a tempo scaduto si completa il giro in corso
+        # when time runs out the current lap is completed
         return int(math.ceil(time_left_s / avg_lap_s)) + 1
     return 0
 
 
 @dataclass(frozen=True)
 class RaceProgress:
-    """A che punto è la gara, dal giro del leader (come le grafiche TV)."""
+    """How far the race has got, from the leader's lap (like TV graphics)."""
 
-    lap: int                    # giro in corso del leader (1 = primo)
-    total: int | None           # giri della gara; None se a tempo o senza limite
-    to_go: int | None           # giri che mancano compreso quello in corso (stimati se a tempo); None se non si sa
-    time_left_s: float | None   # tempo rimasto della sessione, se ha un limite
+    lap: int                    # leader's current lap (1 = first)
+    total: int | None           # race laps; None if timed or unlimited
+    to_go: int | None           # laps to go including the current one (estimated if timed); None if unknown
+    time_left_s: float | None   # session time left, if it has a limit
     estimated: bool = False
 
     @property
@@ -69,16 +69,16 @@ class RaceProgress:
         if self.to_go is None:
             return "—"
         if self.to_go == 0:
-            return "FINITA"
+            return "FINISHED"
         if self.to_go == 1:
-            return "ULTIMO GIRO"
-        return f"{'~' if self.estimated else ''}{self.to_go} giri"
+            return "FINAL LAP"
+        return f"{'~' if self.estimated else ''}{self.to_go} laps"
 
 
 def race_progress(race_laps: int, leader_done: int, time_left_ms: float | None, lap_s: float | None,
                   is_race: bool, extra_lap: bool = False) -> RaceProgress:
-    """Giri della gara (numberOfLaps di AC) o, a tempo, stima dal giro medio: allo scadere si chiude il giro in
-    corso, più uno se il server ha il giro in più."""
+    """Race laps (AC's numberOfLaps) or, for timed races, an estimate from the average lap: when time runs out
+    the current lap is completed, plus one if the server has the extra lap."""
     time_left = time_left_ms / 1000 if time_left_ms is not None and time_left_ms > 0 else None
     lap = leader_done + 1
     if is_race and race_laps > 0:
@@ -90,7 +90,7 @@ def race_progress(race_laps: int, leader_done: int, time_left_ms: float | None, 
 
 
 def race_progress_for(s, cars, is_race: bool, extra_lap: bool = False) -> RaceProgress:
-    """RaceProgress da un campione e dalle auto dell'app CSP: il giro è quello del leader, se si conosce."""
+    """RaceProgress from a sample and the CSP app cars: the lap is the leader's, if known."""
     leader_done, lap_ms = s.completed_laps, s.last_lap_ms or s.best_lap_ms
     leader = min((c for c in cars or [] if c.connected and c.race_pos > 0), key=lambda c: c.race_pos, default=None)
     if leader is not None:
@@ -110,7 +110,7 @@ def fuel_plan(fuel_now: float, per_lap: float, laps_remaining: int, tank: float,
     window = None
     if stops >= 1:
         latest = laps_done + int(math.floor(laps_now - margin_laps))
-        # il più presto possibile: dopo la sosta il resto va coperto con (stops) pieni
+        # as early as possible: after the stop the rest must be covered with (stops) full tanks
         earliest = laps_done + max(0, int(math.ceil(laps_remaining + margin_laps - stops * laps_per_tank)))
         window = (min(earliest, latest), latest)
     return FuelPlan(laps_remaining, needed, to_add, laps_now, stops, window, laps_per_tank)
@@ -134,21 +134,21 @@ def theoretical_best(laps: list[LapData], count: int = 3) -> int | None:
     return sum(b) if all(v is not None for v in b) else None
 
 
-# ---------------------------------------------------------- degrado gomme
+# ---------------------------------------------------------- tyre degradation
 
 @dataclass
 class DegradationForecast:
-    stint_laps: np.ndarray      # giri nello stint usati per il fit (1 = primo giro)
-    lap_times: np.ndarray       # s, corretti per carburante
-    coeffs: np.ndarray          # polinomio in giri-stint
-    deg_per_lap: float          # s/giro attuale (derivata a fine stint)
+    stint_laps: np.ndarray      # stint laps used for the fit (1 = first lap)
+    lap_times: np.ndarray       # s, fuel corrected
+    coeffs: np.ndarray          # polynomial in stint laps
+    deg_per_lap: float          # current s/lap (derivative at end of stint)
     forecast_laps: np.ndarray
     forecast_times: np.ndarray
-    cliff_lap: int | None       # primo giro previsto con perdita > soglia vs migliore
+    cliff_lap: int | None       # first forecast lap losing > threshold vs best
 
 
 def is_pit_stop_lap(lap: LapData, previous: LapData | None) -> bool:
-    """Giro con sosta: rifornimento, oppure gomme nuove (l'usura in AC scende sempre, 100 = nuova)."""
+    """Pit stop lap: refuelling, or new tyres (wear in AC only goes down, 100 = new)."""
     if lap.valid:
         return False
     refuel = lap.fuel_end > lap.fuel_start + 0.5
@@ -158,7 +158,7 @@ def is_pit_stop_lap(lap: LapData, previous: LapData | None) -> bool:
 
 
 def current_stint(laps: list[LapData]) -> list[LapData]:
-    """Giri dall'ultima sosta (rifornimento o cambio gomme) in poi."""
+    """Laps since the last stop (refuel or tyre change)."""
     stint: list[LapData] = []
     previous = None
     for lap in laps:
@@ -172,14 +172,14 @@ def current_stint(laps: list[LapData]) -> list[LapData]:
 
 def forecast_degradation(stint: list[LapData], horizon: int = 15, fuel_s_per_l: float = 0.025,
                          cliff_threshold_s: float = 1.5) -> DegradationForecast | None:
-    """Fit polinomiale robusto dei tempi giro dello stint, corretti per l'alleggerimento carburante."""
+    """Robust polynomial fit of the stint lap times, corrected for the fuel burn-off."""
     pts = [(i + 1, l) for i, l in enumerate(stint) if l.valid and l.lap_time_ms > 0]
     if len(pts) < 3:
         return None
     x = np.array([p[0] for p in pts], dtype=float)
     t = np.array([p[1].lap_time_ms / 1000.0 for p in pts])
     fuel = np.array([p[1].fuel_start for p in pts])
-    t_corr = t + (fuel - fuel[-1]) * -fuel_s_per_l    # riporta tutti al carico di fine stint
+    t_corr = t + (fuel - fuel[-1]) * -fuel_s_per_l    # bring all of them to the end-of-stint fuel load
 
     med = np.median(t_corr)
     keep = t_corr < med * 1.03
@@ -188,12 +188,12 @@ def forecast_degradation(stint: list[LapData], horizon: int = 15, fuel_s_per_l: 
         return None
     deg = 2 if len(x) >= 6 else 1
     coeffs = np.polyfit(x, t_corr, deg)
-    if deg == 2 and coeffs[0] < 0:     # una parabola concava non ha senso fisico: ricado sul lineare
+    if deg == 2 and coeffs[0] < 0:     # a concave parabola makes no physical sense: fall back to linear
         coeffs = np.polyfit(x, t_corr, 1)
     poly = np.poly1d(coeffs)
     last = int(x[-1])
     fx = np.arange(last + 1, last + horizon + 1, dtype=float)
-    # in previsione il carburante continua a calare: guadagno per giro
+    # in the forecast the fuel keeps dropping: gain per lap
     per_lap_fuel = float(np.mean([l.fuel_used for _, l in pts])) if pts else 0.0
     ft = poly(fx) - (fx - last) * per_lap_fuel * fuel_s_per_l
     best = float(np.min(poly(x)))
@@ -202,13 +202,13 @@ def forecast_degradation(stint: list[LapData], horizon: int = 15, fuel_s_per_l: 
 
 
 def optimal_pit_lap(fc: DegradationForecast, laps_remaining: int, pit_loss_s: float) -> int | None:
-    """Giro di stint in cui fermarsi minimizzando il tempo totale (una sosta, gomme nuove = inizio stint)."""
+    """Stint lap on which to stop to minimise total time (one stop, new tyres = stint start)."""
     if laps_remaining <= 1:
         return None
     poly = np.poly1d(fc.coeffs)
     last = int(fc.stint_laps[-1])
     best_total, best_k = None, None
-    for k in range(0, laps_remaining):   # k giri ancora su questo treno
+    for k in range(0, laps_remaining):   # k more laps on this set
         old = poly(np.arange(last + 1, last + k + 1)).sum() if k else 0.0
         new = poly(np.arange(1, laps_remaining - k + 1)).sum()
         total = old + pit_loss_s + new

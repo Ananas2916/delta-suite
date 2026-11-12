@@ -1,15 +1,15 @@
--- Delta Suite Bridge (app Lua per Custom Shaders Patch)
+-- Delta Suite Bridge (Lua app for Custom Shaders Patch)
 --
--- Ponte tra Assetto Corsa e Delta Suite (programma esterno), tramite due file mappati in memoria:
---   DeltaSuite_Bridge_Out_v1  scritto qui: regolazioni attuali, setup, pit stop, avversari, tasti radio
---   DeltaSuite_Bridge_In_v1   scritto da Delta Suite: un comando alla volta, numerato da `seq`
--- Il video onboard sta in DeltaSuiteOnboard.lua, caricato con un require protetto: se non parte, il
--- ponte funziona lo stesso.
--- I layout devono restare identici a quelli in hub_core/ac/csp_bridge.py (solo int/float a 4 byte e
--- array di char, così l'allineamento è lo stesso in LuaJIT e in ctypes).
+-- Bridge between Assetto Corsa and Delta Suite (external program), through two memory-mapped files:
+--   DeltaSuite_Bridge_Out_v1  written here: current adjustments, setup, pit stop, rivals, radio buttons
+--   DeltaSuite_Bridge_In_v1   written by Delta Suite: one command at a time, numbered by `seq`
+-- The onboard video lives in DeltaSuiteOnboard.lua, loaded with a protected require: if it fails, the
+-- bridge still works.
+-- The layouts must stay identical to those in hub_core/ac/csp_bridge.py (only 4-byte int/float and
+-- char arrays, so the alignment is the same in LuaJIT and in ctypes).
 
 local VERSION = 1
-local END_MARKER = 0x44535431 -- 'DST1': Delta Suite controlla di leggerlo alla posizione attesa
+local END_MARKER = 0x44535431 -- 'DST1': Delta Suite checks it reads it at the expected offset
 
 local MAX_SETUP, MAX_PIT, MAX_CARS = 96, 16, 64
 
@@ -80,20 +80,20 @@ local IN_LAYOUT = [[
   int endMarker;
 ]]
 
--- Variabili a livello di modulo: restano vive finché l'app è caricata.
+-- Module-level variables: they stay alive while the app is loaded.
 local out = ac.writeMemoryMappedFile('DeltaSuite_Bridge_Out_v1', OUT_LAYOUT)
 local inp = ac.writeMemoryMappedFile('DeltaSuite_Bridge_In_v1', IN_LAYOUT)
 
-local btnRadio = ac.ControlButton('DeltaSuite/Radio ingegnere (tieni premuto)')
-local btnOk = ac.ControlButton('DeltaSuite/Conferma proposta')
-local btnNo = ac.ControlButton('DeltaSuite/Scarta proposta')
+local btnRadio = ac.ControlButton('DeltaSuite/Engineer radio (hold)')
+local btnOk = ac.ControlButton('DeltaSuite/Confirm proposal')
+local btnNo = ac.ControlButton('DeltaSuite/Discard proposal')
 btnOk:setAlwaysActive(true)
 btnNo:setAlwaysActive(true)
 
 local CMD_BRAKE_BIAS, CMD_ABS, CMD_TC, CMD_ENGINE_BRAKE = 1, 2, 3, 4
 local CMD_SETUP, CMD_PIT, CMD_LOAD_SETUP, CMD_SAVE_SETUP = 5, 6, 7, 8
 
-local lastSeq = inp.seq -- comandi rimasti da una sessione precedente: ignorati
+local lastSeq = inp.seq -- commands left over from a previous session: ignored
 local lastBeat, lastBeatChange = inp.hostBeat, -100
 local clock = 0
 local setupTimer, namesTimer = 0, 0
@@ -120,23 +120,23 @@ local function applyCommand(cmd, value, name, text)
     return true, 'TC ' .. round(value)
   elseif cmd == CMD_ENGINE_BRAKE then
     ac.setEngineBrakeSetting(round(value))
-    return true, 'freno motore ' .. round(value)
+    return true, 'engine brake ' .. round(value)
   elseif cmd == CMD_SETUP then
-    if not ac.isSetupAvailableToEdit() then return false, 'setup modificabile solo ai box' end
+    if not ac.isSetupAvailableToEdit() then return false, 'setup can only be changed in the pits' end
     local ok = ac.setSetupSpinnerValue(name, round(value))
-    return ok, ok and (name .. ' = ' .. round(value)) or ('valore non accettato: ' .. name)
+    return ok, ok and (name .. ' = ' .. round(value)) or ('value not accepted: ' .. name)
   elseif cmd == CMD_PIT then
-    if not ac.setPitstopSpinnerValue then return false, 'CSP troppo vecchio per il pit stop' end
+    if not ac.setPitstopSpinnerValue then return false, 'CSP too old for pit stops' end
     local ok = ac.setPitstopSpinnerValue(name, value)
-    return ok, ok and ('pit ' .. name) or ('pit non modificabile: ' .. name)
+    return ok, ok and ('pit ' .. name) or ('pit item not editable: ' .. name)
   elseif cmd == CMD_LOAD_SETUP then
     local ok = ac.loadSetup(text)
-    return ok, ok and 'setup caricato' or 'setup caricabile solo dal menu setup ai box'
+    return ok, ok and 'setup loaded' or 'setups can only be loaded from the setup menu in the pits'
   elseif cmd == CMD_SAVE_SETUP then
     local ok = ac.saveCurrentSetup(text)
-    return ok, ok and ('setup salvato: ' .. text) or 'salvataggio non riuscito'
+    return ok, ok and ('setup saved: ' .. text) or 'saving failed'
   end
-  return false, 'comando sconosciuto ' .. tostring(cmd)
+  return false, 'unknown command ' .. tostring(cmd)
 end
 
 local function updateSetup()
@@ -200,7 +200,7 @@ local function updateCars(sim, withNames)
   end
 end
 
--- video onboard in un modulo a parte, nella stessa cartella dell'app
+-- onboard video in a separate module, in the same folder as the app
 local onboard, onboardError = nil, nil
 do
   if __dirname then package.path = package.path .. ';' .. __dirname .. '/?.lua' end
@@ -209,7 +209,7 @@ do
     onboard = mod
   else
     onboardError = tostring(mod)
-    ac.log('DeltaSuite onboard non caricato: ' .. onboardError)
+    ac.log('DeltaSuite onboard not loaded: ' .. onboardError)
   end
 end
 
@@ -268,18 +268,18 @@ end
 
 function script.windowMain(dt)
   local connected = clock - lastBeatChange < 2
-  ui.text(connected and 'Delta Suite: collegato' or 'Delta Suite: non collegato (avvia l\'acquisizione)')
-  if lastAck ~= '' then ui.text('Ultimo comando: ' .. lastAck) end
+  ui.text(connected and 'Delta Suite: connected' or 'Delta Suite: not connected (start the acquisition)')
+  if lastAck ~= '' then ui.text('Last command: ' .. lastAck) end
   if onboard then
     onboard.window()
   else
-    ui.text('Onboard non caricato: ' .. tostring(onboardError))
+    ui.text('Onboard not loaded: ' .. tostring(onboardError))
   end
   ui.text(' ')
-  ui.text('Radio ingegnere (tieni premuto):')
+  ui.text('Engineer radio (hold):')
   btnRadio:control(vec2(0, 0))
-  ui.text('Conferma proposta dell\'ingegnere:')
+  ui.text('Confirm the engineer\'s proposal:')
   btnOk:control(vec2(0, 0))
-  ui.text('Scarta proposta:')
+  ui.text('Discard proposal:')
   btnNo:control(vec2(0, 0))
 end

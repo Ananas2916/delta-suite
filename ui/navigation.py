@@ -1,32 +1,32 @@
-"""Moduli dell'hub in barra laterale: sezioni, nomi e descrizioni (usate come suggerimento)."""
+"""Hub modules in the sidebar: sections, names and descriptions (used as tooltips)."""
 
 from __future__ import annotations
 
-# la prima voce, fuori dalle sezioni: la panoramica da muretto
-GENERAL = ("general", "Generale", "Tutto insieme, come al muretto: onboard, classifica, GPS, stato vettura, "
-           "carburante e batteria, radio e proposte dell'ingegnere.")
+# the first entry, outside the sections: the pit-wall overview
+GENERAL = ("general", "Overview", "Everything at once, like on the pit wall: onboard, standings, GPS, car status, "
+           "fuel and battery, radio and the engineer's proposals.")
 
-# moduli raggruppati come nella barra laterale: (chiave pagina, nome, descrizione, al posto di)
+# modules grouped as in the sidebar: (page key, name, description, replaces)
 SECTIONS = [
-    ("In pista", [
-        ("telemetry", "Telemetria live", "Acquisizione 60–100 Hz dalla shared memory di Assetto Corsa, "
-         "registrazione delle sessioni e replay.", "MoTeC i2 · ATLAS · WinDARAB"),
-        ("onboard", "Onboard live", "Fino a 4 onboard insieme resi da AC (anche sugli avversari) con grafica TV, "
-         "classifica, GPS della pista e stato vettura: danni, gomme, freni, sospensioni, batteria.",
-         "Feed onboard del muretto"),
-        ("engineer", "Ingegnere di pista", "Chat di analisi e radio in cuffia con lo stesso agente (Claude Code o "
-         "altro): push-to-talk dal volante, radio automatica su giro, carburante, gomme e bandiere, proposte di "
-         "setup da confermare.", "Ingegnere e radio di squadra"),
-        ("box", "Box & Assetto", "Bias freni, ABS, TC e freno motore in diretta, setup dai box, proposte "
-         "dell'ingegnere e classifica con distacchi.", "Muretto box"),
+    ("On track", [
+        ("telemetry", "Live telemetry", "60–100 Hz acquisition from Assetto Corsa's shared memory, "
+         "session recording and replay.", "MoTeC i2 · ATLAS · WinDARAB"),
+        ("onboard", "Live onboard", "Up to 4 onboards at once rendered by AC (rivals too) with TV graphics, "
+         "standings, track GPS and car status: damage, tyres, brakes, suspension, battery.",
+         "Pit-wall onboard feeds"),
+        ("engineer", "Race engineer", "Analysis chat and headset radio with the same agent (Claude Code or "
+         "another): push-to-talk from the wheel, automatic radio on lap, fuel, tyres and flags, setup "
+         "proposals to confirm.", "Team engineer and radio"),
+        ("box", "Pit & Setup", "Live brake bias, ABS, TC and engine brake, setup from the pits, the engineer's "
+         "proposals and standings with gaps.", "Pit wall"),
     ]),
-    ("Analisi e strategia", [
-        ("analysis", "Analisi giri", "Giri sovrapposti su distanza, Delta-T, traiettoria, cursore sincronizzato, "
-         "archivio DuckDB ed esportazione Parquet.", "MoTeC i2 · Pi Toolbox"),
-        ("strategy", "Strategia & Timing", "Consumo medio, finestra pit, previsione degrado gomme, sosta ottimale, "
-         "settori e giro ideale.", "HH Timing · SBG RaceWatch"),
-        ("dynamics", "Dinamica veicolo", "Pneumatico Pacejka, ellisse d'attrito, trasferimenti di carico con aero, "
-         "cinematica del quadrilatero e centro di rollio.", "ChassisSim · OptimumG · Adams"),
+    ("Analysis & strategy", [
+        ("analysis", "Lap analysis", "Overlaid laps by distance, Delta-T, racing line, synced cursor, "
+         "DuckDB archive and Parquet export.", "MoTeC i2 · Pi Toolbox"),
+        ("strategy", "Strategy & Timing", "Average fuel use, pit window, tyre degradation forecast, optimal stop, "
+         "sectors and ideal lap.", "HH Timing · SBG RaceWatch"),
+        ("dynamics", "Vehicle dynamics", "Pacejka tyre, friction ellipse, load transfer with aero, "
+         "double-wishbone kinematics and roll centre.", "ChassisSim · OptimumG · Adams"),
     ]),
 ]
 

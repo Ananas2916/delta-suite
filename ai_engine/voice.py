@@ -1,9 +1,9 @@
 """
-Voce dell'ingegnere: sintesi (Kokoro locale o Tsukumo) e trascrizione (Tsukumo).
+The engineer's voice: synthesis (local Kokoro or Tsukumo) and transcription (Tsukumo).
 
-RadioVoice è un thread con coda a priorità: i messaggi hanno una scadenza (un delta di un giro
-fa non serve più), quelli urgenti passano avanti e si parla solo quando `is_safe()` lo permette
-(non in staccata o a metà curva), con un'attesa massima.
+RadioVoice is a thread with a priority queue: messages expire (a delta from a lap ago
+is no longer useful), urgent ones jump ahead, and it only speaks when `is_safe()` allows
+(not under braking or mid-corner), with a maximum wait.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from ai_engine.lang import language_of
 
 try:
     import winsound
-except ImportError:   # pragma: no cover - solo Windows
+except ImportError:   # pragma: no cover - Windows only
     winsound = None
 
 TSUKUMO_URL = "http://127.0.0.1:8770"
@@ -38,10 +38,10 @@ DEFAULT_KOKORO_DIR = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ts
 PRIO_URGENT, PRIO_HIGH, PRIO_NORMAL, PRIO_LOW = 0, 1, 2, 3
 
 
-# --------------------------------------------------------------------- motori
+# --------------------------------------------------------------------- engines
 
 class TTSBackend:
-    name = "nessuna"
+    name = "none"
     plays_itself = False
 
     def available(self) -> tuple[bool, str]:
@@ -52,11 +52,11 @@ class TTSBackend:
 
 
 class KokoroBackend(TTSBackend):
-    """kokoro-onnx in processo, con i file del modello già scaricati da Tsukumo (o altra cartella)."""
+    """In-process kokoro-onnx, with the model files already downloaded by Tsukumo (or another folder)."""
 
     name = "kokoro"
 
-    def __init__(self, model_dir: str | Path | None = None, voice: str = "im_nicola", speed: float = 1.1):
+    def __init__(self, model_dir: str | Path | None = None, voice: str = "am_michael", speed: float = 1.1):
         self.model_dir = Path(model_dir) if model_dir else DEFAULT_KOKORO_DIR
         self.voice, self.speed = voice, speed
         self._kokoro = None
@@ -69,10 +69,10 @@ class KokoroBackend(TTSBackend):
         try:
             import kokoro_onnx  # noqa: F401
         except ImportError:
-            return False, "pacchetto kokoro-onnx non installato"
+            return False, "kokoro-onnx package not installed"
         missing = [p.name for p in self.files() if not p.is_file()]
         if missing:
-            return False, f"mancano {', '.join(missing)} in {self.model_dir}"
+            return False, f"missing {', '.join(missing)} in {self.model_dir}"
         return True, ""
 
     def synth(self, text: str) -> tuple[np.ndarray, int] | None:
@@ -87,12 +87,12 @@ class KokoroBackend(TTSBackend):
 
 
 class TsukumoBackend(TTSBackend):
-    """Fa parlare Tsukumo (/api/say): l'audio lo riproduce la sua finestra."""
+    """Makes Tsukumo speak (/api/say): its own window plays the audio."""
 
     name = "tsukumo"
     plays_itself = True
 
-    def __init__(self, url: str = TSUKUMO_URL, voice: str = "im_nicola", speed: float = 1.1):
+    def __init__(self, url: str = TSUKUMO_URL, voice: str = "am_michael", speed: float = 1.1):
         self.url, self.voice, self.speed = url.rstrip("/"), voice, speed
 
     def available(self) -> tuple[bool, str]:
@@ -100,7 +100,7 @@ class TsukumoBackend(TTSBackend):
             urllib.request.urlopen(self.url + "/api/voices", timeout=1.5).close()
             return True, ""
         except OSError as exc:
-            return False, f"Tsukumo non risponde su {self.url} ({exc})"
+            return False, f"Tsukumo is not answering on {self.url} ({exc})"
 
     def synth(self, text: str):
         body = json.dumps({"text": text, "voice": self.voice, "speed": self.speed}).encode()
@@ -121,7 +121,7 @@ def make_backend(engine: str, voice: str, speed: float, model_dir: str | None = 
 # ------------------------------------------------------------------ audio
 
 def radio_click(sr: int, ms: float = 45.0, level: float = 0.06) -> np.ndarray:
-    """Breve fruscio da radio di squadra prima e dopo il messaggio."""
+    """Short team-radio crackle before and after the message."""
     n = int(sr * ms / 1000)
     rng = np.random.default_rng(7)
     env = np.linspace(1.0, 0.0, n) ** 2
@@ -140,20 +140,20 @@ def to_wav(samples: np.ndarray, sr: int) -> bytes:
 
 
 def play_wav(data: bytes) -> None:
-    """Riproduzione bloccante sul dispositivo predefinito (chiamare dal thread della voce)."""
+    """Blocking playback on the default device (call from the voice thread)."""
     if winsound is not None:
         winsound.PlaySound(data, winsound.SND_MEMORY)
 
 
 def stop_playback() -> None:
     if winsound is not None:
-        winsound.PlaySound(None, 0)   # interrompe il suono in corso
+        winsound.PlaySound(None, 0)   # stops the sound being played
 
 
-# --------------------------------------------------------------- trascrizione
+# --------------------------------------------------------------- transcription
 
 def transcribe_tsukumo(pcm16_mono_16k: bytes, url: str = TSUKUMO_URL) -> str:
-    """Testo dall'audio del push-to-talk (Tsukumo: Motori → Ascolto deve essere attivo)."""
+    """Text from the push-to-talk audio (in Tsukumo the listening engine must be enabled)."""
     req = urllib.request.Request(url.rstrip("/") + "/api/transcribe", data=pcm16_mono_16k, method="POST",
                                  headers={"Content-Type": "application/octet-stream"})
     try:
@@ -168,7 +168,7 @@ def transcribe_tsukumo(pcm16_mono_16k: bytes, url: str = TSUKUMO_URL) -> str:
         raise RuntimeError(f"Tsukumo: {detail}") from exc
 
 
-# -------------------------------------------------------------------- coda
+# -------------------------------------------------------------------- queue
 
 @dataclass(order=True)
 class _Item:
@@ -180,7 +180,7 @@ class _Item:
 
 
 class RadioVoice(threading.Thread):
-    """Thread che pronuncia i messaggi in ordine di priorità."""
+    """Thread that speaks the messages in order of priority."""
 
     def __init__(self, backend: TTSBackend, is_safe: Callable[[], bool] | None = None,
                  on_spoken: Callable[[str], None] | None = None, on_error: Callable[[str], None] | None = None):
@@ -202,7 +202,7 @@ class RadioVoice(threading.Thread):
         self._cache.clear()
 
     def say(self, text: str, priority: int = PRIO_NORMAL, ttl_s: float = 20.0, key: str | None = None) -> None:
-        """Accoda un messaggio. Con `key`, un messaggio nuovo con la stessa chiave rimpiazza quello vecchio."""
+        """Queue a message. With `key`, a new message with the same key replaces the old one."""
         text = text.strip()
         if not text:
             return
@@ -212,7 +212,7 @@ class RadioVoice(threading.Thread):
         self._q.put(_Item(priority, seq, text, time.monotonic() + ttl_s, key))
 
     def interrupt(self) -> None:
-        """Svuota la coda e tronca il messaggio in corso (es. il pilota preme la radio)."""
+        """Empty the queue and cut the current message (e.g. the driver presses the radio)."""
         while True:
             try:
                 self._q.get_nowait()
@@ -247,7 +247,7 @@ class RadioVoice(threading.Thread):
             if self._stop.is_set():
                 break
             if item.key and self._keys.get(item.key) != item.seq:
-                continue          # superato da un messaggio più recente con la stessa chiave
+                continue          # superseded by a newer message with the same key
             if time.monotonic() > item.expires:
                 continue
             waited = 0.0
@@ -260,6 +260,6 @@ class RadioVoice(threading.Thread):
                     play_wav(data)
                 if self.on_spoken:
                     self.on_spoken(item.text)
-            except Exception as exc:   # la radio non deve mai far cadere l'hub
+            except Exception as exc:   # the radio must never bring the hub down
                 if self.on_error:
                     self.on_error(f"{type(exc).__name__}: {exc}")

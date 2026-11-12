@@ -1,4 +1,4 @@
-"""Archivio sessioni/giri/campioni su DuckDB, con esportazione Parquet."""
+"""Session/lap/sample archive on DuckDB, with Parquet export."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class TelemetryDB:
         self.con.close()
 
     def thread_view(self) -> "TelemetryDB":
-        """Stessa API su un cursore dedicato, da usare in thread diversi da quello della UI."""
+        """Same API on a dedicated cursor, for threads other than the UI thread."""
         view = TelemetryDB.__new__(TelemetryDB)
         view.path = self.path
         view.con = self.con.cursor()

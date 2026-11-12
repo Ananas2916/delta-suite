@@ -10,13 +10,13 @@ from ai_engine.mcp_server import MCPServer, handle_rpc
 
 
 class FakeProvider:
-    def live_state(self): return {"carburante_l": 24.1}
-    def session_laps(self, sid): return {"giri": [], "sid": sid}
+    def live_state(self): return {"fuel_l": 24.1}
+    def session_laps(self, sid): return {"laps": [], "sid": sid}
     def compare_laps(self, a, b, sid): return {"a": a, "b": b}
-    def current_setup(self): return {"voci": []}
+    def current_setup(self): return {"items": []}
     def standings(self): return {}
     def sessions(self): return []
-    def propose(self, kind, value, name, reason): return {"accettata": True, "tipo": kind, "valore": value}
+    def propose(self, kind, value, name, reason): return {"accepted": True, "kind": kind, "value": value}
 
 
 def rpc(method, params=None, mid=1):
@@ -29,13 +29,13 @@ def test_handshake_and_tools():
     assert init["result"]["protocolVersion"] == "2025-06-18"
     assert handle_rpc(p, {"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     names = [t["name"] for t in handle_rpc(p, rpc("tools/list"))["result"]["tools"]]
-    assert {"stato_live", "giri_sessione", "confronta_giri", "setup_attuale", "proponi_modifica"} <= set(names)
-    res = handle_rpc(p, rpc("tools/call", {"name": "confronta_giri",
-                                           "arguments": {"giro_riferimento": 3, "giro_confronto": 5}}))
+    assert {"live_state", "session_laps", "compare_laps", "current_setup", "propose_change"} <= set(names)
+    res = handle_rpc(p, rpc("tools/call", {"name": "compare_laps",
+                                           "arguments": {"reference_lap": 3, "compared_lap": 5}}))
     assert json.loads(res["result"]["content"][0]["text"]) == {"a": 3, "b": 5}
-    missing = handle_rpc(p, rpc("tools/call", {"name": "confronta_giri", "arguments": {}}))
+    missing = handle_rpc(p, rpc("tools/call", {"name": "compare_laps", "arguments": {}}))
     assert missing["result"]["isError"]
-    assert handle_rpc(p, rpc("tools/call", {"name": "boh"}))["error"]["code"] == -32602
+    assert handle_rpc(p, rpc("tools/call", {"name": "nope"}))["error"]["code"] == -32602
 
 
 def _post(url, body, token=None, origin=None):
@@ -57,11 +57,11 @@ def test_http_requires_token_and_local_origin():
             _post(srv.url, rpc("tools/list"))
         assert e.value.code == 401
         with pytest.raises(urllib.error.HTTPError) as e:
-            _post(srv.url, rpc("tools/list"), srv.token, origin="https://sito-malevolo.example")
+            _post(srv.url, rpc("tools/list"), srv.token, origin="https://evil-site.example")
         assert e.value.code == 401
-        code, body = _post(srv.url, rpc("tools/call", {"name": "stato_live"}), srv.token)
+        code, body = _post(srv.url, rpc("tools/call", {"name": "live_state"}), srv.token)
         assert code == 200
-        assert json.loads(json.loads(body)["result"]["content"][0]["text"]) == {"carburante_l": 24.1}
+        assert json.loads(json.loads(body)["result"]["content"][0]["text"]) == {"fuel_l": 24.1}
         code, body = _post(srv.url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, srv.token)
         assert code == 202 and body == b""
         cfg = srv.client_config()["mcpServers"]["deltasuite"]
@@ -91,9 +91,9 @@ def test_claude_stream_parsing():
     lines = [
         {"type": "system", "subtype": "init", "session_id": "abc"},
         {"type": "stream_event", "event": {"type": "message_start"}},
-        {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Otto "}}},
-        {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "giri."}}},
-        {"type": "result", "subtype": "success", "is_error": False, "result": "Otto giri.", "session_id": "abc"},
+        {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Eight "}}},
+        {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "laps."}}},
+        {"type": "result", "subtype": "success", "is_error": False, "result": "Eight laps.", "session_id": "abc"},
     ]
 
     class P:
@@ -102,6 +102,6 @@ def test_claude_stream_parsing():
     a = CLIAgent.__new__(CLIAgent)
     a.session_id = None
     chunks = []
-    assert a._read_claude(P, chunks.append) == "Otto giri."
-    assert "".join(chunks) == "Otto giri."
+    assert a._read_claude(P, chunks.append) == "Eight laps."
+    assert "".join(chunks) == "Eight laps."
     assert a.session_id == "abc"

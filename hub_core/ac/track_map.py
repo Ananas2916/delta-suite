@@ -1,14 +1,14 @@
 """
-Linea della pista per il GPS: la linea AI del tracciato di AC (`ai/fast_lane.ai`, e `pit_lane.ai` per la corsia
-box).
+Track line for the GPS: the AI line of the AC track (`ai/fast_lane.ai`, and `pit_lane.ai` for the pit
+lane).
 
-È la stessa spline con cui AC calcola la posizione sul giro delle auto (normalizedCarPosition, splinePosition
-dell'app CSP): la distanza lungo la linea divisa per la sua lunghezza. Quindi ogni auto si mette sulla mappa dalla
-sua posizione sul giro, anche senza le coordinate, e i tratti della pista (gialle, auto ferme) si colorano per
-posizione. Le coordinate (x, z) sono quelle del mondo di AC, come carCoordinates.
+It is the same spline AC uses to compute each car's position on the lap (normalizedCarPosition, splinePosition
+of the CSP app): the distance along the line divided by its length. So every car is placed on the map from its
+lap position, even without coordinates, and track segments (yellows, stopped cars) are coloured by
+position. The (x, z) coordinates are AC world coordinates, like carCoordinates.
 
-Formato di fast_lane.ai: 4 int32 (versione, numero di punti, tempo sul giro, campioni), poi per ogni punto
-x, y, z, lunghezza (float32) e id (int32); dopo vengono altri dati che qui non servono.
+fast_lane.ai format: 4 int32 (version, number of points, lap time, samples), then for each point
+x, y, z, length (float32) and id (int32); other data follows that is not needed here.
 """
 
 from __future__ import annotations
@@ -20,13 +20,13 @@ from pathlib import Path
 POINT = struct.Struct("<4fi")
 HEADER = struct.Struct("<4i")
 MAX_POINTS = 200_000
-MAX_COORD = 50_000.0        # m: oltre non è una pista (file diverso da quello atteso)
-MAX_STEP = 100.0            # m tra due punti consecutivi (di solito ~1 m)
+MAX_COORD = 50_000.0        # m: beyond this it is not a track (unexpected file)
+MAX_STEP = 100.0            # m between two consecutive points (usually ~1 m)
 
 
 def read_ai_line(path: Path, closed: bool = True) -> list[tuple[float, float]]:
-    """Punti (x, z) della linea AI, nell'ordine del giro (il primo è sul traguardo). [] se il file non va.
-    `closed=False` per la corsia box, che non è un anello."""
+    """(x, z) points of the AI line, in lap order (the first is on the finish line). [] if the file is unusable.
+    `closed=False` for the pit lane, which is not a loop."""
     try:
         data = path.read_bytes()
     except OSError:
@@ -46,20 +46,20 @@ def read_ai_line(path: Path, closed: bool = True) -> list[tuple[float, float]]:
 
 
 def _looks_like_a_line(pts: list[tuple[float, float]], closed: bool) -> bool:
-    """Punti vicini tra loro (e giro chiuso): se no, meglio la linea imparata girando che una mappa sbagliata."""
+    """Points close together (and a closed lap): otherwise the line learned while driving beats a wrong map."""
     steps = [math.dist(a, b) for a, b in zip(pts, pts[1:] + (pts[:1] if closed else []))]
     return max(steps) <= MAX_STEP and sum(steps) >= 100.0
 
 
 def ai_dirs(ac_root: Path, track_id: str, config: str = "") -> list[Path]:
-    """Dove cercare la cartella ai: prima quella del layout, poi quella del tracciato."""
+    """Where to look for the ai folder: first the layout's, then the track's."""
     base = ac_root / "content" / "tracks" / track_id
     return ([base / config / "ai"] if config else []) + [base / "ai"]
 
 
 def find_ai_lines(ac_root: Path | None, track_id: str, config: str = "") \
         -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """(linea del giro, corsia box) del tracciato; liste vuote se non ci sono (tracciato non installato, demo)."""
+    """(lap line, pit lane) of the track; empty lists if missing (track not installed, demo)."""
     if ac_root is None or not track_id:
         return [], []
     for folder in ai_dirs(ac_root, track_id, config):

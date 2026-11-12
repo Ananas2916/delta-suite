@@ -22,16 +22,16 @@ def test_hybrid_fields_from_ac_pages():
     assert info["has_ers"] and not info["has_kers"] and info["ers_power_modes"] == 5
 
     h = cs.hybrid_state(s, info)
-    assert h.deploying and h.mode_text == "in spinta"
+    assert h.deploying and h.mode_text == "deploying"
     assert h.lap_limit_kj == pytest.approx(4000) and h.lap_left_kj == pytest.approx(3187.5)
-    assert cs.hybrid_dict(h)["batteria_pct"] == 42.0
+    assert cs.hybrid_dict(h)["battery_pct"] == 42.0
 
 
 def test_not_hybrid_without_kers_or_ers():
     s = make_sample(kers_charge=0.0)
     assert cs.hybrid_state(s, {"damage_rate": 1.0}) is None
-    assert cs.status_dict(s, {})["ibrido"] is None
-    assert not any(a.key == "battery" for a in cs.car_alerts(s, {}))   # carica 0 ma non è ibrida
+    assert cs.status_dict(s, {})["hybrid"] is None
+    assert not any(a.key == "battery" for a in cs.car_alerts(s, {}))   # charge 0 but not a hybrid
 
 
 def test_kers_only_car_uses_kers_limit():
@@ -55,14 +55,14 @@ def test_radio_battery_once_until_recharged():
     assert said(kers_charge=0.18) == ["Batteria al 18 per cento."]
     assert said(kers_charge=0.17) == []
     assert said(kers_charge=0.03) == ["Batteria scarica."]
-    assert said(kers_charge=0.5) == []                       # ricaricata: niente da dire
+    assert said(kers_charge=0.5) == []                       # recharged: nothing to say
     assert said(kers_charge=0.19) == ["Batteria al 19 per cento."]
     assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=3) == ["Energia elettrica del giro finita."]
-    assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=4) == []        # stesso stint: già detto
+    assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=4) == []        # same stint: already said
     assert said(kers_charge=0.6, is_in_pit=True) == []
     assert said(kers_charge=0.6, kers_lap_kj=4000.0, completed_laps=9) == ["Energia elettrica del giro finita."]
     assert RadioRules(RadioConfig(flags=False, hybrid=False)).on_sample(make_sample(kers_charge=0.03), HYBRID) == []
-    assert r.on_sample(make_sample(kers_charge=0.03), {}) == []   # auto non ibrida
+    assert r.on_sample(make_sample(kers_charge=0.03), {}) == []   # not a hybrid
 
 
 def test_battery_phrases_in_every_language():

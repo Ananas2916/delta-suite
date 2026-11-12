@@ -1,9 +1,9 @@
 """
-Classifica live con gap e interval dai dati di tutte le auto (app CSP).
+Live standings with gap and interval from the data of all cars (CSP app).
 
-Per ogni auto si tiene la storia (tempo, avanzamento) dove avanzamento = giri completati + posizione
-sulla spline. Il distacco di B da A è il tempo passato da quando A si trovava dove B è adesso:
-come i loop di cronometraggio veri, ma con un loop in ogni punto della pista.
+For each car a (time, progress) history is kept, where progress = completed laps + position
+on the spline. B's gap to A is the time elapsed since A was where B is now:
+like real timing loops, but with a loop at every point of the track.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import numpy as np
 
 from hub_core.model import CarEntry
 
-HISTORY_S = 400.0      # abbastanza per un doppiaggio su piste lunghe
+HISTORY_S = 400.0      # enough for a lapping on long tracks
 
 
 @dataclass
@@ -27,24 +27,24 @@ class StandingRow:
     laps: int
     last_ms: int
     best_ms: int
-    gap_s: float | None         # dal leader (in gara) o dal miglior giro (prove/qualifica)
-    interval_s: float | None    # dall'auto davanti
+    gap_s: float | None         # to the leader (race) or to the best lap (practice/qualifying)
+    interval_s: float | None    # to the car ahead
     laps_down: int
     in_pit: bool
     is_player: bool
 
     def as_dict(self) -> dict:
-        return {"pos": self.pos, "pilota": self.driver, "auto": self.model, "giri": self.laps,
-                "ultimo_ms": self.last_ms, "migliore_ms": self.best_ms,
+        return {"pos": self.pos, "driver": self.driver, "car": self.model, "laps": self.laps,
+                "last_ms": self.last_ms, "best_ms": self.best_ms,
                 "gap_s": None if self.gap_s is None else round(self.gap_s, 3),
                 "interval_s": None if self.interval_s is None else round(self.interval_s, 3),
-                "giri_di_distacco": self.laps_down, "ai_box": self.in_pit, "sei_tu": self.is_player}
+                "laps_down": self.laps_down, "in_pit": self.in_pit, "is_you": self.is_player}
 
 
 def fmt_gap(r: StandingRow) -> str:
-    """Distacco come in TV: giri di ritardo, altrimenti secondi; il primo non ne ha."""
+    """Gap as on TV: laps behind, otherwise seconds; the leader has none."""
     if r.laps_down >= 1:
-        return f"+{r.laps_down} {'giro' if r.laps_down == 1 else 'giri'}"
+        return f"+{r.laps_down} {'lap' if r.laps_down == 1 else 'laps'}"
     return "-" if not r.gap_s else f"+{r.gap_s:.1f}"
 
 
@@ -63,15 +63,15 @@ class TimingTower:
             p = c.progress
             if h and p < h[-1][1]:
                 if h[-1][1] - p > 0.5:
-                    h.clear()           # sessione ricominciata o auto riportata ai box
+                    h.clear()           # session restarted or car sent back to the pits
                 else:
-                    continue            # salto di spline al traguardo prima del giro: si aspetta
+                    continue            # spline jump at the line before the lap count: wait
             h.append((now, p))
             while h and now - h[0][0] > HISTORY_S:
                 h.popleft()
 
     def time_at(self, index: int, progress: float) -> float | None:
-        """Quando l'auto `index` era all'avanzamento dato (None se fuori dalla storia)."""
+        """When car `index` was at the given progress (None if outside the history)."""
         h = self._hist.get(index)
         if not h or len(h) < 2 or progress < h[0][1] or progress > h[-1][1]:
             return None
@@ -108,7 +108,7 @@ class TimingTower:
 
 
 def neighbours(rows: list[StandingRow]) -> tuple[StandingRow | None, StandingRow | None, StandingRow | None]:
-    """(auto davanti, tu, auto dietro) nella classifica."""
+    """(car ahead, you, car behind) in the standings."""
     for i, r in enumerate(rows):
         if r.is_player:
             return (rows[i - 1] if i else None, r, rows[i + 1] if i + 1 < len(rows) else None)

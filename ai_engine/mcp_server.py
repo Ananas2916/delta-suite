@@ -1,9 +1,9 @@
 """
-Server MCP (Streamable HTTP, solo risposte JSON) che espone i dati di Delta Suite agli agenti:
-Claude Code, Codex, Antigravity o qualunque client MCP.
+MCP server (Streamable HTTP, JSON responses only) exposing Delta Suite data to agents:
+Claude Code, Codex, Antigravity or any MCP client.
 
-Ascolta solo su 127.0.0.1 e richiede il token generato a ogni avvio (header Authorization),
-così né altri programmi né pagine web aperte nel browser possono usarlo.
+It listens on 127.0.0.1 only and requires the token generated at every start (Authorization header),
+so neither other programs nor web pages open in the browser can use it.
 """
 
 from __future__ import annotations
@@ -35,85 +35,85 @@ def _obj(props: dict, required: list[str] | None = None) -> dict:
 
 TOOLS: list[dict] = [
     {
-        "name": "stato_live",
-        "description": "Stato attuale della vettura in pista: velocità, marcia, carburante, gomme (temperatura "
-                       "°C, pressione psi, usura % dove 100 = nuova) e freni per ruota [AS, AD, PS, PD], giro e "
-                       "settore, condizioni pista, regolazioni di abitacolo (bias freni, ABS, TC, freno motore), "
-                       "stato vettura (danni per zona, sporco gomme, corsa sospensioni, avvisi).",
+        "name": "live_state",
+        "description": "Current state of the car on track: speed, gear, fuel, tyres (temperature °C, "
+                       "pressure psi, wear % where 100 = new) and brakes per wheel [FL, FR, RL, RR], lap and "
+                       "sector, track conditions, cockpit adjustments (brake bias, ABS, TC, engine brake), "
+                       "car status (damage per zone, tyre dirt, suspension travel, alerts).",
         "inputSchema": _obj({}),
     },
     {
-        "name": "giri_sessione",
-        "description": "Giri della sessione con tempi, settori, validità, consumo, medie gomme e freni, più "
-                       "analisi di strategia: consumo medio, giro ideale, previsione degrado gomme. Senza "
-                       "session_id usa la sessione live.",
-        "inputSchema": _obj({"session_id": {"type": "integer", "description": "id da archivio_sessioni"}}),
+        "name": "session_laps",
+        "description": "Session laps with times, sectors, validity, fuel use, tyre and brake averages, plus "
+                       "strategy analysis: average fuel use, ideal lap, tyre degradation forecast. Without "
+                       "session_id it uses the live session.",
+        "inputSchema": _obj({"session_id": {"type": "integer", "description": "id from session_archive"}}),
     },
     {
-        "name": "confronta_giri",
-        "description": "Confronto curva per curva tra due giri (curve riconosciute automaticamente): tempo "
-                       "perso, punto di frenata, velocità minima, ripresa del gas. Usalo per dire al pilota "
-                       "dove e perché perde tempo.",
+        "name": "compare_laps",
+        "description": "Corner-by-corner comparison of two laps (corners detected automatically): time "
+                       "lost, braking point, minimum speed, throttle pick-up. Use it to tell the driver "
+                       "where and why they lose time.",
         "inputSchema": _obj({
-            "giro_riferimento": {"type": "integer", "description": "numero del giro di riferimento"},
-            "giro_confronto": {"type": "integer", "description": "numero del giro da confrontare"},
+            "reference_lap": {"type": "integer", "description": "reference lap number"},
+            "compared_lap": {"type": "integer", "description": "number of the lap to compare"},
             "session_id": {"type": "integer"},
-        }, ["giro_riferimento", "giro_confronto"]),
+        }, ["reference_lap", "compared_lap"]),
     },
     {
-        "name": "setup_attuale",
-        "description": "Setup attuale della vettura: ogni voce con nome interno, valore in click, valore "
-                       "mostrato in gioco, unità, limiti e passo; indica se ora è modificabile (solo ai box).",
+        "name": "current_setup",
+        "description": "Current car setup: every item with internal name, value in clicks, value shown "
+                       "in game, units, limits and step; says whether it can be edited now (pits only).",
         "inputSchema": _obj({}),
     },
     {
-        "name": "classifica",
-        "description": "Classifica live con gap dal leader e interval dall'auto davanti (richiede l'app CSP).",
+        "name": "standings",
+        "description": "Live standings with gap to the leader and interval to the car ahead (needs the CSP app).",
         "inputSchema": _obj({}),
     },
     {
-        "name": "archivio_sessioni",
-        "description": "Sessioni salvate in archivio (id, auto, pista, giri, miglior giro).",
+        "name": "session_archive",
+        "description": "Sessions saved in the archive (id, car, track, laps, best lap).",
         "inputSchema": _obj({}),
     },
     {
-        "name": "proponi_modifica",
-        "description": "Propone al pilota una modifica: non viene applicata finché lui non conferma (tasto al "
-                       "volante o pulsante nell'hub). tipo: bias_freni (valore 0-1, quota anteriore), abs, tc, "
-                       "freno_motore (valori interi del gioco), setup (nome = nome interno della voce di "
-                       "setup_attuale, valore = click). Le modifiche di setup si applicano solo ai box.",
+        "name": "propose_change",
+        "description": "Proposes a change to the driver: it is not applied until they confirm (wheel button "
+                       "or hub button). kind: brake_bias (value 0-1, front share), abs, tc, "
+                       "engine_brake (game integer values), setup (name = internal name of the "
+                       "current_setup item, value = clicks). Setup changes only apply in the pits.",
         "inputSchema": _obj({
-            "tipo": {"type": "string", "enum": ["bias_freni", "abs", "tc", "freno_motore", "setup"]},
-            "valore": {"type": "number"},
-            "nome": {"type": "string", "description": "solo per tipo=setup"},
-            "motivo": {"type": "string", "description": "spiegazione breve, letta al pilota"},
-        }, ["tipo", "valore", "motivo"]),
+            "kind": {"type": "string", "enum": ["brake_bias", "abs", "tc", "engine_brake", "setup"]},
+            "value": {"type": "number"},
+            "name": {"type": "string", "description": "only for kind=setup"},
+            "reason": {"type": "string", "description": "short explanation, read to the driver"},
+        }, ["kind", "value", "reason"]),
     },
 ]
 
 
 def _call_tool(provider: DataProvider, name: str, args: dict) -> Any:
-    if name == "stato_live":
+    if name == "live_state":
         return provider.live_state()
-    if name == "giri_sessione":
+    if name == "session_laps":
         return provider.session_laps(args.get("session_id"))
-    if name == "confronta_giri":
-        return provider.compare_laps(int(args["giro_riferimento"]), int(args["giro_confronto"]),
+    if name == "compare_laps":
+        return provider.compare_laps(int(args["reference_lap"]), int(args["compared_lap"]),
                                      args.get("session_id"))
-    if name == "setup_attuale":
+    if name == "current_setup":
         return provider.current_setup()
-    if name == "classifica":
+    if name == "standings":
         return provider.standings()
-    if name == "archivio_sessioni":
+    if name == "session_archive":
         return provider.sessions()
-    if name == "proponi_modifica":
-        return provider.propose(str(args["tipo"]), float(args["valore"]), str(args.get("nome") or ""),
-                                str(args.get("motivo") or ""))
+    if name == "propose_change":
+        return provider.propose(str(args["kind"]), float(args["value"]), str(args.get("name") or ""),
+                                str(args.get("reason") or ""))
     raise KeyError(name)
 
 
 def handle_rpc(provider: DataProvider, msg: dict) -> dict | None:
-    """Gestisce un messaggio JSON-RPC; None per le notifiche (nessuna risposta)."""
+    """Handle a JSON-RPC message; None for notifications (no reply)."""
     method, mid = msg.get("method"), msg.get("id")
     if mid is None:
         return None
@@ -130,8 +130,8 @@ def handle_rpc(provider: DataProvider, msg: dict) -> dict | None:
             "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": SERVER_NAME, "version": "1.0"},
-            "instructions": "Dati di telemetria, strategia e setup di Delta Suite (Assetto Corsa). "
-                            "Le modifiche si propongono con proponi_modifica e le conferma il pilota.",
+            "instructions": "Telemetry, strategy and setup data from Delta Suite (Assetto Corsa). "
+                            "Changes are proposed with propose_change and the driver confirms them.",
         })
     if method == "ping":
         return ok({})
@@ -144,20 +144,20 @@ def handle_rpc(provider: DataProvider, msg: dict) -> dict | None:
             data = _call_tool(provider, name, params.get("arguments") or {})
         except KeyError as exc:
             if str(exc).strip("'") == name:
-                return err(-32602, f"strumento sconosciuto: {name}")
-            return ok({"content": [{"type": "text", "text": f"Parametro mancante: {exc}"}], "isError": True})
+                return err(-32602, f"unknown tool: {name}")
+            return ok({"content": [{"type": "text", "text": f"Missing parameter: {exc}"}], "isError": True})
         except Exception as exc:
             return ok({"content": [{"type": "text", "text": f"{type(exc).__name__}: {exc}"}], "isError": True})
         text = json.dumps(data, ensure_ascii=False, default=str)
         return ok({"content": [{"type": "text", "text": text}], "isError": False})
-    return err(-32601, f"metodo non supportato: {method}")
+    return err(-32601, f"unsupported method: {method}")
 
 
 class _QuietServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def handle_error(self, request, client_address):
-        # i client chiudono le connessioni keep-alive senza preavviso: non è un errore
+        # clients close keep-alive connections without notice: not an error
         if isinstance(sys.exc_info()[1], (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
             return
         super().handle_error(request, client_address)
@@ -207,13 +207,13 @@ class MCPServer:
                 if self.path.split("?")[0] != "/mcp":
                     return self._send(404, {"error": "not found"})
                 if not self._authorized():
-                    return self._send(401, {"error": "token mancante o errato"})
+                    return self._send(401, {"error": "missing or wrong token"})
                 try:
                     length = int(self.headers.get("Content-Length") or 0)
                     payload = json.loads(self.rfile.read(length) or b"null")
                 except (ValueError, OSError):
                     return self._send(400, {"jsonrpc": "2.0", "id": None,
-                                            "error": {"code": -32700, "message": "JSON non valido"}})
+                                            "error": {"code": -32700, "message": "invalid JSON"}})
                 msgs = payload if isinstance(payload, list) else [payload]
                 replies = [r for m in msgs if isinstance(m, dict) for r in [handle_rpc(server.provider, m)] if r]
                 headers = {}
@@ -224,7 +224,7 @@ class MCPServer:
                 self._send(200, replies if isinstance(payload, list) else replies[0], headers)
 
             def do_GET(self):
-                self._send(405, {"error": "nessuno stream SSE: usare POST"}, {"Allow": "POST"})
+                self._send(405, {"error": "no SSE stream: use POST"}, {"Allow": "POST"})
 
             def do_DELETE(self):
                 self._send(200, {})
@@ -250,6 +250,6 @@ class MCPServer:
             self._httpd = None
 
     def client_config(self) -> dict:
-        """Configurazione per --mcp-config di Claude Code (e formato mcpServers in generale)."""
+        """Configuration for Claude Code's --mcp-config (and the mcpServers format in general)."""
         return {"mcpServers": {SERVER_NAME: {"type": "http", "url": self.url,
                                              "headers": {"Authorization": f"Bearer {self.token}"}}}}

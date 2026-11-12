@@ -1,11 +1,11 @@
--- Delta Suite Onboard: video onboard per Delta Suite (modulo di DeltaSuiteBridge, caricato con require)
+-- Delta Suite Onboard: onboard video for Delta Suite (DeltaSuiteBridge module, loaded with require)
 --
--- DeltaSuite_Onboard_v6: fino a 4 viste (auto, telecamera, qualità) rese con ac.GeometryShot, con
--- esposizione e gamma (o il post-processing del gioco con YEBIS); i fotogrammi arrivano a Delta Suite come
--- texture condivise, DDS grezzo nella mapping (solo la principale) o file JPG; in più posizioni delle auto
--- (GPS) e telecamere F6 dell'auto.
--- Il layout deve restare identico a OnboardShared in hub_core/ac/onboard_feed.py (stesso ordine dei campi).
--- Un errore qui non ferma il ponte: DeltaSuiteBridge.lua chiama solo M.update e M.window.
+-- DeltaSuite_Onboard_v6: up to 4 views (car, camera, quality) rendered with ac.GeometryShot, with
+-- exposure and gamma (or the game's post-processing with YEBIS); frames reach Delta Suite as
+-- shared textures, raw DDS in the mapping (main view only) or JPG files; plus the car positions
+-- (GPS) and the car's F6 cameras.
+-- The layout must stay identical to OnboardShared in hub_core/ac/onboard_feed.py (same field order).
+-- An error here does not stop the bridge: DeltaSuiteBridge.lua only calls M.update and M.window.
 
 local ONBOARD_LAYOUT = [[
   int version;
@@ -41,10 +41,10 @@ local ONBOARD_LAYOUT = [[
 ]]
 local ONBOARD_VERSION, ONBOARD_END, ONBOARD_SLOTS, ONBOARD_DATA_MAX = 6, 0x44534F31, 3, 3686656 -- 'DSO1'
 local ONBOARD_VIEWS, MAX_CAR_CAMERAS, MAX_CARS_POS = 4, 16, 64
-local CAR_CAMERA_BASE = 8 -- da qui in poi le telecamere F6 dell'auto (cameras.ini): 8 = la prima
+local CAR_CAMERA_BASE = 8 -- from here on the car's F6 cameras (cameras.ini): 8 = the first
 local TONEMAP_YEBIS, TRANSPORT_MEMORY, TRANSPORT_SHARED = 3, 1, 2
 
--- Variabili a livello di modulo: restano vive finché l'app è caricata.
+-- Module-level variables: they stay alive while the app is loaded.
 local onb = ac.writeMemoryMappedFile('DeltaSuite_Onboard_v6', ONBOARD_LAYOUT)
 
 local function setStr(dst, size, s)
@@ -60,16 +60,16 @@ local onbBeat, onbBeatChange = onb.hostBeat, -100
 local onbActive = false
 local camCountTimer, posTimer = 0, 0
 local X, Y, Z = vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1)
-local carNodes, wheelsLocal = {}, {} -- nodo carRoot e ruote nello spazio dell'auto, per indice d'auto
+local carNodes, wheelsLocal = {}, {} -- carRoot node and wheels in car space, by car index
 local fpsAvg = 0
 
--- una vista per riquadro di Delta Suite (0 = principale): shot, canvas e richiesta con cui sono stati creati
+-- one view per Delta Suite panel (0 = main): shot, canvas and the request they were created with
 local views = {}
 for k = 0, ONBOARD_VIEWS - 1 do views[k] = { timer = 0 } end
 
--- La GeometryShot non passa dal post-processing del gioco: senza esposizione e gamma esce scura
--- (provato con CSP 0.2.11). gMode: 0 niente, 1 solo gamma, 2 curva filmica (ACES) + gamma; con YEBIS
--- (tonemap 3) il post-processing lo fa la GeometryShot stessa e qui si copia e basta.
+-- The GeometryShot skips the game's post-processing: without exposure and gamma it comes out dark
+-- (tested with CSP 0.2.11). gMode: 0 none, 1 gamma only, 2 filmic curve (ACES) + gamma; with YEBIS
+-- (tonemap 3) the GeometryShot does the post-processing itself and here it is just copied.
 local TONEMAP_SHADER = [[
 float4 main(PS_IN pin) {
   float3 c = txIn.Sample(samLinear, pin.Tex).rgb * gExposure;
@@ -80,7 +80,7 @@ float4 main(PS_IN pin) {
 
 local function avg(a, b) return (a + b) * 0.5 end
 
--- campo che può mancare nelle versioni di CSP più vecchie (su una struct ffi leggerlo è un errore)
+-- field that may be missing in older CSP versions (reading it on an ffi struct is an error)
 local function field(obj, name)
   local ok, v = pcall(function () return obj[name] end)
   if ok then return v end
@@ -97,21 +97,21 @@ end
 
 local function freeAll()
   for k = 0, ONBOARD_VIEWS - 1 do freeView(k) end
-  carNodes, wheelsLocal = {}, {} -- ripresi alla prossima ripresa (cambio di sessione o di auto)
+  carNodes, wheelsLocal = {}, {} -- re-read on the next shot (session or car change)
 end
 
--- Canvas con texture condivisa: Delta Suite la apre con OpenSharedResource e la copia sulla propria
--- GPU, così in AC non c'è nessuna lettura dalla GPU (encode o save costano 9-12 ms a 1280×720).
+-- Canvas with a shared texture: Delta Suite opens it with OpenSharedResource and copies it on its own
+-- GPU, so there is no GPU readback in AC (encode or save cost 9-12 ms at 1280×720).
 local function makeSharedCanvas(k, w, h)
-  if not (render.TextureFlags and render.TextureFlags.Shared) then return nil, 'TextureFlags.Shared assente' end
+  if not (render.TextureFlags and render.TextureFlags.Shared) then return nil, 'TextureFlags.Shared missing' end
   local fmt = render.TextureFormat and render.TextureFormat.R8G8B8A8 and render.TextureFormat.R8G8B8A8.UNorm
   local aa = render.AntialiasingMode and render.AntialiasingMode.None
   local ok, c = pcall(ui.ExtraCanvas, vec2(w, h), 1, aa, fmt, render.TextureFlags.Shared)
   if not ok or not c then return nil, tostring(c) end
   local fn = field(c, 'sharedHandle')
   local hok, hnd = false, nil
-  -- crossProcess = true: handle D3D11 "legacy" apribile da un altro processo con OpenSharedResource
-  -- (con false è un identificativo valido solo per gli script dentro AC: E_INVALIDARG fuori)
+  -- crossProcess = true: "legacy" D3D11 handle another process can open with OpenSharedResource
+  -- (with false it is an id only valid for scripts inside AC: E_INVALIDARG outside)
   if fn then hok, hnd = pcall(fn, c, true) end
   hnd = hok and tonumber(hnd) or nil
   if not hnd or hnd == 0 then
@@ -130,12 +130,12 @@ local function makeShot(k, w, h, yebis, shared, key)
   local root = ac.findNodes('sceneRoot:yes')
   local ok, s = false, nil
   if yebis and render.AntialiasingMode and render.AntialiasingMode.YEBIS then
-    -- antialiasing e conversione HDR→LDR con le impostazioni di post-processing del gioco
+    -- antialiasing and HDR→LDR conversion with the game's post-processing settings
     ok, s = pcall(ac.GeometryShot, root, vec2(w, h), 1, true, render.AntialiasingMode.YEBIS)
     v.yebis = ok and s ~= nil
   end
   if not v.yebis then
-    -- texture HDR se disponibile: l'esposizione poi non schiaccia le ombre su pochi livelli
+    -- HDR texture if available: exposure then does not crush the shadows into a few levels
     local fmt = render.TextureFormat and render.TextureFormat.R16G16B16A16 and render.TextureFormat.R16G16B16A16.Float
     if fmt then ok, s = pcall(ac.GeometryShot, root, vec2(w, h), 1, true, nil, fmt) end
     v.hdr = ok and s ~= nil
@@ -148,18 +148,18 @@ local function makeShot(k, w, h, yebis, shared, key)
     local err
     v.canvas, err = makeSharedCanvas(k, w, h)
     v.shared = v.canvas ~= nil
-    if err then ac.log('DeltaSuite onboard: texture condivisa non disponibile: ' .. err) end
+    if err then ac.log('DeltaSuite onboard: shared texture not available: ' .. err) end
   end
   v.canvas = v.canvas or ui.ExtraCanvas(vec2(w, h))
   v.w, v.h, v.key = w, h, key
 end
 
--- Le telecamere si calcolano nello spazio dell'auto e si portano nel mondo con la trasformazione con cui
--- l'auto viene disegnata (nodo carRoot): così sono solidali con la carrozzeria inquadrata. Prima si partiva
--- dal centro delle ruote, che si muove con le sospensioni, e dallo stato fisico, che non coincide con quello
--- disegnato nello stesso fotogramma: l'immagine tremava molto.
+-- Cameras are computed in car space and brought into the world with the transform the car is drawn
+-- with (carRoot node): this way they move rigidly with the bodywork on screen. Previously they started
+-- from the wheel centre, which moves with the suspension, and from the physics state, which does not match
+-- what is drawn in the same frame: the image shook a lot.
 
--- ripiego se il nodo dell'auto non si trova: base dallo stato dell'auto (meno precisa)
+-- fallback if the car node is not found: basis from the car state (less precise)
 local function basisOf(car)
   local side = field(car, 'side') or car.look:clone():cross(car.up)
   return {
@@ -183,7 +183,7 @@ local function carTransform(idx, car)
   return node:getWorldTransformationRaw() or basisOf(car)
 end
 
--- ruote nello spazio dell'auto, prese una volta sola: la carrozzeria non segue le sospensioni
+-- wheels in car space, read only once: the bodywork does not follow the suspension
 local function wheelsOf(idx, car, m)
   local w = wheelsLocal[idx]
   if w then return w end
@@ -207,7 +207,7 @@ local function countCarCameras(car)
   return n
 end
 
--- telecamere F6 e ruote dell'auto del giocatore, nello spazio dell'auto: Delta Suite ne ricava i nomi
+-- F6 cameras and wheels of the player's car, in car space: Delta Suite derives the names from them
 local function publishCarCameras()
   local player = ac.getCar(0)
   local n = player and countCarCameras(player) or 0
@@ -215,7 +215,7 @@ local function publishCarCameras()
     local ok, cc = pcall(ac.accessCarCamera, i)
     if ok and cc then
       local t = cc.transform
-      local p, d = t.position, t.look * -1 -- .look della telecamera guarda all'indietro
+      local p, d = t.position, t.look * -1 -- the camera's .look points backwards
       onb.carCamData[i * 6], onb.carCamData[i * 6 + 1], onb.carCamData[i * 6 + 2] = p.x, p.y, p.z
       onb.carCamData[i * 6 + 3], onb.carCamData[i * 6 + 4], onb.carCamData[i * 6 + 5] = d.x, d.y, d.z
     end
@@ -229,7 +229,7 @@ local function publishCarCameras()
   end
 end
 
--- posizione (x, z) di ogni auto per la mappa GPS di Delta Suite
+-- (x, z) position of every car for Delta Suite's GPS map
 local function publishPositions(sim)
   local n = math.min(sim.carsCount, MAX_CARS_POS)
   for i = 0, n - 1 do
@@ -239,37 +239,37 @@ local function publishPositions(sim)
   onb.carCount = n
 end
 
--- telecamera in coordinate dell'auto: posizione, direzione, alto, fov (stesso ordine di CAMERAS in onboard_feed.py)
+-- camera in car coordinates: position, direction, up, fov (same order as CAMERAS in onboard_feed.py)
 local function localCamera(car, w, kind)
   local front, rear = avg(w[1], w[2]), avg(w[3], w[4])
   local centre = avg(front, rear)
-  if kind == 1 then -- cofano: dagli occhi del pilota, ma l'abitacolo in una seconda vista non viene reso
+  if kind == 1 then -- bonnet: from the driver's eyes, but the cockpit is not rendered in a second view
     return field(car, 'driverEyesPosition') or (centre + Y * 0.62 - Z * 0.15), Z, Y, 72
-  elseif kind == 2 then -- posteriore: sopra la coda, dietro il tetto (più in basso alettone e coda coprono metà)
+  elseif kind == 2 then -- rear: above the tail, behind the roof (lower down, wing and tail cover half of it)
     return rear + Y * 1.15 - Z * 0.3, (Z * -1 - Y * 0.1):normalize(), Y, 60
-  elseif kind >= 3 and kind <= 6 then -- ruote
+  elseif kind >= 3 and kind <= 6 then -- wheels
     local wp = w[kind - 2]
     local out = X * (wp.x >= centre.x and 1 or -1)
-    if kind <= 4 then -- anteriori: più in fuori e più in basso, sennò il parafango copre la gomma
+    if kind <= 4 then -- fronts: further out and lower, otherwise the wheel arch covers the tyre
       local pos = wp + out * 0.36 + Y * 0.16 - Z * 0.9
       return pos, (Z * 1.5 + (wp - pos):normalize()):normalize(), Y, 68
     end
-    local pos = wp + out * 0.28 + Y * 0.22 + Z * 0.95 -- posteriori: guardano indietro
+    local pos = wp + out * 0.28 + Y * 0.22 + Z * 0.95 -- rears: they look backwards
     return pos, (Z * -2 + (wp - pos):normalize()):normalize(), Y, 68
-  elseif kind == 7 then -- inseguimento
+  elseif kind == 7 then -- chase
     return centre - Z * 5.5 + Y * 1.7, (Z - Y * 0.14):normalize(), Y, 55
   end
-  -- T-cam: sopra il tetto e un po' avanti, sennò il tetto copre metà inquadratura
+  -- T-cam: above the roof and a little forward, otherwise the roof covers half the frame
   return centre + Y * 1.18 + Z * 0.15, (Z - Y * 0.07):normalize(), Y, 62
 end
 
--- posizione, direzione, alto, fov nel mondo; l'ultimo valore è una nota per lo stato
+-- position, direction, up, fov in the world; the last value is a note for the status
 local function cameraFor(idx, car, kind)
   local m = carTransform(idx, car)
   local note = nil
   if kind >= CAR_CAMERA_BASE then
-    -- telecamere F6 dell'auto: ac.accessCarCamera vale per l'auto del giocatore; la matrice è relativa
-    -- al modello e la sua .look guarda all'indietro
+    -- the car's F6 cameras: ac.accessCarCamera works for the player's car; the matrix is relative
+    -- to the model and its .look points backwards
     local ok, cc = false, nil
     if idx == 0 and ac.accessCarCamera then ok, cc = pcall(ac.accessCarCamera, kind - CAR_CAMERA_BASE) end
     if ok and cc then
@@ -277,13 +277,13 @@ local function cameraFor(idx, car, kind)
       return m:transformPoint(t.position), m:transformVector(t.look * -1):normalize(),
         m:transformVector(t.up):normalize(), cc.fov > 1 and cc.fov or 60, nil
     end
-    kind, note = 0, 'F6 solo per la tua auto'
+    kind, note = 0, 'F6 only for your car'
   end
   local p, l, u, fov = localCamera(car, wheelsOf(idx, car, m), kind)
   return m:transformPoint(p), m:transformVector(l):normalize(), m:transformVector(u):normalize(), fov, note
 end
 
--- esposizione e gamma sul fotogramma reso; se lo shader non compila, solo un moltiplicatore
+-- exposure and gamma on the rendered frame; if the shader does not compile, just a multiplier
 local function developShot(v)
   local size = vec2(v.w, v.h)
   local exposure = onb.exposure > 0 and onb.exposure or 1
@@ -307,9 +307,9 @@ local function developShot(v)
   end)
 end
 
--- In memoria (solo la vista principale) va il DDS grezzo di ExtraCanvas:encode() (in CSP 0.2.11 non
--- prende il formato e non comprime); su file va un JPG: onboard_<posto>.jpg per la principale,
--- onboard_v<vista>_<posto>.jpg per le altre. Se encode non dà un risultato utilizzabile non lo si chiama più.
+-- Memory (main view only) gets the raw DDS from ExtraCanvas:encode() (in CSP 0.2.11 it ignores
+-- the format and does not compress); files get a JPG: onboard_<slot>.jpg for the main view,
+-- onboard_v<view>_<slot>.jpg for the others. If encode gives nothing usable it is not called again.
 local function publishFrame(k, v, n, folder, transport)
   local slot = n % ONBOARD_SLOTS
   if k == 0 and transport == TRANSPORT_MEMORY and encodeOk then
@@ -319,25 +319,25 @@ local function publishFrame(k, v, n, folder, transport)
     if ok and type(enc) == 'string' and #enc > 128 and #enc <= ONBOARD_DATA_MAX then
       ffi.copy(onb.data[slot], enc, #enc)
       onb.dataSize[slot] = #enc
-      return 'memoria'
+      return 'memory'
     end
     encodeOk = false
-    ac.log('DeltaSuite onboard: encode inutilizzabile (' .. type(enc) .. (type(enc) == 'string' and
-      (', ' .. #enc .. ' byte') or '') .. '), si passa ai file')
+    ac.log('DeltaSuite onboard: encode unusable (' .. type(enc) .. (type(enc) == 'string' and
+      (', ' .. #enc .. ' bytes') or '') .. '), switching to files')
   end
   if k == 0 then onb.dataSize[slot] = 0 end
-  if folder == '' then error('cartella dei fotogrammi non indicata') end
+  if folder == '' then error('frame folder not set') end
   local name = k == 0 and string.format('onboard_%d.jpg', slot) or string.format('onboard_v%d_%d.jpg', k, slot)
   v.canvas:save(folder .. '\\' .. name, ac.ImageFormat.JPG)
-  return transport == TRANSPORT_MEMORY and k == 0 and 'file (encode non va)' or 'file'
+  return transport == TRANSPORT_MEMORY and k == 0 and 'file (encode not working)' or 'file'
 end
 
 local function renderView(k, sim)
   local v = views[k]
   local idx = onb.viewCar[k] >= 0 and onb.viewCar[k] or sim.focusedCar
   local car = ac.getCar(idx)
-  if not car then setStr(onb.status[k], 96, 'auto ' .. idx .. ' non trovata'); return end
-  local cap = k == 0 and 1920 or 640 -- le viste secondarie sono piccole: al massimo 640×360
+  if not car then setStr(onb.status[k], 96, 'car ' .. idx .. ' not found'); return end
+  local cap = k == 0 and 1920 or 640 -- secondary views are small: at most 640×360
   local w = math.max(160, math.min(cap, onb.viewWidth[k]))
   local h = math.max(90, math.min(cap * 9 / 16, onb.viewHeight[k]))
   local yebis, shared = onb.tonemap == TONEMAP_YEBIS, onb.transport == TRANSPORT_SHARED
@@ -352,16 +352,16 @@ local function renderView(k, sim)
   local route
   if v.shared then
     if k == 0 then onb.dataSize[n % ONBOARD_SLOTS] = 0 end
-    route = 'condivisa'
+    route = 'shared'
   else
     route = publishFrame(k, v, n, ffi.string(onb.folder), shared and TRANSPORT_MEMORY or onb.transport)
-    if shared then route = route .. ' (condivisa non va)' end
+    if shared then route = route .. ' (shared not working)' end
   end
   onb.renderMs[k] = (os.clock() - t0) * 1000
   onb.shotWidth[k], onb.shotHeight[k], onb.shotCar[k] = w, h, idx
-  onb.frame[k] = n -- per ultimo: Delta Suite legge il fotogramma n - 1
-  setStr(onb.status[k], 96, string.format('in diretta · %s · %s%s%s', route,
-    v.yebis and 'yebis' or v.hdr and 'hdr' or 'ldr', shaderOk and '' or ' · senza shader',
+  onb.frame[k] = n -- last: Delta Suite reads frame n - 1
+  setStr(onb.status[k], 96, string.format('live · %s · %s%s%s', route,
+    v.yebis and 'yebis' or v.hdr and 'hdr' or 'ldr', shaderOk and '' or ' · no shader',
     camNote and (' · ' .. camNote) or ''))
 end
 
@@ -383,10 +383,10 @@ local function updateOnboard(dt, sim)
   if onb.hostBeat ~= onbBeat then onbBeat, onbBeatChange = onb.hostBeat, clock end
   local alive = clock - onbBeatChange < 2
   if not alive and next(wheelsLocal) ~= nil then
-    carNodes, wheelsLocal = {}, {} -- Delta Suite staccata: alla ripresa si rileggono (magari è cambiata auto)
+    carNodes, wheelsLocal = {}, {} -- Delta Suite detached: re-read on resume (the car may have changed)
   end
   onbActive = false
-  -- al massimo una vista resa per fotogramma di AC: la più in ritardo, così il costo non fa picchi
+  -- at most one view rendered per AC frame: the most overdue, so the cost does not spike
   local due, dueTimer = nil, 0
   for k = 0, ONBOARD_VIEWS - 1 do
     local v = views[k]
@@ -396,7 +396,7 @@ local function updateOnboard(dt, sim)
       if v.timer <= dueTimer then due, dueTimer = k, v.timer end
     elseif v.shot then
       freeView(k)
-      setStr(onb.status[k], 96, 'in pausa')
+      setStr(onb.status[k], 96, 'paused')
     end
   end
   if due ~= nil then
@@ -413,13 +413,13 @@ function M.update(dt, sim)
   if ok then return end
   freeAll()
   for k = 0, ONBOARD_VIEWS - 1 do
-    views[k].timer = 2 -- si riprova fra un po' invece di ripetere l'errore a ogni frame
-    setStr(onb.status[k], 96, 'errore: ' .. tostring(err))
+    views[k].timer = 2 -- retry in a while instead of repeating the error every frame
+    setStr(onb.status[k], 96, 'error: ' .. tostring(err))
   end
   ac.log('DeltaSuite onboard: ' .. tostring(err))
 end
 
--- righe per la finestra dell'app
+-- lines for the app window
 function M.window()
   if not onbActive then return end
   for k = 0, ONBOARD_VIEWS - 1 do

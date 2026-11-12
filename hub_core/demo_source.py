@@ -1,10 +1,10 @@
 """
-Sorgente di telemetria simulata: permette di usare tutto l'hub senza Assetto Corsa.
+Simulated telemetry source: lets you use the whole hub without Assetto Corsa.
 
-Pista sintetica chiusa con profilo di velocità calcolato da limiti di aderenza
-(curva) e di accelerazione/frenata, più modelli semplici di consumo, temperatura,
-pressione e usura gomme e di un sistema ibrido (batteria, spinta, ricarica in frenata,
-limite di energia per giro). Espone la stessa interfaccia di TelemetryReceiver.
+Closed synthetic track with a speed profile computed from grip (cornering) and
+acceleration/braking limits, plus simple models of fuel use, tyre temperature,
+pressure and wear, and of a hybrid system (battery, deploy, harvesting under braking,
+per-lap energy limit). Exposes the same interface as TelemetryReceiver.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ G = 9.81
 GEAR_TOP_KMH = (85.0, 125.0, 165.0, 205.0, 245.0, 290.0)
 MAX_RPM = 8200
 TANK_L = 70.0
-# ibrido: batteria da 4 MJ, spinta a 160 kW fino a 3 MJ per giro, recupero fino a 260 kW in frenata
+# hybrid: 4 MJ battery, 160 kW deploy up to 3 MJ per lap, up to 260 kW harvest under braking
 BATTERY_KJ, DEPLOY_KW, HARVEST_KW, LAP_LIMIT_KJ = 4000.0, 160.0, 260.0, 3000.0
 ERS_POWER_MODES = 4
 
@@ -49,12 +49,12 @@ def _speed_profile(seg, k, mu=1.75):
     n = len(k)
     v_corner = np.minimum(np.sqrt(mu * G / np.maximum(np.abs(k), 1e-6)), 82.0)
     v = v_corner.copy()
-    for _ in range(2):   # due passate per chiudere il giro in modo periodico
-        for i in range(n):  # accelerazione
+    for _ in range(2):   # two passes to close the lap periodically
+        for i in range(n):  # acceleration
             j = (i + 1) % n
             a = max(0.5, 8.5 - 0.0011 * v[i] ** 2)
             v[j] = min(v_corner[j], math.sqrt(v[i] ** 2 + 2 * a * seg[i]))
-        for i in range(n - 1, -1, -1):  # frenata
+        for i in range(n - 1, -1, -1):  # braking
             j = (i + 1) % n
             a = 13.0 + 0.0018 * v[j] ** 2
             v[i] = min(v[i], math.sqrt(v[j] ** 2 + 2 * a * seg[i]))
@@ -63,10 +63,10 @@ def _speed_profile(seg, k, mu=1.75):
 
 
 class DemoSource:
-    """Simulatore di una hypercar ibrida su pista sintetica (stessa interfaccia di TelemetryReceiver)."""
+    """Hybrid hypercar simulator on a synthetic track (same interface as TelemetryReceiver)."""
 
     name = "Demo (simulatore)"
-    waiting_message = "Avvio del simulatore..."
+    waiting_message = "Starting the simulator..."
     finished = False
 
     def __init__(self, speed_factor: float = 1.0, seed: int | None = None):
@@ -77,7 +77,7 @@ class DemoSource:
         self._v, self._ax = _speed_profile(self._seg, self._k)
         self._connected = False
 
-    # ---- interfaccia comune
+    # ---- common interface
     def connect(self) -> bool:
         if not self._connected:
             self._reset_session()
@@ -91,12 +91,12 @@ class DemoSource:
         return {
             "source": self.name,
             "car": "demo_hypercar",
-            "track": "Circuito Demo",
+            "track": "Demo Circuit",
             "track_length": self._length,
             "max_rpm": MAX_RPM,
             "max_fuel": TANK_L,
             "sector_count": 3,
-            "player": "Pilota Demo",
+            "player": "Demo Driver",
             "damage_rate": 1.0,
             "suspension_max_travel": [0.10, 0.10, 0.12, 0.12],
             "has_kers": False,
@@ -110,7 +110,7 @@ class DemoSource:
         info = self.session_info()
         return info["car"], info["track"]
 
-    # ---- simulazione
+    # ---- simulation
     def _reset_session(self):
         self._wall = time.perf_counter()
         self._pos = 0.0
@@ -135,7 +135,7 @@ class DemoSource:
         self._harvest = 0.0
 
     def _new_lap_pace(self) -> float:
-        # variabilità del pilota + degrado gomme + effetto peso carburante
+        # driver variability + tyre degradation + fuel weight effect
         deg = 0.0016 * self._stint_laps + 0.00012 * self._stint_laps ** 2
         fuel_eff = 0.0003 * self._fuel
         return max(0.80, 1.0 - deg - fuel_eff + self._rng.gauss(0.0, 0.0025))
@@ -147,11 +147,11 @@ class DemoSource:
         self._pos += v * dt
         self._lap_t += dt
 
-        # consumo proporzionale al gas
+        # fuel use proportional to throttle
         gas = self._gas(i)
         self._fuel = max(0.0, self._fuel - (0.00055 + 0.0042 * gas) * v * dt / 10.0)
 
-        # ibrido: spinta a gas pieno sopra i 120 km/h finché c'è carica ed energia del giro, ricarica in frenata
+        # hybrid: deploy at full throttle above 120 km/h while there is charge and lap energy left, harvest under braking
         brake_now = self._brake(i)
         can_deploy = self._battery_kj > 20.0 and self._lap_kj < LAP_LIMIT_KJ
         self._deploy = 1.0 if gas >= 0.9 and v > 33.0 and can_deploy else 0.0
@@ -160,7 +160,7 @@ class DemoSource:
         self._battery_kj = min(BATTERY_KJ, max(0.0, self._battery_kj - used + HARVEST_KW * self._harvest * dt))
         self._lap_kj += used
 
-        # temperature gomme: tendono a un target funzione di carichi laterali/frenata
+        # tyre temperatures: tend to a target driven by lateral/braking loads
         ay = v * v * self._k[i] / G
         brake = self._brake(i)
         for w in range(4):
@@ -169,11 +169,11 @@ class DemoSource:
             target = 72 + 9 * abs(ay) * (1.5 if outside else 0.6) + (12 * brake if front else 5 * brake)
             target += 0.25 * self._stint_laps
             self._tyre_t[w] += (target - self._tyre_t[w]) * min(1.0, dt / 18.0)
-            heat = (110 if front else 75) * brake   # °C/s in frenata
+            heat = (110 if front else 75) * brake   # °C/s under braking
             self._brake_t[w] += (heat - (self._brake_t[w] - 150) * 0.035 * (1 + v / 60)) * dt
             self._wear[w] = max(0.0, self._wear[w] - (0.00008 + 0.00025 * abs(ay)) * v * dt / 10.0)
 
-        # settori a 1/3 e 2/3 del giro
+        # sectors at 1/3 and 2/3 of the lap
         frac = (self._pos % self._length) / self._length
         sector = min(2, int(frac * 3))
         if sector != self._sector and self._pos < self._length:
@@ -195,7 +195,7 @@ class DemoSource:
             self._sector = 0
             self._pit_flag = False
             if self._fuel < 6.0 or min(self._wear) < 88.0:
-                # pit stop simulato: rifornimento e gomme nuove, il giro successivo è un out-lap
+                # simulated pit stop: refuel and new tyres, the next lap is an out-lap
                 self._fuel = TANK_L * 0.6
                 self._wear = [100.0] * 4
                 self._tyre_t = [55.0] * 4
@@ -221,7 +221,7 @@ class DemoSource:
         now = time.perf_counter()
         dt = min(0.1, now - self._wall) * self.speed_factor
         self._wall = now
-        # integrazione a passi piccoli anche con speed_factor alto
+        # integrate in small steps even with a high speed_factor
         steps = max(1, int(dt / 0.02))
         for _ in range(steps):
             self._advance(dt / steps)

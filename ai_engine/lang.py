@@ -1,9 +1,9 @@
 """
-Lingua della radio: la sceglie la voce.
+Radio language: the voice decides it.
 
-Le voci di Kokoro dichiarano la lingua nella prima lettera del nome (im_nicola = italiano, uomo).
-Dalla voce derivano la pronuncia di Kokoro, le frasi della radio, la lingua in cui risponde
-l'agente e quella della trascrizione (Whisper).
+Kokoro voices declare their language in the first letter of the name (im_nicola = Italian, male).
+The voice determines Kokoro's pronunciation, the radio phrases, the language the agent
+answers in and the transcription language (Whisper).
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ from ai_engine.phrases_race import phrases_for
 
 @dataclass(frozen=True)
 class Language:
-    code: str           # codice breve, anche per Whisper
-    name: str           # nome nella lingua stessa (va anche nel prompt dell'agente)
-    kokoro: str         # codice per kokoro-onnx / espeak
+    code: str           # short code, also for Whisper
+    name: str           # name in the language itself (also goes in the agent prompt)
+    kokoro: str         # code for kokoro-onnx / espeak
     phrases: dict = field(compare=False, hash=False, default_factory=dict)
 
 
-# ----------------------------------------------------------------- frasi
+# ----------------------------------------------------------------- phrases
 
 _IT = {
     "lap_invalid": "{t}, giro non valido.",
@@ -47,7 +47,7 @@ _IT = {
     "done": "Fatto, {what}.", "failed": "Non riesco: {msg}.",
     "busy": "Un attimo, sto ancora rispondendo.", "agent_error": "Problema di collegamento con l'ingegnere.",
     "stt_error": "Non ti ho sentito, ripeti.", "radio_check": "Radio check. Mi senti? Gomme in temperatura, spingi.",
-    "kinds": {"bias_freni": "bias freni", "abs": "ABS", "tc": "TC", "freno_motore": "freno motore"},
+    "kinds": {"brake_bias": "bias freni", "abs": "ABS", "tc": "TC", "engine_brake": "freno motore"},
     "to": "{what} a {v}",
     "stt_prompt": "Radio di squadra in gara: box, gomme, pressioni, bias freni, ABS, TC, freno motore, "
                   "carburante, giro, settore, sottosterzo, sovrasterzo, distacco.",
@@ -77,7 +77,7 @@ _EN = {
     "done": "Done, {what}.", "failed": "Can't do it: {msg}.",
     "busy": "Stand by, still answering.", "agent_error": "Lost contact with the engineer.",
     "stt_error": "Didn't get that, say again.", "radio_check": "Radio check. Do you copy? Tyres are in the window, push.",
-    "kinds": {"bias_freni": "brake bias", "abs": "ABS", "tc": "TC", "freno_motore": "engine braking"},
+    "kinds": {"brake_bias": "brake bias", "abs": "ABS", "tc": "TC", "engine_brake": "engine braking"},
     "to": "{what} to {v}",
     "stt_prompt": "Race team radio: box, tyres, pressures, brake bias, ABS, TC, engine braking, fuel, lap, "
                   "sector, understeer, oversteer, gap.",
@@ -107,7 +107,7 @@ _ES = {
     "done": "Hecho, {what}.", "failed": "No puedo: {msg}.",
     "busy": "Un momento, todavía estoy respondiendo.", "agent_error": "Problema de conexión con el ingeniero.",
     "stt_error": "No te he oído, repite.", "radio_check": "Prueba de radio. ¿Me oyes? Neumáticos en temperatura, empuja.",
-    "kinds": {"bias_freni": "reparto de frenada", "abs": "ABS", "tc": "TC", "freno_motore": "freno motor"},
+    "kinds": {"brake_bias": "reparto de frenada", "abs": "ABS", "tc": "TC", "engine_brake": "freno motor"},
     "to": "{what} a {v}",
     "stt_prompt": "Radio del equipo: box, neumáticos, presiones, reparto de frenada, ABS, TC, combustible, "
                   "vuelta, sector, subviraje, sobreviraje.",
@@ -137,7 +137,7 @@ _FR = {
     "done": "C'est fait, {what}.", "failed": "Impossible : {msg}.",
     "busy": "Un instant, je réponds encore.", "agent_error": "Problème de liaison avec l'ingénieur.",
     "stt_error": "Je ne t'ai pas entendu, répète.", "radio_check": "Essai radio. Tu me reçois ? Pneus en température, attaque.",
-    "kinds": {"bias_freni": "répartition de freinage", "abs": "ABS", "tc": "TC", "freno_motore": "frein moteur"},
+    "kinds": {"brake_bias": "répartition de freinage", "abs": "ABS", "tc": "TC", "engine_brake": "frein moteur"},
     "to": "{what} à {v}",
     "stt_prompt": "Radio de l'équipe : box, pneus, pressions, répartition de freinage, ABS, TC, carburant, "
                   "tour, secteur, sous-virage, survirage.",
@@ -167,13 +167,13 @@ _PT = {
     "done": "Feito, {what}.", "failed": "Não consigo: {msg}.",
     "busy": "Um momento, ainda estou respondendo.", "agent_error": "Problema de conexão com o engenheiro.",
     "stt_error": "Não te ouvi, repete.", "radio_check": "Teste de rádio. Está me ouvindo? Pneus na temperatura, acelera.",
-    "kinds": {"bias_freni": "balanço de freio", "abs": "ABS", "tc": "TC", "freno_motore": "freio motor"},
+    "kinds": {"brake_bias": "balanço de freio", "abs": "ABS", "tc": "TC", "engine_brake": "freio motor"},
     "to": "{what} em {v}",
     "stt_prompt": "Rádio da equipe: box, pneus, pressões, balanço de freio, ABS, TC, combustível, volta, "
                   "setor, subesterço, sobre-esterço.",
 }
 
-# frasi della radio di gara (posizioni, avversari, gialle, fine gara...): tutte le lingue in un file a parte
+# race radio phrases (positions, rivals, yellows, race end...): all languages in a separate file
 for _phrases, _code in ((_IT, "it"), (_EN, "en"), (_ES, "es"), (_FR, "fr"), (_PT, "pt")):
     _phrases.update(phrases_for(_code))
 
@@ -186,16 +186,16 @@ LANGUAGES = {
     "pt": Language("pt", "português", "pt-br", _PT),
 }
 
-# prima lettera della voce Kokoro -> lingua (h, j, z: hindi, giapponese, cinese non supportati dalla radio)
+# first letter of the Kokoro voice -> language (h, j, z: Hindi, Japanese, Chinese not supported by the radio)
 _PREFIX = {"i": "it", "a": "en-us", "b": "en-gb", "e": "es", "f": "fr", "p": "pt"}
 _FLAG = {"it": "Italiano", "en-us": "English (US)", "en-gb": "English (UK)", "es": "Español", "fr": "Français",
          "pt": "Português (BR)"}
 
-DEFAULT_VOICE = "im_nicola"
+DEFAULT_VOICE = "am_michael"
 
 
 def language_of(voice: str | None) -> Language:
-    key = _PREFIX.get((voice or DEFAULT_VOICE)[:1].lower(), "it")
+    key = _PREFIX.get((voice or DEFAULT_VOICE)[:1].lower(), "en-us")
     return LANGUAGES[key]
 
 
@@ -204,14 +204,14 @@ def is_supported(voice: str) -> bool:
 
 
 def voice_label(voice: str) -> str:
-    """'im_nicola' -> 'Nicola — Italiano, uomo'."""
+    """'im_nicola' -> 'Nicola — Italiano, male'."""
     key = _PREFIX.get(voice[:1].lower())
-    sex = {"f": "donna", "m": "uomo"}.get(voice[1:2], "")
+    sex = {"f": "female", "m": "male"}.get(voice[1:2], "")
     name = voice.split("_", 1)[-1].replace("_", " ").title()
     return f"{name} — {_FLAG.get(key, '?')}{', ' + sex if sex else ''}"
 
 
-# Voci di Kokoro v1.0 usabili dalla radio (le stesse del file voices-v1.0.bin)
+# Kokoro v1.0 voices usable by the radio (the same as in voices-v1.0.bin)
 KOKORO_VOICES = (
     "im_nicola", "if_sara",
     "am_michael", "am_adam", "am_eric", "am_liam", "am_onyx", "am_puck", "am_echo", "am_fenrir",
@@ -222,10 +222,10 @@ KOKORO_VOICES = (
 )
 
 
-# -------------------------------------------------------------- numeri parlati
+# -------------------------------------------------------------- spoken numbers
 
 def speak_number(v: float, lang: Language, decimals: int = 1) -> str:
-    """29.1 -> '29 e 1' / '29 point 1' (così la sintesi non legge 'punto' o la virgola a modo suo)."""
+    """29.1 -> '29 point 1' / '29 e 1' (so the synthesis does not read the decimal point its own way)."""
     v = round(v, decimals)
     whole = int(v)
     frac = round(abs(v - whole) * 10 ** decimals)
@@ -236,7 +236,7 @@ def speak_number(v: float, lang: Language, decimals: int = 1) -> str:
 
 
 def speak_lap_time(ms: int, lang: Language) -> str:
-    """90461 -> '1, 30 e 5' / '1 30 point 5': minuti, secondi e decimi come al muretto."""
+    """90461 -> '1 30 point 5' / '1, 30 e 5': minutes, seconds and tenths as on the pit wall."""
     tenths = int(round(ms / 100.0))
     m, rest = divmod(tenths, 600)
     s, d = divmod(rest, 10)
@@ -249,7 +249,7 @@ def speak_lap_time(ms: int, lang: Language) -> str:
 
 
 _DELTA = {
-    #       più/meno            stesso           1 decimo           N decimi            secondi
+    #       plus/minus          same             1 tenth            N tenths            seconds
     "it": (("più", "meno"), "stesso tempo", "un decimo", "{n} decimi", ("secondo", "secondi"), "e"),
     "en": (("plus", "minus"), "same time", "a tenth", "{n} tenths", ("second", "seconds"), "point"),
     "es": (("más", "menos"), "mismo tiempo", "una décima", "{n} décimas", ("segundo", "segundos"), "coma"),
@@ -259,7 +259,7 @@ _DELTA = {
 
 
 def speak_amount(seconds: float, lang: Language) -> str:
-    """Un tempo senza segno: 0.3 → "3 decimi", 0.1 → "un decimo", 1.4 → "1 e 4" ("" se è sotto il decimo)."""
+    """An unsigned time: 0.3 → "3 tenths", 0.1 → "a tenth", 1.4 → "1 point 4" ("" if under a tenth)."""
     _signs, _same, one, many, (sec1, secn), sep = _DELTA[lang.code]
     tenths = int(round(abs(seconds) * 10))
     if tenths == 0:

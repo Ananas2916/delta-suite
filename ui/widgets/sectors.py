@@ -1,4 +1,4 @@
-"""Parziali: riquadri S1..Sn colorati come in TV e il tempo del giro in corso con il delta live sul migliore."""
+"""Splits: S1..Sn boxes coloured as on TV and the current lap time with the live delta to the best."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def fmt_sector(ms: int | None) -> str:
 
 
 def fmt_delta(delta_s: float | None) -> tuple[str, str]:
-    """Testo e colore del delta live: rosso se più lento del migliore, verde se più veloce."""
+    """Live delta text and colour: red if slower than the best, green if faster."""
     if delta_s is None:
         return "", C["dim"]
     color = C["red"] if delta_s > 0.05 else C["green"] if delta_s < -0.05 else C["text"]
@@ -29,7 +29,7 @@ def fmt_delta(delta_s: float | None) -> tuple[str, str]:
 
 
 class SectorBar(QWidget):
-    """Un riquadro per settore: etichetta, tempo, striscia del colore (viola migliore, giallo più lento)."""
+    """One box per sector: label, time, colour strip (purple best, yellow slower)."""
 
     def __init__(self, height: int = 30):
         super().__init__()
@@ -70,9 +70,9 @@ class SectorBar(QWidget):
 
 
 class LapTimeTile(Card):
-    """Tempo del giro in corso, delta live sul migliore e parziali sotto."""
+    """Current lap time, live delta to the best and splits below."""
 
-    def __init__(self, title: str = "TEMPO GIRO"):
+    def __init__(self, title: str = "LAP TIME"):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 8)

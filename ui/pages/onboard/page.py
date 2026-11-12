@@ -1,4 +1,4 @@
-"""Modulo 1b: Onboard live — fino a 4 onboard insieme con grafica TV, GPS della pista e stato della vettura."""
+"""Live onboard — up to 4 onboards at once with TV graphics, track GPS and car status."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from ui.widgets.view_panel import ViewPanel
 
 class OnboardPage(QWidget):
     LAYOUTS = ["1 onboard", "1 + 1", "1 + 2", "1 + 3"]
-    DEFAULT_CAMERAS = [0, 7, 3, 2]      # T-cam, inseguimento, ruota ant. sx, posteriore
+    DEFAULT_CAMERAS = [0, 7, 3, 2]      # T-cam, chase, front left wheel, rear
 
     def __init__(self, hub):
         super().__init__()
@@ -40,7 +40,7 @@ class OnboardPage(QWidget):
         root.setSpacing(10)
 
         head = QHBoxLayout()
-        head.addWidget(label("Onboard live", "h1"))
+        head.addWidget(label("Live onboard", "h1"))
         head.addStretch()
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)
@@ -54,21 +54,21 @@ class OnboardPage(QWidget):
         self.layout_box = QComboBox()
         self.layout_box.addItems(self.LAYOUTS)
         self.layout_box.setCurrentIndex(max(0, min(3, hub.setting("onboard/layout", 0, int))))
-        self.layout_box.setToolTip("Quanti onboard insieme: ognuno è una vista in più resa da AC (costa FPS)")
+        self.layout_box.setToolTip("How many onboards at once: each one is an extra view rendered by AC (costs FPS)")
         self.quality = QComboBox()
         for name, *_ in QUALITIES:
             self.quality.addItem(name)
         self.quality.setCurrentIndex(max(0, min(len(QUALITIES) - 1, hub.setting("onboard/quality", 1, int))))
-        self.quality.setToolTip("Qualità del riquadro principale; gli altri vanno a 640×360 o 480×270")
+        self.quality.setToolTip("Main view quality; the others run at 640×360 or 480×270")
         self.quality.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.quality.setMinimumContentsLength(22)
         self.exposure = QSlider(Qt.Orientation.Horizontal)
         self.exposure.setRange(30, 400)
         self.exposure.setFixedWidth(110)
         self.exposure.setValue(round(100 * hub.setting("onboard/exposure", DEFAULT_EXPOSURE, float)))
-        self.exposure.setToolTip("Esposizione del video: la vista in più non ha il post-processing del gioco")
-        for w in (label("Riquadri", "dim"), self.layout_box, label("Qualità", "dim"), self.quality,
-                  label("Luminosità", "dim"), self.exposure):
+        self.exposure.setToolTip("Video exposure: the extra view has none of the game's post-processing")
+        for w in (label("Views", "dim"), self.layout_box, label("Quality", "dim"), self.quality,
+                  label("Brightness", "dim"), self.exposure):
             controls.addWidget(w)
         controls.addStretch()
         root.addLayout(controls)
@@ -95,12 +95,12 @@ class OnboardPage(QWidget):
         side = QSplitter(Qt.Orientation.Vertical)
         side.setFixedWidth(300)
         side.setChildrenCollapsible(False)
-        # sopra: classifica e stato vettura in schede; sotto: la mappa, grande
+        # top: standings and car status in tabs; bottom: the map, large
         self.side_tabs = QTabWidget()
         self.timing = TimingTable()
-        self.timing.setToolTip("Clic su un'auto per vederla nel riquadro principale")
+        self.timing.setToolTip("Click a car to watch it in the main view")
         self.timing.car_clicked.connect(self._on_gps_click)
-        self.side_tabs.addTab(self.timing, "Classifica")
+        self.side_tabs.addTab(self.timing, "Standings")
         status_page = QWidget()
         sl = QVBoxLayout(status_page)
         sl.setContentsMargins(8, 8, 8, 8)
@@ -114,16 +114,16 @@ class OnboardPage(QWidget):
         self.alerts.setTextFormat(Qt.TextFormat.RichText)
         self.alerts.setAlignment(Qt.AlignmentFlag.AlignTop)
         sl.addWidget(self.alerts)
-        self.side_tabs.addTab(status_page, "Stato vettura")
+        self.side_tabs.addTab(status_page, "Car status")
         self.side_tabs.setCurrentIndex(max(0, min(1, hub.setting("onboard/side_tab", 0, int))))
         self.side_tabs.currentChanged.connect(lambda i: hub.settings.setValue("onboard/side_tab", i))
         side.addWidget(self.side_tabs)
         gps_card = Card()
         gl = QVBoxLayout(gps_card)
         gl.setContentsMargins(12, 10, 12, 12)
-        gl.addWidget(label("GPS · POSIZIONE IN PISTA", "dim"))
+        gl.addWidget(label("GPS · TRACK POSITION", "dim"))
         self.gps = GPSView()
-        self.gps.setToolTip("Clic su un'auto per vederla nel riquadro principale")
+        self.gps.setToolTip("Click a car to watch it in the main view")
         self.gps.car_clicked.connect(self._on_gps_click)
         gl.addWidget(self.gps, 1)
         side.addWidget(gps_card)
@@ -146,13 +146,13 @@ class OnboardPage(QWidget):
         self.timer.timeout.connect(self._tick)
         self.timer.start(33)
 
-    # ------------------------------------------------------------- controlli
+    # ------------------------------------------------------------- controls
     @property
     def _n_views(self) -> int:
         return self.layout_box.currentIndex() + 1
 
     def _video_label(self):
-        self.video_btn.setText("Video acceso" if self.video_btn.isChecked() else "Video spento")
+        self.video_btn.setText("Video on" if self.video_btn.isChecked() else "Video off")
 
     def _on_video_toggled(self, on: bool):
         self.hub.settings.setValue("onboard/video", on)
@@ -177,7 +177,7 @@ class OnboardPage(QWidget):
         self._push_request()
 
     def _make_main(self, k: int):
-        """Scambia l'onboard k con quello principale."""
+        """Swap onboard k with the main one."""
         a, b = self.panels[0], self.panels[k]
         sel_a, sel_b = (a.car_index(), a.camera_index()), (b.car_index(), b.camera_index())
         a.select(*sel_b)
@@ -196,7 +196,7 @@ class OnboardPage(QWidget):
             panel.select(self.hub.setting(f"onboard/view{k}/car", -1, int), panel.camera_index())
 
     def _fill_cars(self, rows):
-        others = [(r.index, f"P{r.pos}  {r.driver or 'auto ' + str(r.index)}") for r in rows if not r.is_player]
+        others = [(r.index, f"P{r.pos}  {r.driver or 'car ' + str(r.index)}") for r in rows if not r.is_player]
         if others == self._cars_key:
             return
         self._cars_key = others
@@ -208,7 +208,7 @@ class OnboardPage(QWidget):
         self.gps.clear_trail()
 
     def _sync_cameras(self):
-        """Aggiorna gli elenchi quando l'app trova (o cambia) le telecamere F6 dell'auto."""
+        """Refresh the lists when the app finds (or changes) the car's F6 cameras."""
         f6 = self.feed.f6_cameras()
         if not f6 or f6 == self._f6:
             return
@@ -223,7 +223,7 @@ class OnboardPage(QWidget):
         return self.hub.onboard_feed
 
     def _push_request(self) -> bool:
-        if not self.hub.ac_live or not self.isVisible():    # il collegamento è condiviso con la pagina Generale
+        if not self.hub.ac_live or not self.isVisible():    # the link is shared with the Overview page
             return False
         n = self._n_views
         on = self.video_btn.isChecked()
@@ -237,10 +237,10 @@ class OnboardPage(QWidget):
         return self.feed.request(views, self.exposure.value() / 100, DEFAULT_TONEMAP)
 
     def hideEvent(self, e):
-        self.feed.disconnect()          # niente rendering in AC mentre la pagina non si vede
+        self.feed.disconnect()          # no rendering in AC while the page is hidden
         super().hideEvent(e)
 
-    # ------------------------------------------------------------- aggiornamento
+    # ------------------------------------------------------------- refresh
     def _tick(self):
         if not self.isVisible():
             return
@@ -256,7 +256,7 @@ class OnboardPage(QWidget):
                         self.panels[k].img, self.panels[k].frame_t = img, now
         elif self.feed.connected:
             self.feed.disconnect()
-        if now - self._ui_t >= 0.066:       # grafica, GPS e stato a 15 Hz, il video a ogni fotogramma
+        if now - self._ui_t >= 0.066:       # graphics, GPS and status at 15 Hz, video every frame
             self._ui_t = now
             self._refresh()
 
@@ -298,15 +298,15 @@ class OnboardPage(QWidget):
         if live_video:
             inf = self.feed.info()
             if inf is not None:
-                parts.append(f"<span style='color:{C['green']}'>●</span>  Video in diretta · "
-                             f"{self._n_views} {'riquadro' if self._n_views == 1 else 'riquadri'} · "
-                             f"AC a {inf.game_fps:.0f} FPS")
+                parts.append(f"<span style='color:{C['green']}'>●</span>  Live video · "
+                             f"{self._n_views} {'view' if self._n_views == 1 else 'views'} · "
+                             f"AC at {inf.game_fps:.0f} FPS")
         elif self.hub.ac_live and self.video_btn.isChecked() and self.feed.connected:
-            parts.append(f"<span style='color:{C['yellow']}'>●</span>  Video non in diretta")
+            parts.append(f"<span style='color:{C['yellow']}'>●</span>  Video not live")
         if self.feed.shared_error:
-            parts.append("texture condivisa non disponibile, si usa la via più lenta")
+            parts.append("shared texture not available, using the slower path")
         if any(self.panels[k].car_index() >= 0 for k in range(self._n_views)):
-            parts.append("lo stato vettura è sempre quello della tua auto")
+            parts.append("car status is always your own car's")
         self.status.setText("  ·  ".join(parts) if parts else
-                            "Viste in più rese da AC tramite l'app CSP; GPS dalla posizione delle auto; danni, "
-                            "gomme, freni e sospensioni dalla shared memory.")
+                            "Extra views rendered by AC through the CSP app; GPS from the car positions; damage, "
+                            "tyres, brakes and suspension from the shared memory.")

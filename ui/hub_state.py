@@ -1,4 +1,4 @@
-"""Stato condiviso dell'hub: acquisizione, archivio, app CSP, radio, ingegnere AI e server MCP."""
+"""Shared hub state: acquisition, archive, CSP app, radio, AI engineer and MCP server."""
 
 from __future__ import annotations
 
@@ -29,14 +29,15 @@ from ui.hub_data import KIND_CMD, HubDataProvider, Proposal
 from ui.mic import MicRecorder
 from ui.workers import SOURCE_AC, Job, TelemetryWorker
 
-MODES = {"pilota": "Pilota", "ingegnere": "Ingegnere", "analisi": "Analisi"}
+MODES = {"driver": "Driver", "engineer": "Engineer", "analysis": "Analysis"}
+_OLD_MODES = {"pilota": "driver", "ingegnere": "engineer", "analisi": "analysis"}   # settings saved before 0.6
 
 
 def _quiet(fn):
     try:
         fn()
     except Exception:
-        pass        # l'errore riemerge, con il suo messaggio, alla prima trascrizione
+        pass        # the error resurfaces, with its message, at the first transcription
 
 
 class HubState(QObject):
@@ -50,11 +51,11 @@ class HubState(QObject):
     bridge_changed = pyqtSignal(object)
     standings_changed = pyqtSignal(list)
     proposals_changed = pyqtSignal()
-    proposal_requested = pyqtSignal(object)      # emesso anche dai thread del server MCP
-    radio_log = pyqtSignal(str, str)             # (chi, testo): "radio", "pilota", "ingegnere", "sistema"
+    proposal_requested = pyqtSignal(object)      # also emitted by the MCP server threads
+    radio_log = pyqtSignal(str, str)             # (who, text): "radio", "driver", "engineer", "system"
     voice_error = pyqtSignal(str)
     engineer_text = pyqtSignal(str)
-    engineer_started = pyqtSignal(str, str)      # (domanda, modalità)
+    engineer_started = pyqtSignal(str, str)      # (question, mode)
     engineer_done = pyqtSignal(str)
     engineer_failed = pyqtSignal(str)
     ptt_changed = pyqtSignal(bool)
@@ -66,7 +67,7 @@ class HubState(QObject):
         try:
             self.db = TelemetryDB()
             self.db_error = None
-        except Exception as exc:   # es. DB bloccato da un'altra istanza dell'hub
+        except Exception as exc:   # e.g. DB locked by another hub instance
             self.db = TelemetryDB(":memory:")
             self.db_error = str(exc)
         self.session_info: dict = {}
@@ -76,17 +77,18 @@ class HubState(QObject):
         self.worker: TelemetryWorker | None = None
         self.recording_file: str | None = None
 
-        self.mode = self.settings.value("mode", "pilota", str)
+        mode = self.settings.value("mode", "driver", str)
+        self.mode = _OLD_MODES.get(mode, mode if mode in MODES else "driver")
         self.bridge_state: BridgeState | None = None
         self.timing = TimingTower()
         self.standings_rows: list = []
         self.is_race = False
         self.proposals: list[Proposal] = []
         self._bridge_counts: tuple[int, int] | None = None
-        # video onboard dall'app CSP: uno solo, lo usa la pagina visibile (Onboard o Generale)
+        # onboard video from the CSP app: a single feed, used by the visible page (Onboard or Overview)
         self.onboard_feed = OnboardFeed()
-        self.track = TrackWatch()           # linea della pista e zone gialle/rosse/blu della sessione
-        self.live_lap = LiveLap()           # parziali e delta live del giro in corso
+        self.track = TrackWatch()           # track line and yellow/red/blue zones of the session
+        self.live_lap = LiveLap()           # splits and live delta of the current lap
         self._ptt = False
 
         self.radio_rules = RadioRules(self.load_radio_config(), self.lang)
@@ -103,12 +105,12 @@ class HubState(QObject):
         self.mcp.start()
         self.agent = None
         self._job: Job | None = None
-        self._job_mode = "ANALISI"
+        self._job_mode = "ANALYSIS"
         self._stt_job: Job | None = None
 
         self.proposal_requested.connect(self._add_proposal)
 
-    # ----------------------------------------------------------- impostazioni
+    # ----------------------------------------------------------- settings
     def setting(self, key: str, default, typ=str):
         return self.settings.value(key, default, typ)
 
@@ -141,8 +143,8 @@ class HubState(QObject):
 
     def _make_tts(self):
         if os.environ.get("DELTA_MUTE") or os.environ.get("DELTA_SELFTEST"):
-            return make_backend("none", "", 1.0)      # test e autotest: niente audio
-        return make_backend(self.setting("voice/engine", "kokoro"), self.setting("voice/voice", "im_nicola"),
+            return make_backend("none", "", 1.0)      # tests and self-test: no audio
+        return make_backend(self.setting("voice/engine", "kokoro"), self.setting("voice/voice", DEFAULT_VOICE),
                             self.setting("voice/speed", 1.1, float), self.setting("voice/model_dir", "") or None)
 
     def reload_voice(self):
@@ -170,16 +172,16 @@ class HubState(QObject):
 
     @property
     def radio_active(self) -> bool:
-        return self.mode == "pilota" or self.setting("radio/always", False, bool)
+        return self.mode == "driver" or self.setting("radio/always", False, bool)
 
-    # ----------------------------------------------------------- acquisizione
+    # ----------------------------------------------------------- acquisition
     @property
     def running(self) -> bool:
         return self.worker is not None and self.worker.isRunning()
 
     @property
     def ac_live(self) -> bool:
-        """Acquisizione da AC (non demo né replay): solo allora c'è il video onboard."""
+        """Acquisition from AC (not demo or replay): only then is there onboard video."""
         return self.running and self.worker.source == SOURCE_AC
 
     def start(self, source: str, hz: float = 60.0, speed: float = 1.0, replay_path: str | None = None,
@@ -204,7 +206,7 @@ class HubState(QObject):
             self.running_changed.emit(False)
 
     def _on_worker_finished(self, w: TelemetryWorker):
-        if self.worker is w:            # finito da solo (fine del replay, sorgente non valida)
+        if self.worker is w:            # finished by itself (end of replay, invalid source)
             self.worker = None
             self.running_changed.emit(False)
 
@@ -214,7 +216,7 @@ class HubState(QObject):
 
     def _on_session(self, info: dict):
         self.session_info = info
-        self.session_id = None          # la riga in archivio nasce al primo giro completato
+        self.session_id = None          # the archive row is created at the first completed lap
         self.laps = []
         self.radio_rules.reset()
         self.timing.reset()
@@ -224,7 +226,7 @@ class HubState(QObject):
 
     @staticmethod
     def _load_track(info: dict) -> TrackWatch:
-        """Linea AI del tracciato (se AC è installato e il tracciato c'è), altrimenti si impara girando."""
+        """Track AI line (if AC is installed and the track is there), otherwise learned while driving."""
         try:
             lap, pit = find_ai_lines(find_ac_root(), info.get("track_id", ""), info.get("track_config", ""))
         except OSError:
@@ -235,9 +237,9 @@ class HubState(QObject):
         if self.session_id is None:
             self.session_id = self.db.new_session(self.session_info)
         self.db.save_lap(self.session_id, lap)
-        self.laps = self.laps + [lap]    # lista nuova: i thread MCP leggono senza lock
+        self.laps = self.laps + [lap]    # new list: MCP threads read without a lock
         valid = [l for l in self.laps if l.valid]
-        if valid:                        # delta live sul miglior giro valido
+        if valid:                        # live delta against the best valid lap
             self.live_lap.set_reference(min(valid, key=lambda l: l.lap_time_ms))
         self.lap_completed.emit(lap)
         self.db_changed.emit()
@@ -294,7 +296,7 @@ class HubState(QObject):
             self._handle_acks(b)
             if b.setup_editable and not was_editable:
                 for p in self.proposals:
-                    if p.status == "ai box":
+                    if p.status == "in pits":
                         self._send_proposal(p)
             now = time.monotonic()
             s = self.last_sample
@@ -321,16 +323,16 @@ class HubState(QObject):
             return None
         return self.worker.bridge.send(cmd, value, name, text)
 
-    # ------------------------------------------------------------ proposte
+    # ------------------------------------------------------------ proposals
     def _add_proposal(self, p: Proposal):
         self.proposals.append(p)
-        self.radio_log.emit("ingegnere", f"Proposta: {p.describe()} — {p.reason}")
+        self.radio_log.emit("engineer", f"Proposal: {p.describe()} — {p.reason}")
         if self.radio_active:
             self.say(self.phrase("proposal", what=p.spoken(self.lang), reason=p.reason), PRIO_HIGH, 60)
         self.proposals_changed.emit()
 
     def pending(self) -> list[Proposal]:
-        return [p for p in self.proposals if p.status == "in attesa"]
+        return [p for p in self.proposals if p.status == "pending"]
 
     def confirm_latest(self):
         pend = self.pending()
@@ -344,10 +346,10 @@ class HubState(QObject):
 
     def apply_proposal(self, pid: int):
         p = next((x for x in self.proposals if x.id == pid), None)
-        if p is None or p.status not in ("in attesa", "errore"):
+        if p is None or p.status not in ("pending", "error"):
             return
         if p.kind == "setup" and not (self.bridge_state and self.bridge_state.setup_editable):
-            p.status, p.result = "ai box", "confermata: si applica appena entri ai box"
+            p.status, p.result = "in pits", "confirmed: applied as soon as you enter the pits"
             if self.radio_active:
                 self.say(self.phrase("at_box"), PRIO_NORMAL)
         else:
@@ -357,34 +359,34 @@ class HubState(QObject):
     def _send_proposal(self, p: Proposal):
         seq = self.send_command(KIND_CMD[p.kind], p.value, p.name)
         if seq is None:
-            p.status, p.result = "errore", "app CSP non collegata"
+            p.status, p.result = "error", "CSP app not connected"
         else:
-            p.status, p.seq = "inviata", seq
+            p.status, p.seq = "sent", seq
         self.proposals_changed.emit()
 
     def discard_proposal(self, pid: int):
         p = next((x for x in self.proposals if x.id == pid), None)
-        if p is not None and p.status in ("in attesa", "ai box", "errore"):
-            p.status = "scartata"
+        if p is not None and p.status in ("pending", "in pits", "error"):
+            p.status = "discarded"
             if self.radio_active:
                 self.say(self.phrase("discarded"), PRIO_NORMAL, 15)
             self.proposals_changed.emit()
 
     def _handle_acks(self, b: BridgeState):
         for p in self.proposals:
-            if p.status == "inviata" and p.seq is not None and b.ack_seq == p.seq:
-                p.status = "applicata" if b.ack_ok else "errore"
+            if p.status == "sent" and p.seq is not None and b.ack_seq == p.seq:
+                p.status = "applied" if b.ack_ok else "error"
                 p.result = b.ack_msg
                 if self.radio_active:
                     self.say(self.phrase("done", what=p.spoken(self.lang)) if b.ack_ok else
                              self.phrase("failed", msg=b.ack_msg), PRIO_HIGH, 20)
-                self.radio_log.emit("sistema", f"{p.describe()}: {b.ack_msg}")
+                self.radio_log.emit("system", f"{p.describe()}: {b.ack_msg}")
                 self.proposals_changed.emit()
 
     def set_setup_value(self, name: str, value: int) -> int | None:
         return self.send_command(CMD_SETUP, value, name)
 
-    # ------------------------------------------------------- ingegnere AI
+    # ------------------------------------------------------- AI engineer
     def _make_agent(self):
         backend = self.setting("engineer/backend", "claude")
         if backend == "api":
@@ -399,7 +401,7 @@ class HubState(QObject):
     def engineer_busy(self) -> bool:
         return self._job is not None and self._job.isRunning()
 
-    def ask_engineer(self, question: str, mode: str = "ANALISI") -> bool:
+    def ask_engineer(self, question: str, mode: str = "ANALYSIS") -> bool:
         question = question.strip()
         if not question or self.engineer_busy:
             return False
@@ -411,8 +413,8 @@ class HubState(QObject):
                 return False
         agent = self.agent
         timeout = 120.0 if mode == "RADIO" else 600.0
-        # via radio si parla la lingua della voce; l'analisi scritta segue l'interfaccia (italiano)
-        lang_name = self.lang.name if mode == "RADIO" else "italiano"
+        # on the radio the voice's language is spoken; the written analysis follows the interface (English)
+        lang_name = self.lang.name if mode == "RADIO" else "English"
         self._job = Job(lambda emit: agent.ask(question, mode, emit, timeout, lang_name))
         self._job.text.connect(self.engineer_text)
         self._job.done.connect(lambda ans, m=mode: self._on_engineer_done(ans, m))
@@ -425,11 +427,11 @@ class HubState(QObject):
     def _on_engineer_done(self, answer: str, mode: str):
         self.engineer_done.emit(answer)
         if mode == "RADIO" and answer:
-            self.say(answer, PRIO_HIGH, 60)      # finisce nel registro radio quando viene letta
+            self.say(answer, PRIO_HIGH, 60)      # ends up in the radio log once spoken
 
     def _on_engineer_failed(self, err: str):
         self.engineer_failed.emit(err)
-        self.radio_log.emit("sistema", f"Ingegnere: {err}")
+        self.radio_log.emit("system", f"Engineer: {err}")
         if self._job_mode == "RADIO":
             self.say(self.phrase("agent_error"), PRIO_NORMAL, 15)
 
@@ -439,7 +441,7 @@ class HubState(QObject):
 
     # ------------------------------------------------------- push-to-talk
     def set_ptt(self, down: bool):
-        """Radio premuta: si interrompe la voce e si registra; rilasciata: trascrizione → ingegnere."""
+        """Radio pressed: stop the voice and record; released: transcription → engineer."""
         if down == self._ptt:
             return
         self._ptt = down
@@ -447,15 +449,15 @@ class HubState(QObject):
         if down:
             self.voice.interrupt()
             if not self.mic.start():
-                self.radio_log.emit("sistema", "Microfono non disponibile")
+                self.radio_log.emit("system", "Microphone not available")
             return
         pcm = self.mic.stop()
-        if len(pcm) < 16000 * 2 * 0.4:          # meno di 0,4 s: pressione accidentale
+        if len(pcm) < 16000 * 2 * 0.4:          # under 0.4 s: accidental press
             return
         stt, lang = self.stt, self.lang
         self._stt_job = Job(lambda _emit: stt.transcribe(pcm, lang))
         self._stt_job.done.connect(self._on_transcript)
-        self._stt_job.failed.connect(lambda e: (self.radio_log.emit("sistema", f"Trascrizione: {e}"),
+        self._stt_job.failed.connect(lambda e: (self.radio_log.emit("system", f"Transcription: {e}"),
                                                 self.say(self.phrase("stt_error"), PRIO_URGENT, 10)))
         self._stt_job.start()
 
@@ -463,11 +465,11 @@ class HubState(QObject):
         if not text:
             self.say(self.phrase("stt_error"), PRIO_URGENT, 10)
             return
-        self.radio_log.emit("pilota", text)
+        self.radio_log.emit("driver", text)
         if not self.ask_engineer(text, "RADIO"):
             self.say(self.phrase("busy"), PRIO_NORMAL, 10)
 
-    # ------------------------------------------------------------- chiusura
+    # ------------------------------------------------------------- shutdown
     def shutdown(self):
         self.stop()
         self.onboard_feed.disconnect()
