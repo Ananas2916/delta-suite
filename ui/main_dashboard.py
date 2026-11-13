@@ -73,6 +73,14 @@ class MainWindow(QMainWindow):
                                     "language of the chosen voice."))
         self.language.currentIndexChanged.connect(self._on_language)
         ml.addWidget(self.language)
+        ml.addWidget(QLabel(tr("THEME")))
+        self.theme = QComboBox()
+        for key, t in theme.THEMES.items():
+            self.theme.addItem(tr(t["name"]), key)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(theme.THEME)))
+        self.theme.setToolTip(tr("Look of the interface (applied at the next start)"))
+        self.theme.currentIndexChanged.connect(self._on_theme)
+        ml.addWidget(self.theme)
         sl.addWidget(mode_box)
         self.nav = QListWidget()
         self.nav.setObjectName("sidebar")
@@ -190,6 +198,14 @@ class MainWindow(QMainWindow):
             return
         self.hub.settings.setValue("ui/language", code)
         QMessageBox.information(self, "Delta Suite", tr("The new language is applied the next time you start "
+                                                        "Delta Suite."))
+
+    def _on_theme(self):
+        key = self.theme.currentData()
+        if key == self.hub.setting("ui/theme", theme.DEFAULT_THEME):
+            return
+        self.hub.settings.setValue("ui/theme", key)
+        QMessageBox.information(self, "Delta Suite", tr("The new theme is applied the next time you start "
                                                         "Delta Suite."))
 
     def _on_checklist(self, key: str):

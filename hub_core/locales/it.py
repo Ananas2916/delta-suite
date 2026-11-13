@@ -1,6 +1,16 @@
 """Italian interface texts: English text in the code (tr) -> Italian."""
 
 CATALOG = {
+    'THEME': 'TEMA',
+    'Look of the interface (applied at the next start)': "Aspetto dell'interfaccia (applicato al prossimo avvio)",
+    'The new theme is applied the next time you start Delta Suite.': 'Il nuovo tema si applica al prossimo avvio di Delta Suite.',
+    'Pit Wall': 'Pit Wall',
+    'Broadcast F1': 'Broadcast F1',
+    'Carbon Instrument': 'Carbon Instrument',
+    'Paddock Light': 'Paddock chiaro',
+    'Glass (Apple style)': 'Glass (stile Apple)',
+    'Fluent (Windows 11)': 'Fluent (Windows 11)',
+    'Swiss': 'Svizzero',
     ' · forward': ' · avanti',
     ' · rear-facing': ' · indietro',
     "'{exe}' not found in PATH": "'{exe}' non trovato nel PATH",
