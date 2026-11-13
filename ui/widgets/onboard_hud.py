@@ -102,23 +102,23 @@ class OnboardView(QWidget):
         # top right: lap and times
         rows = h.get("times", [])
         if rows:
-            tr = QRectF(vr.right() - m - 230 * k, vr.top() + m, 230 * k, (12 + 21 * len(rows)) * k)
-            self._box(p, tr)
+            tbox = QRectF(vr.right() - m - 230 * k, vr.top() + m, 230 * k, (12 + 21 * len(rows)) * k)
+            self._box(p, tbox)
             for i, (name, value, color) in enumerate(rows):
-                y = tr.top() + (6 + 21 * i) * k
+                y = tbox.top() + (6 + 21 * i) * k
                 p.setPen(QColor(C["dim"]))
                 p.setFont(paint_font(8.5 * k, QFont.Weight.DemiBold))
-                p.drawText(QRectF(tr.left() + 12 * k, y, 90 * k, 21 * k), Qt.AlignmentFlag.AlignVCenter, name)
+                p.drawText(QRectF(tbox.left() + 12 * k, y, 90 * k, 21 * k), Qt.AlignmentFlag.AlignVCenter, name)
                 p.setPen(QColor(color or "white"))
                 p.setFont(paint_font(11 * k))
-                p.drawText(QRectF(tr.left(), y, tr.width() - 12 * k, 21 * k),
+                p.drawText(QRectF(tbox.left(), y, tbox.width() - 12 * k, 21 * k),
                            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, value)
             sectors = h.get("sectors") or []
             if sectors:                     # splits below the times: colour strip and time
                 n, gap = len(sectors), 4 * k
-                sw = (tr.width() - gap * (n - 1)) / n
+                sw = (tbox.width() - gap * (n - 1)) / n
                 for i, (name, text, color) in enumerate(sectors):
-                    r = QRectF(tr.left() + i * (sw + gap), tr.bottom() + 4 * k, sw, 26 * k)
+                    r = QRectF(tbox.left() + i * (sw + gap), tbox.bottom() + 4 * k, sw, 26 * k)
                     self._box(p, r)
                     p.setPen(Qt.PenStyle.NoPen)
                     p.setBrush(QColor(color))

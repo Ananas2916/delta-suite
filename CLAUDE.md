@@ -205,6 +205,8 @@ docs/                          # logo and README screenshots
 - [x] 0.6.0 (13/11/2026): get-started checklist, voice download, Italian UI (tr), HubState split into
       controllers, rivals in recordings (.dsr v2), archive reference lap, strategy from the session,
       chatty engineer and remote pit wall (merged from claude/chatty-engineer-remote)
+- [x] 0.6.1 (13/11/2026): remote pit wall for the whole suite (LAN + Tailscale, on-demand onboard),
+      byte-level layout tests, slimmer exe, interface themes, TV graphics fix with live video
 - [x] Test with real AC (15/10/2026, Red Bull Ring, BMW M4 GT3): laps, sectors, fuel ok
 - [x] CSP app: setup/pit/car reading and commands with confirmation tested live (values unchanged)
 - [x] Claude Code via MCP tested with real data (radio answer in ~8 s)

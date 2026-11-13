@@ -1,3 +1,35 @@
+## Delta Suite 0.6.1 — the whole pit wall in a browser
+
+**Remote pit wall, now the full suite**: from another PC, a tablet or a phone — on your home network or from
+anywhere through [Tailscale](https://tailscale.com) — open the address shown in *Remote access* and you get:
+- *Pit wall*: position, lap and live delta, pedals, fuel, hybrid battery, tyres, track map with yellow/red/blue
+  zones, standings with gap and interval, car alerts, the engineer's proposals and the radio;
+- *Onboard*: the onboard video with camera, car and quality selection. It is rendered in AC **only while
+  someone is watching**: switch tab or close the browser and it stops within 3 seconds (no FPS lost);
+- *Pit & Setup*: the current setup and live adjustments (brake bias, ABS, TC, engine brake, setup items) sent as
+  proposals to confirm — from the browser, Delta Suite or the wheel;
+- *Strategy*: fuel plan and pit window, tyre degradation forecast, laps with sectors;
+- *Engineer*: chat with the AI engineer, messages read out to the driver, and the radio audio played in the
+  browser.
+
+Plain HTML and JavaScript, no frameworks: it runs smoothly on an old laptop. The *Remote access* window now
+lists the LAN address (lowest latency) and the Tailscale one separately.
+
+**Interface themes**: pick one of seven colour themes under *Theme* in the sidebar.
+
+**Fixes**
+- The TV graphics over the onboard video failed to draw with live video from AC (demo and replay were fine).
+
+**Under the hood**
+- The exe is ~15 MB smaller (176 → 161 MB): only the pronunciation data of the six radio languages, no model
+  tools that are never used.
+- The memory layouts shared with the CSP app are now checked byte for byte by the tests, and a layout change
+  without a new version fails the build.
+
+The CSP app is unchanged: no need to update it from 0.6.0.
+
+---
+
 ## Delta Suite 0.6.0 — easier to start, chattier on the radio, in your language
 
 **Get started in minutes**

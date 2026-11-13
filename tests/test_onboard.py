@@ -306,3 +306,22 @@ def test_reserved_view_survives_the_pages_and_closes_when_released(tmp_path):
     # released: nothing left on, the link is closed
     feed.release(ob.REMOTE_VIEW)
     assert not feed.connected and shared.viewEnabled[ob.REMOTE_VIEW] == 0
+
+
+def test_tv_graphics_paint_with_live_video():
+    # regression: a local variable named `tr` shadowed the translation function, so painting the TV graphics
+    # failed only with live video (never in demo)
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt6.QtWidgets import QApplication
+    from ui.widgets.onboard_hud import OnboardView
+
+    app = QApplication.instance() or QApplication([])
+    assert "tr" not in OnboardView._paint_hud.__code__.co_varnames
+    v = OnboardView()
+    v.resize(640, 360)
+    v.live = True
+    v.set_hud({"title": "P1", "camera": "T-cam", "times": [("LAP", "1:20.0", None)],
+               "sectors": [("S1", "30.1", "#00ff00")], "speed": 200, "gear": "5", "rpm_frac": 0.9,
+               "gas": 0.5, "brake": 0.0, "alert": None}, "")
+    assert not v.grab().isNull() and app is not None
