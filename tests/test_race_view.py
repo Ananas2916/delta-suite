@@ -69,3 +69,16 @@ def test_timeline_records_pit_stops_and_practice_lookahead():
     tl = build_timeline(log, [a, b], to_go=None, fuel_now=60.0, tank=70.0)
     assert tl.total == 12 and (2, False) in tl.boxes and (2, "pit", "pit") in tl.events
     assert tl.stints[0] == (1, 1, False)
+
+
+def test_compare_plans_one_stop_wins_with_strong_degradation():
+    from hub_core.analysis import race_strategy as rs
+    stint = [_lap(n, 80_000 + 600 * n * n // 4) for n in range(1, 8)]     # times growing faster and faster
+    fc = rs.forecast_degradation(stint, fuel_s_per_l=0.0)
+    plans = rs.compare_plans(fc, laps_remaining=20, pit_loss_s=60.0, laps_done=7)   # 0.9 s/lap: one stop pays
+    assert [p.name.split(" ·")[0] for p in plans][0] == "1 stop"
+    assert plans[0].delta_s == 0 and all(p.delta_s >= 0 for p in plans)
+    assert all(sum(p.stints) == 20 for p in plans)
+    # not enough fuel for a no-stop run: that plan is marked and goes last
+    plans = rs.compare_plans(fc, 20, 20.0, 7, laps_on_fuel=12, laps_per_tank=30)
+    assert plans[-1].name == "No stop" and not plans[-1].feasible

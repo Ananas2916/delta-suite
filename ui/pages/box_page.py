@@ -61,7 +61,6 @@ class BoxPage(QWidget):
         root.setSpacing(10)
 
         head = QHBoxLayout()
-        head.addWidget(label(tr("Pit & Setup"), "h1"))
         head.addStretch()
         self.bridge_status = label("", "dim")
         head.addWidget(self.bridge_status)

@@ -219,3 +219,50 @@ def optimal_pit_lap(fc: DegradationForecast, laps_remaining: int, pit_loss_s: fl
     if best_total is None or no_stop <= best_total:
         return None
     return last + best_k
+
+
+@dataclass
+class StrategyPlan:
+    name: str                    # "No stop", "1 stop · lap 18", ...
+    stints: list[int]            # laps of each stint, from now to the finish
+    total_s: float               # time for the remaining laps, stops included
+    feasible: bool               # enough fuel for each stint (with full tanks after a stop)
+    delta_s: float = 0.0         # against the best feasible plan
+
+
+def compare_plans(fc: DegradationForecast, laps_remaining: int, pit_loss_s: float, laps_done: int,
+                  laps_on_fuel: float | None = None, laps_per_tank: float | None = None) -> list[StrategyPlan]:
+    """No stop, one stop (at the best lap) and two stops (even stints) side by side, fastest first.
+    New tyres restart the degradation curve from stint lap 1."""
+    if laps_remaining < 1:
+        return []
+    poly = np.poly1d(fc.coeffs)
+    last = int(fc.stint_laps[-1])
+
+    def run(start: int, n: int) -> float:
+        return float(poly(np.arange(start, start + n)).sum()) if n > 0 else 0.0
+
+    def fuel_ok(stints: list[int]) -> bool:
+        if laps_on_fuel is None:
+            return True
+        if stints[0] > laps_on_fuel + 1e-6:
+            return False
+        return laps_per_tank is None or all(s <= laps_per_tank + 1e-6 for s in stints[1:])
+
+    plans = [StrategyPlan("No stop", [laps_remaining], run(last + 1, laps_remaining), fuel_ok([laps_remaining]))]
+    if laps_remaining >= 2:
+        best = min(range(1, laps_remaining), key=lambda k: run(last + 1, k) + run(1, laps_remaining - k))
+        one = [best, laps_remaining - best]
+        plans.append(StrategyPlan(f"1 stop · lap {laps_done + best}", one,
+                                  run(last + 1, one[0]) + pit_loss_s + run(1, one[1]), fuel_ok(one)))
+    if laps_remaining >= 3:
+        a = laps_remaining // 3
+        b = (laps_remaining - a) // 2
+        two = [a, b, laps_remaining - a - b]
+        plans.append(StrategyPlan(f"2 stops · laps {laps_done + a} and {laps_done + a + b}", two,
+                                  run(last + 1, a) + run(1, b) + run(1, two[2]) + 2 * pit_loss_s, fuel_ok(two)))
+    feasible = [p for p in plans if p.feasible] or plans
+    ref = min(p.total_s for p in feasible)
+    for p in plans:
+        p.delta_s = round(p.total_s - ref, 2)
+    return sorted(plans, key=lambda p: (not p.feasible, p.total_s))

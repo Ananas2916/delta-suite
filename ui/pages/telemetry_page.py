@@ -39,8 +39,6 @@ class TelemetryPage(QWidget):
 
         # --- control bar
         bar = QHBoxLayout()
-        # title on its own row: with the screen scaled to 150% title + controls did not fit
-        root.addWidget(label(tr("Live telemetry"), "h1"))
         self.source = QComboBox()
         self.source.addItem(tr("Assetto Corsa (shared memory)"), SOURCE_AC)
         self.source.addItem(tr("Demo (simulator)"), SOURCE_DEMO)

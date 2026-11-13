@@ -67,7 +67,6 @@ class EngineerPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         head = QHBoxLayout()
-        head.addWidget(label(tr("Race engineer"), "h1"))
         head.addStretch()
         self.overview = label("", "dim")
         head.addWidget(self.overview)
@@ -235,9 +234,6 @@ class EngineerPage(QWidget):
         v.addWidget(self.mcp_info)
         v.addWidget(copy)
         c1.addWidget(g)
-        again = QPushButton(tr("Show the get-started list on the Overview"))
-        again.clicked.connect(lambda: hub.settings.setValue("checklist/hidden", False))
-        c1.addWidget(again)
 
         # --- voice
         g = QGroupBox(tr("Voice and language"))

@@ -41,7 +41,6 @@ class OnboardPage(QWidget):
         root.setSpacing(10)
 
         head = QHBoxLayout()
-        head.addWidget(label(tr("Live onboard"), "h1"))
         head.addStretch()
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)

@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
 
 from hub_core.analysis import race_strategy as rs
 from ui.theme import C
-from ui.widgets import SessionPicker, ValueTile, dspin, label, make_plot, readonly_table, table_item
+from ui.widgets import Card, SessionPicker, ValueTile, dspin, label, make_plot, readonly_table, table_item
+from ui.widgets.plans import PlansView
 from hub_core.i18n import tr
 
 
@@ -24,7 +25,6 @@ class StrategyPage(QWidget):
 
         # --- input
         left = QVBoxLayout()
-        left.addWidget(label(tr("Strategy & Timing"), "h1"))
         self.picker = SessionPicker(hub)
         left.addWidget(self.picker)
 
@@ -88,6 +88,13 @@ class StrategyPage(QWidget):
                                self.t_deg, self.t_pit, self.t_theo, self.t_cliff)):
             tiles.addWidget(t, i // 4, i % 4)
         right.addLayout(tiles)
+        plans_card = Card()
+        pl = QVBoxLayout(plans_card)
+        pl.setContentsMargins(12, 10, 12, 10)
+        pl.addWidget(label(tr("PLANS COMPARED"), "dim"))
+        self.plans = PlansView()
+        pl.addWidget(self.plans)
+        right.addWidget(plans_card)
 
         self.plot = make_plot(tr("Stint lap times and forecast (fuel corrected)"), "s", tr("stint lap"))
         self.plot.addLegend(offset=(-10, 10))
@@ -96,7 +103,7 @@ class StrategyPage(QWidget):
         self.table = readonly_table([tr(h) for h in ("Lap", "Time", "S1", "S2", "S3", "Fuel used", "Valid")])
         self.table.setMaximumHeight(220)
         right.addWidget(self.table)
-        note = label(tr("Gaps and intervals to rivals are on the Pit & Setup page and the Overview: AC's shared "
+        note = label(tr("Gaps and intervals to rivals are on the Pit & Setup page and the Race view: AC's shared "
                         "memory only exposes your car, the rivals come from the CSP app."), "dim")
         note.setWordWrap(True)
         right.addWidget(note)
@@ -205,10 +212,14 @@ class StrategyPage(QWidget):
                            name=tr("model"))
             self.plot.plot(fc.forecast_laps, fc.forecast_times, pen=pg.mkPen(C["accent"], width=2), symbol="t",
                            symbolBrush=C["accent"], name=tr("forecast"))
+            self.plans.set_plans(rs.compare_plans(fc, remaining, self.pit_loss.value(), self.laps_done.value(),
+                                                  plan.laps_on_current_fuel, plan.laps_per_tank),
+                                 self.laps_done.value())
         else:
             self.t_deg.set(tr("needs ≥3 laps"))
             self.t_cliff.set("--")
             self.t_pit.set("--")
+            self.plans.set_plans([], self.laps_done.value())
 
         bs = rs.best_sectors(laps)
         best = min((l.lap_time_ms for l in valid), default=None)

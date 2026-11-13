@@ -282,7 +282,6 @@ class DynamicsPage(QWidget):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
-        lay.addWidget(label(tr("Vehicle & tyre dynamics"), "h1"))
         tabs = QTabWidget()
         tabs.addTab(PacejkaTab(), tr("Tyre (Pacejka)"))
         tabs.addTab(LoadTransferTab(hub), tr("Load transfer"))
