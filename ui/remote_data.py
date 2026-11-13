@@ -22,6 +22,7 @@ from hub_core.analysis import race_strategy as rs
 from hub_core.remote.auth import Pairing
 from hub_core.remote.server import RemoteServer
 from ui.hub_data import _lap_dict
+from hub_core.i18n import tr
 
 LOG_SIZE = 200
 SAY_MAX = 200
@@ -136,10 +137,10 @@ class RemoteAccess(QObject):
         hub = self.hub
         if kind == "confirm":
             hub.apply_proposal(payload)
-            hub.radio_log.emit("system", f"Proposal confirmed from {device}")
+            hub.radio_log.emit("system", tr("Proposal confirmed from {device}", device=device))
         elif kind == "discard":
             hub.discard_proposal(payload)
-            hub.radio_log.emit("system", f"Proposal discarded from {device}")
+            hub.radio_log.emit("system", tr("Proposal discarded from {device}", device=device))
         elif kind == "say":
             # the remote engineer talks to the driver through the radio voice (logged as "radio" when spoken)
             hub.radio_log.emit("remote", f"{device}: {payload}")

@@ -14,6 +14,7 @@ from hub_core.analysis.lap_analysis import clean_lap
 from hub_core.analysis.race_strategy import fmt_ms
 from ui.theme import C, LAP_COLORS
 from ui.widgets import Card, SessionPicker, label, make_plot
+from hub_core.i18n import tr
 
 MAX_LAPS = 4
 GRID_POINTS = 2000
@@ -32,28 +33,28 @@ class AnalysisPage(QWidget):
         left = Card()
         left.setFixedWidth(330)
         ll = QVBoxLayout(left)
-        ll.addWidget(label("Lap analysis", "h2"))
-        ll.addWidget(label("Session", "dim"))
+        ll.addWidget(label(tr("Lap analysis"), "h2"))
+        ll.addWidget(label(tr("Session"), "dim"))
         self.picker = SessionPicker(hub)
         self.picker.currentIndexChanged.connect(self._load_laps)
         ll.addWidget(self.picker)
-        ll.addWidget(label("Reference from the archive (same car and track)", "dim"))
+        ll.addWidget(label(tr("Reference from the archive (same car and track)"), "dim"))
         self.ref = QComboBox()
-        self.ref.setToolTip("A lap from another session, e.g. your all-time best: it becomes the reference "
-                            "for Delta-T and is drawn first")
+        self.ref.setToolTip(tr("A lap from another session, e.g. your all-time best: it becomes the reference "
+                               "for Delta-T and is drawn first"))
         self.ref.currentIndexChanged.connect(lambda _: self._redraw())
         ll.addWidget(self.ref)
-        ll.addWidget(label(f"Laps (tick up to {MAX_LAPS}; the first is the reference)", "dim"))
+        ll.addWidget(label(tr("Laps (tick up to {n}; the first is the reference)", n=MAX_LAPS), "dim"))
         self.lap_list = QListWidget()
         self.lap_list.itemChanged.connect(self._on_check)
         ll.addWidget(self.lap_list, 1)
-        best_btn = QPushButton("Compare best lap with the last")
+        best_btn = QPushButton(tr("Compare best lap with the last"))
         best_btn.clicked.connect(self._best_vs_last)
         ll.addWidget(best_btn)
-        exp = QPushButton("Export session to Parquet…")
+        exp = QPushButton(tr("Export session to Parquet…"))
         exp.clicked.connect(self._export)
         ll.addWidget(exp)
-        dele = QPushButton("Delete session from the archive")
+        dele = QPushButton(tr("Delete session from the archive"))
         dele.clicked.connect(self._delete)
         ll.addWidget(dele)
         self.legend = label("", "dim")
@@ -69,12 +70,12 @@ class AnalysisPage(QWidget):
                  ("rpm", "RPM"), ("steer", "Steering")]
         for i, (key, title) in enumerate(specs):
             p = glw.addPlot(row=i, col=0)
-            p.setLabel("left", title)
+            p.setLabel("left", tr(title))
             p.showGrid(x=True, y=True, alpha=0.15)
             if i:
                 p.setXLink(self.plots["speed"])
             self.plots[key] = p
-        self.plots["steer"].setLabel("bottom", "Distance m")
+        self.plots["steer"].setLabel("bottom", tr("Distance m"))
         glw.ci.layout.setRowStretchFactor(0, 3)
         glw.ci.layout.setRowStretchFactor(1, 2)
         self.cursor = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(C["yellow"], width=1))
@@ -87,7 +88,7 @@ class AnalysisPage(QWidget):
             self.cursor_lines.append(ln)
         split.addWidget(glw)
 
-        self.map = make_plot("Racing line")
+        self.map = make_plot(tr("Racing line"))
         self.map.setAspectLocked(True)
         self.map.hideAxis("left")
         self.map.hideAxis("bottom")
@@ -117,8 +118,8 @@ class AnalysisPage(QWidget):
         valid = [l.lap_time_ms for l in laps if l.valid]
         best = min(valid) if valid else None
         for lap in laps:
-            tag = "  ★" if lap.lap_time_ms == best and lap.valid else ("" if lap.valid else "  (invalid)")
-            it = QListWidgetItem(f"Lap {lap.lap_no:>3}   {fmt_ms(lap.lap_time_ms)}{tag}")
+            tag = "  ★" if lap.lap_time_ms == best and lap.valid else ("" if lap.valid else "  " + tr("(invalid)"))
+            it = QListWidgetItem(f"{tr('Lap')} {lap.lap_no:>3}   {fmt_ms(lap.lap_time_ms)}{tag}")
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Unchecked)
             it.setData(Qt.ItemDataRole.UserRole, lap.lap_no)
@@ -132,13 +133,14 @@ class AnalysisPage(QWidget):
         current = self.ref.currentData()
         self.ref.blockSignals(True)
         self.ref.clear()
-        self.ref.addItem("None", None)
+        self.ref.addItem(tr("None"), None)
         car, track = (info or {}).get("car"), (info or {}).get("track")
         if car and track:
             sid = self.picker.selected()[2]
             for b in self.hub.db.best_laps(car, track, limit=10, exclude_session=sid):
                 when = f"{b['started']:%d/%m %H:%M}" if b.get("started") else ""
-                self.ref.addItem(f"{fmt_ms(b['lap_time_ms'])}  ·  session #{b['session_id']} lap {b['lap_no']}  {when}",
+                self.ref.addItem(f"{fmt_ms(b['lap_time_ms'])}  ·  "
+                                 + tr("session #{sid} lap {n}", sid=b["session_id"], n=b["lap_no"]) + f"  {when}",
                                  (b["session_id"], b["lap_no"], b["lap_time_ms"]))
         self.ref.setCurrentIndex(max(0, self.ref.findData(current)))
         self.ref.blockSignals(False)
@@ -204,15 +206,15 @@ class AnalysisPage(QWidget):
             sid, lap_no, lap_ms = ref
             ch = self.hub.db.lap_channels(sid, lap_no)
             if len(ch["t"]) >= 10:
-                self._loaded.append((f"Ref #{sid} lap {lap_no} {fmt_ms(lap_ms)}", clean_lap(ch, self._track_len(info)),
+                self._loaded.append((tr("Ref #{sid} lap {n}", sid=sid, n=lap_no) + f" {fmt_ms(lap_ms)}", clean_lap(ch, self._track_len(info)),
                                      C["text"]))
         for i, lap_no in enumerate(order):
             ch = self._channels(lap_no)
             if ch is not None:
                 lap = next(l for l in self._laps if l.lap_no == lap_no)
-                self._loaded.append((f"Lap {lap_no} {fmt_ms(lap.lap_time_ms)}", ch, LAP_COLORS[i % len(LAP_COLORS)]))
+                self._loaded.append((f"{tr('Lap')} {lap_no} {fmt_ms(lap.lap_time_ms)}", ch, LAP_COLORS[i % len(LAP_COLORS)]))
         if not self._loaded:
-            self.legend.setText("Tick one or more laps to overlay them.")
+            self.legend.setText(tr("Tick one or more laps to overlay them."))
             return
 
         ref = self._loaded[0][1]
@@ -231,9 +233,9 @@ class AnalysisPage(QWidget):
             self.map.plot(ch["x"], ch["z"], pen=pg.mkPen(color, width=2))
             delta = np.interp(grid, d, ch["t"]) - t_ref
             self.plots["delta"].plot(grid, delta, pen=pen)
-            legend.append(f"<span style='color:{color}'>■</span> {name}  (Δ at end {delta[-1]:+.3f} s)")
-        self.legend.setText("<br>".join(legend) + "<br><br>Throttle solid, brake dashed. "
-                            "Drag the yellow line to move the cursor.")
+            legend.append(f"<span style='color:{color}'>■</span> {name}  " + tr("(Δ at end {d} s)", d=f"{delta[-1]:+.3f}"))
+        self.legend.setText("<br>".join(legend) + "<br><br>" + tr("Throttle solid, brake dashed. "
+                                                                  "Drag the yellow line to move the cursor."))
         self.plots["speed"].setXRange(0, end, padding=0.01)
         self._on_cursor()
 
@@ -249,26 +251,26 @@ class AnalysisPage(QWidget):
             if i == 0:
                 self.map_marker.setData([ch["x"][idx]], [ch["z"][idx]])
             rows.append(f"<span style='color:{color}'>■</span> {ch['speed'][idx]:.0f} km/h · "
-                        f"gear {ch['gear'][idx]:.0f} · throttle {ch['gas'][idx] * 100:.0f}% · "
-                        f"brake {ch['brake'][idx] * 100:.0f}%")
-        self.cursor_info.setText(f"Distance {x:.0f} m<br>" + "<br>".join(rows))
+                        + tr("gear {g} · throttle {t}% · brake {b}%", g=f"{ch['gear'][idx]:.0f}",
+                             t=f"{ch['gas'][idx] * 100:.0f}", b=f"{ch['brake'][idx] * 100:.0f}"))
+        self.cursor_info.setText(tr("Distance {d} m", d=f"{x:.0f}") + "<br>" + "<br>".join(rows))
 
     def _export(self):
         sid = self.picker.selected()[2]
         if sid is None:
-            QMessageBox.information(self, "Export", "The current session has no saved laps yet.")
+            QMessageBox.information(self, tr("Export"), tr("The current session has no saved laps yet."))
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export Parquet", f"session_{sid}.parquet", "Parquet (*.parquet)")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Export Parquet"), f"session_{sid}.parquet", "Parquet (*.parquet)")
         if path:
             self.hub.db.export_parquet(sid, path)
-            QMessageBox.information(self, "Export", f"Saved to {path}")
+            QMessageBox.information(self, tr("Export"), tr("Saved to {path}", path=path))
 
     def _delete(self):
         sid = self.picker.currentData()
         if sid is None:
-            QMessageBox.information(self, "Delete", "Select a session from the archive (not the live one).")
+            QMessageBox.information(self, tr("Delete"), tr("Select a session from the archive (not the live one)."))
             return
-        if QMessageBox.question(self, "Delete", f"Permanently delete session #{sid}?") \
+        if QMessageBox.question(self, tr("Delete"), tr("Permanently delete session #{sid}?", sid=sid)) \
                 == QMessageBox.StandardButton.Yes:
             self.hub.db.delete_session(sid)
             self.hub.db_changed.emit()

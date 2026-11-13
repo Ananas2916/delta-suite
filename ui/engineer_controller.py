@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_engine.agent_cli import BACKENDS, APIAgent, CLIAgent
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL
 from ui.workers import Job
+from hub_core.i18n import tr
 
 
 class EngineerController:
@@ -59,7 +60,7 @@ class EngineerController:
         self._job.failed.connect(self._on_failed)
         self._job_mode = mode
         self._job_auto = auto
-        h.engineer_started.emit("(spontaneous radio update)" if auto else question, mode)
+        h.engineer_started.emit(tr("(spontaneous radio update)") if auto else question, mode)
         self._job.start()
         return True
 
@@ -71,7 +72,7 @@ class EngineerController:
     def _on_failed(self, err: str):
         h = self.hub
         h.engineer_failed.emit(err)
-        h.radio_log.emit("system", f"Engineer: {err}")
+        h.radio_log.emit("system", tr("Engineer: {err}", err=err))
         if self._job_mode == "RADIO" and not self._job_auto:
             h.radio.say(h.radio.phrase("agent_error"), PRIO_NORMAL, 15)
 

@@ -26,6 +26,7 @@ import numpy as np
 
 from ai_engine.lang import language_of
 from ai_engine.voice_models import default_kokoro_dir
+from hub_core.i18n import tr
 
 try:
     import winsound
@@ -68,10 +69,10 @@ class KokoroBackend(TTSBackend):
         try:
             import kokoro_onnx  # noqa: F401
         except ImportError:
-            return False, "kokoro-onnx package not installed"
+            return False, tr("kokoro-onnx package not installed")
         missing = [p.name for p in self.files() if not p.is_file()]
         if missing:
-            return False, "voice model not downloaded"
+            return False, tr("voice model not downloaded")
         return True, ""
 
     def synth(self, text: str) -> tuple[np.ndarray, int] | None:
@@ -99,7 +100,7 @@ class TsukumoBackend(TTSBackend):
             urllib.request.urlopen(self.url + "/api/voices", timeout=1.5).close()
             return True, ""
         except OSError as exc:
-            return False, f"Tsukumo is not answering on {self.url} ({exc})"
+            return False, tr("Tsukumo is not answering on {url} ({err})", url=self.url, err=exc)
 
     def synth(self, text: str):
         body = json.dumps({"text": text, "voice": self.voice, "speed": self.speed}).encode()

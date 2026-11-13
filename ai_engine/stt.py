@@ -16,6 +16,7 @@ import numpy as np
 
 from ai_engine.lang import Language
 from ai_engine.voice import TSUKUMO_URL, transcribe_tsukumo
+from hub_core.i18n import tr
 
 # faster-whisper model -> note
 WHISPER_MODELS = {
@@ -43,13 +44,13 @@ class STTEngine:
     name = "none"
 
     def available(self) -> tuple[bool, str]:
-        return False, "no transcription engine"
+        return False, tr("no transcription engine")
 
     def preload(self) -> None:
         pass
 
     def transcribe(self, pcm16_mono_16k: bytes, lang: Language) -> str:
-        raise RuntimeError("transcription disabled")
+        raise RuntimeError(tr("transcription disabled"))
 
 
 class WhisperSTT(STTEngine):
@@ -64,10 +65,10 @@ class WhisperSTT(STTEngine):
         try:
             import faster_whisper  # noqa: F401
         except ImportError:
-            return False, "faster-whisper package not installed"
+            return False, tr("faster-whisper package not installed")
         if model_cached(self.model_name):
-            return True, f"model {self.model_name} ready"
-        return True, f"model {self.model_name} not downloaded yet: it will be downloaded on first use"
+            return True, tr("model {name} ready", name=self.model_name)
+        return True, tr("model {name} not downloaded yet: it will be downloaded on first use", name=self.model_name)
 
     def _load(self):
         with self._lock:
@@ -100,7 +101,7 @@ class TsukumoSTT(STTEngine):
         self.url = url
 
     def available(self) -> tuple[bool, str]:
-        return True, "uses Tsukumo's listening engine (enable it there)"
+        return True, tr("uses Tsukumo's listening engine (enable it there)")
 
     def transcribe(self, pcm16_mono_16k: bytes, lang: Language) -> str:
         return transcribe_tsukumo(pcm16_mono_16k, self.url)

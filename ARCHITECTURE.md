@@ -14,8 +14,10 @@ hub_core/ac          talks to AC: reads the mappings, records them, opens the sh
 hub_core/model.py    shared types: TelemetrySample, CarEntry, AC states and flags
 hub_core/analysis    calculations: laps, corners, standings, strategy, dynamics, car status
 hub_core/database.py DuckDB archive          hub_core/demo_source.py simulator
+hub_core/i18n.py     interface language: tr() + catalogs in hub_core/locales/ (it.py)
         ▼
-ai_engine            engineer (Claude Code / Codex / API), MCP, radio, voice, transcription; radio without AI
+ai_engine            engineer (Claude Code / API / custom command), MCP, radio, voice (+ model download in
+                     voice_models.py), transcription; radio without AI
                      in radio.py (lap, fuel, tyres, flags) + race_calls.py (F1-game-style race calls,
                      phrases in phrases_race.py) + race_chatter.py (the "chatty" engineer between the
                      important calls, chattiness 0-2, phrases in phrases_chatter.py)
@@ -89,8 +91,14 @@ version in the mapping name and in the constant. The tests compare the Lua and P
 
 - `main_dashboard.py`: window, sidebar, pages by key (`self.pages`, each in a `QScrollArea`). The first entry
   is the Overview page; sections, order and module descriptions live in `navigation.py`.
-- `hub_state.py`: `HubState`, the shared state (active source, laps, CSP bridge, radio, engineer, MCP) and
-  its signals; `hub_data.py` serves the data to the MCP and validates proposals.
+- `hub_state.py`: `HubState`, the shared state (active source, session and laps, archive, CSP bridge,
+  standings and track, reference lap, MCP) and the signals the pages connect to. Three controllers it owns
+  do the rest: `radio_controller.py` (radio rules, voice, microphone, push-to-talk), `proposals.py` (the
+  engineer's proposals and their acks) and `engineer_controller.py` (the AI agent). HubState forwards the
+  few methods the pages call (`ask_engineer`, `apply_proposal`, `say`...), so pages do not know the
+  controllers. `hub_data.py` serves the data to the MCP and validates proposals.
+- `first_run.py`: the get-started checklist on the Overview (pure logic; `widgets/checklist.py` draws it,
+  `MainWindow._on_checklist` runs its buttons).
 - `remote_data.py`: `RemoteAccess`, the hub side of `hub_core/remote` (snapshot for the web page, actions
   routed to the Qt thread); `remote_dialog.py` shows the 10-second code, the addresses and the paired devices.
 - `workers.py`: `TelemetryWorker` (acquisition thread: AC, demo or replay → samples, laps, bridge state
@@ -122,6 +130,16 @@ requests and disconnects when it closes, so AC renders the extra views only when
 2. Register it in `MainWindow.pages` and in `SECTIONS` in `navigation.py`.
 3. Take the common pieces from `ui/widgets`; if a widget is used by several pages, it goes there and not in a
    page.
+
+## Languages
+
+Texts are written in English in the code and wrapped in `tr()` (`hub_core/i18n.py`); placeholders are filled
+after the lookup: `tr("Fuel for {n} laps", n=2.5)`. Each other language is a catalog in
+`hub_core/locales/<code>.py`. Data tables (camera names, sidebar entries, wheel names) keep English text and
+are translated where they are shown (`tr(name)`). The language is chosen once at startup (`ui/language`
+setting, or `DELTA_LANG`); the self-test always runs in English. `tests/test_i18n.py` fails if a `tr()` text
+has no Italian translation or the placeholders differ. The radio phrases are separate: they follow the voice
+(`ai_engine/lang.py`, `phrases_*.py`).
 
 ## Tests
 

@@ -12,6 +12,7 @@ from ai_engine.voice import PRIO_NORMAL, PRIO_URGENT, RadioVoice, make_backend
 from hub_core.model import ACStatus
 from ui.mic import MicRecorder
 from ui.workers import Job
+from hub_core.i18n import tr
 
 RADIO_FLAGS = ("lap_times", "fuel", "tyres", "gaps", "flags", "hybrid", "positions", "rivals", "car")
 RADIO_LIMITS = ("tyre_temp_lo", "tyre_temp_hi", "tyre_press_lo", "tyre_press_hi")
@@ -114,7 +115,7 @@ class RadioController:
         if down:
             self.voice.interrupt()
             if not self.mic.start():
-                self.hub.radio_log.emit("system", "Microphone not available")
+                self.hub.radio_log.emit("system", tr("Microphone not available"))
             return
         pcm = self.mic.stop()
         if len(pcm) < 16000 * 2 * 0.4:          # under 0.4 s: accidental press
@@ -138,7 +139,7 @@ class RadioController:
             self.say(self.phrase("busy"), PRIO_NORMAL, 10)
 
     def _on_transcript_failed(self, err: str):
-        self.hub.radio_log.emit("system", f"Transcription: {err}")
+        self.hub.radio_log.emit("system", tr("Transcription: {err}", err=err))
         self.say(self.phrase("stt_error"), PRIO_URGENT, 10)
 
     def shutdown(self):

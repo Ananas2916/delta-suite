@@ -16,6 +16,7 @@ from hub_core.analysis.car_status import status_dict
 from hub_core.analysis.lap_analysis import compare_laps
 from hub_core.analysis.lap_recorder import LapData
 from ai_engine.lang import Language, speak_number
+from hub_core.i18n import tr
 
 KIND_LABELS = {"brake_bias": "Brake bias", "abs": "ABS", "tc": "TC", "engine_brake": "Engine brake",
                "setup": "Setup"}
@@ -38,10 +39,10 @@ class Proposal:
 
     def describe(self) -> str:
         if self.kind == "brake_bias":
-            return f"Brake bias {self.value * 100:.1f}%"
+            return tr("Brake bias {pct}%", pct=f"{self.value * 100:.1f}")
         if self.kind == "setup":
             return f"{self.label or self.name} → {int(self.value)}"
-        return f"{KIND_LABELS.get(self.kind, self.kind)} {int(self.value)}"
+        return f"{tr(KIND_LABELS.get(self.kind, self.kind))} {int(self.value)}"
 
     def spoken(self, lang: Language) -> str:
         to = lang.phrases["to"]

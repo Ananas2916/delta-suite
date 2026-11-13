@@ -27,7 +27,7 @@ from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
 
 APP_NAME = "Delta Suite"
-VERSION = "0.5.9"
+VERSION = "0.6.0"
 
 # page opened by each mode
 MODE_PAGES = {"driver": "telemetry", "engineer": "box", "analysis": "analysis"}
@@ -78,7 +78,7 @@ class MainWindow(QMainWindow):
         self.nav.setObjectName("sidebar")
         sl.addWidget(self.nav, 1)
         self.remote_btn = QPushButton()
-        self.remote_btn.setToolTip("Follow the session and act as the engineer from another PC, tablet or phone")
+        self.remote_btn.setToolTip(tr("Follow the session and act as the engineer from another PC, tablet or phone"))
         self.remote_btn.clicked.connect(self._open_remote)
         sl.addWidget(self.remote_btn)
         lay.addWidget(side)
@@ -138,7 +138,8 @@ class MainWindow(QMainWindow):
     def _remote_label(self):
         r = self.hub.remote
         n = len(r.pairing.device_list())
-        self.remote_btn.setText(f"  Remote access: {'on' if r.enabled else 'off'}" + (f" · {n}" if r.enabled and n else ""))
+        self.remote_btn.setText("  " + (tr("Remote access: on") if r.enabled else tr("Remote access: off"))
+                                + (f" · {n}" if r.enabled and n else ""))
         color = theme.C["green"] if r.enabled else theme.C["dim"]
         self.remote_btn.setStyleSheet(f"text-align: left; padding: 10px 12px; border: 0; border-radius: 0; "
                                       f"background: {theme.C['panel']}; color: {color}; font-weight: 600;")

@@ -11,8 +11,9 @@ dependency on commercial licences.
 ## Owner's setup
 - Windows 11, Desktop synced to OneDrive: project in `%USERPROFILE%\OneDrive\Desktop\mio_hub_motorsport`
 - Launches AC through **Content Manager** (almost certainly with Custom Shaders Patch)
-- Working language with the owner: **Italian** (replies, explanations). Code, comments, UI and docs are in
-  **English** since 0.5.9; the radio phrases stay multilingual.
+- Working language with the owner: **Italian** (replies, explanations). Code, comments and docs are in
+  **English** since 0.5.9; UI texts are English in the code, wrapped in `tr()`, with an Italian catalog
+  (`hub_core/locales/it.py`) since 0.6.0; the radio phrases stay multilingual.
 
 ## Modules
 Seven modules in two sidebar groups (`SECTIONS` in `ui/navigation.py`; the descriptions are the tooltips),
@@ -50,6 +51,8 @@ removed (16/10/2026).
    automatic fallback to memory. `sharedHandle(true)` (crossProcess): with false it is an id internal to the
    scripts and OpenSharedResource gives E_INVALIDARG. Manual test:
    `python tools/onboard_probe.py $env:LOCALAPPDATA\DeltaSuite\onboard_probe 6 [transports|views]`.
+   Recordings (.dsr v2, 0.6.0) also hold the CSP app's cars at 5 Hz: a recorded race replays standings,
+   flags and race calls — the way to turn a real race into a test.
 3. **Race engineer** (former "AI Race Engineer" + "Radio & voice", merged): one agent for written chat and
    radio. Command-line agent (Claude Code with the owner's subscription; Codex, Antigravity or a custom
    command, Anthropic API as last option) that reads the data via MCP and proposes changes to confirm. Local
@@ -89,16 +92,23 @@ hub_core/analysis/             # calculations, no AC: lap_recorder, lap_analysis
                                # (also laps to go), vehicle_dynamics, car_status (alerts for the Onboard
                                # page and MCP), track_status (track line, slow/stopped cars, flags),
                                # live_lap (splits of the current lap and live delta to the best lap)
-hub_core/database.py           # DuckDB / SQLite
+hub_core/database.py           # DuckDB / SQLite (best_laps: all-time best per car and track)
+hub_core/i18n.py, locales/     # interface language: tr() + Italian catalog (tests/test_i18n.py checks it)
+hub_core/remote/               # remote pit wall: rotating-code pairing (auth.py), LAN web server + page
 ai_engine/race_engineer_agent.py  # API backend (stint summary)
-ai_engine/agent_cli.py         # Claude Code / Codex / Antigravity in non-interactive mode
+ai_engine/agent_cli.py         # Claude Code (or a custom command) in non-interactive mode
 ai_engine/mcp_server.py        # local HTTP MCP server with token (7 tools: live_state, session_laps,
                                # compare_laps, current_setup, standings, session_archive, propose_change)
 ai_engine/radio.py, voice.py   # radio rules, Kokoro/Tsukumo, priority queue
 ai_engine/race_calls.py        # F1-game-style race calls (RaceContext from standings and yellows)
 ai_engine/phrases_race.py      # phrases for those calls in it/en/es/fr/pt, with variants
 ai_engine/stt.py               # push-to-talk transcription (local Whisper / Tsukumo)
-ui/hub_state.py, hub_data.py   # hub state, proposals, data provider for the MCP
+ai_engine/voice_models.py      # Kokoro model location and one-click download (%LOCALAPPDATA%\DeltaSuite\models)
+ai_engine/race_chatter.py      # the "chatty" engineer between the important calls (phrases_chatter.py)
+ui/hub_state.py, hub_data.py   # hub state and signals, data provider for the MCP
+ui/radio_controller.py, proposals.py, engineer_controller.py   # owned by HubState: radio+PTT, proposals, agent
+ui/first_run.py                # get-started checklist on the Overview
+ui/remote_data.py, remote_dialog.py   # hub side of the remote pit wall
 ui/workers.py                  # TelemetryWorker (acquisition thread) and Job
 ui/widgets/                    # reusable widgets: base, car_status, gps, timing_table, hybrid, sectors
                                # (splits and time with delta), onboard_hud (TV graphics), view_panel
@@ -119,6 +129,7 @@ docs/                          # logo and README screenshots
   in both files and bump the version. CSP 0.2.11 hot-loads it (`LAZY = NONE`). The setup is editable on track
   too in practice sessions (`isSetupAvailableToEdit`). CSP buttons (0.5.9): `DeltaSuite/Engineer radio
   (hold)`, `DeltaSuite/Confirm proposal`, `DeltaSuite/Discard proposal`.
+- Codex/Antigravity backends removed in 0.6.0 (untestable here): any agent works as a custom command.
 - Agent via CLI instead of API: `claude -p --output-format stream-json --tools "" --allowedTools
   mcp__deltasuite --strict-mcp-config`, session resumed with `--resume`. Changes always go through
   `propose_change` → driver confirmation (CSP button or app button): never applied by the agent. Proposal
@@ -158,7 +169,9 @@ docs/                          # logo and README screenshots
 ## Next steps
 1. On-track test with the owner driving: push-to-talk (button bound in the CSP app — rebind after 0.5.9),
    voice in the headset, confirming proposals from the wheel.
-2. Check ABS/TC: with the BMW M4 GT3 (trr mod) `absMode`/`tcMode` stay 0 while the setup says 5/3.
+2. ABS/TC: with the BMW M4 GT3 (trr mod) `absMode`/`tcMode` stay 0 while the setup says 5/3; on 12/11/2026
+   with the Mercedes-AMG GT3 Evo (trr) the CSP app read ABS 5/12 and TC 3/12, matching the setup: it is
+   specific to that M4 mod, not to Delta Suite.
 3. Standings with real rivals (session with AI or online) and race gaps.
 4. Onboard (0.5.0): cameras computed in car space and brought into the world with
    `ac.findNodes('carRoot:N'):getWorldTransformationRaw()` (before: wheel centre + physics state → strong
@@ -186,6 +199,9 @@ docs/                          # logo and README screenshots
 - [x] 0.5.2: live splits and delta, Int column, compound, green flag; F1-game-style engineer lexicon
       (tested in demo; to be heard in a real race)
 - [x] 0.5.9 (12/11/2026): everything in English, MIT license, public repo, README with screenshots
+- [x] 0.6.0 (13/11/2026): get-started checklist, voice download, Italian UI (tr), HubState split into
+      controllers, rivals in recordings (.dsr v2), archive reference lap, strategy from the session,
+      chatty engineer and remote pit wall (merged from claude/chatty-engineer-remote)
 - [x] Test with real AC (15/10/2026, Red Bull Ring, BMW M4 GT3): laps, sectors, fuel ok
 - [x] CSP app: setup/pit/car reading and commands with confirmation tested live (values unchanged)
 - [x] Claude Code via MCP tested with real data (radio answer in ~8 s)

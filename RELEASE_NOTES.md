@@ -1,3 +1,45 @@
+## Delta Suite 0.6.0 — easier to start, chattier on the radio, in your language
+
+**Get started in minutes**
+- A *Get started* list on the Overview shows what is ready and what is missing — Assetto Corsa, the CSP app,
+  the wheel buttons, the AI engineer, the voice, push-to-talk — each with the button that fixes it. It hides
+  itself when everything is green.
+- **Download voice**: the engineer's voice (Kokoro, 34 voices, ~120 MB) now downloads with one click from
+  *Race engineer → Settings*; no other program needed.
+- Each release ships a SHA-256 checksum next to the exe. The exe is not signed yet: if Windows SmartScreen
+  warns you, click *More info → Run anyway*.
+
+**Italian interface**: *Language* in the sidebar switches between English and Italian (applied at the next
+start). The radio keeps speaking the language of the chosen voice; the AI engineer writes its analysis in the
+interface language.
+
+**A chattier race engineer** (still all local, instant and free): lights out, overtakes and lost places by the
+rival's name, rivals' pit stops with undercut/overcut, your stop and tyres up to temperature, purple sectors,
+pace drops, half distance, "bring it home", practice timesheets, and short updates when the radio has been
+quiet. Choose how much it talks in *Settings → Automatic radio → Engineer* (Essential, Normal, Chatty).
+Optionally, every N race laps the AI engineer says one thing on its own (off by default). Your own best lap is
+now called "Personal best", so it no longer sounds like the race's fastest lap.
+
+**Remote pit wall**: follow the session from another PC, tablet or phone on the same network — live data,
+standings, laps, radio — and act as the engineer: confirm proposals, talk to the driver, ask the AI engineer.
+Pair with a 6-digit code that changes every 10 seconds (sidebar *Remote access*, off by default).
+
+**Analysis**
+- *Delta vs all-time best* (Live telemetry): the live delta can use your fastest lap ever for this car and
+  track, not just today's.
+- *Reference from the archive* (Lap analysis): overlay and compare against a lap from another session.
+- *Strategy* fills race type, laps, time left and fuel from the session; untick it to try your own numbers.
+- Recordings now also store the rivals: replaying a race brings back standings, gaps, yellow flags and race
+  calls exactly as they happened.
+
+**Also**
+- The CSP app window has a new look and shows the connection and the radio transmitting. Update it from
+  *Pit & Setup* (or the *Get started* list).
+- The untested Codex and Antigravity options were removed: any agent can still be plugged in as a *custom
+  command*.
+
+---
+
 ## Delta Suite 0.5.9 — now in English, and open source
 
 **Delta Suite speaks English.** The whole app is now in English: pages, buttons, alerts, flags, the TV

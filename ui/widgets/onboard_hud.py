@@ -68,8 +68,9 @@ class OnboardView(QWidget):
         if self.placeholder:
             p.setPen(QColor(C["dim"]))
             p.setFont(paint_font(11, QFont.Weight.Normal))
-            p.drawText(vr.adjusted(40, 0, -40, -vr.height() * 0.2), Qt.AlignmentFlag.AlignCenter |
-                       Qt.TextFlag.TextWordWrap, self.placeholder)
+            # in a band below the times (top right) and above the speed and pedal boxes (bottom)
+            band = QRectF(vr.left() + 40, vr.top() + vr.height() * 0.5, vr.width() - 80, vr.height() * 0.2)
+            p.drawText(band, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.placeholder)
         if self.hud:
             self._paint_hud(p, vr)
         p.end()

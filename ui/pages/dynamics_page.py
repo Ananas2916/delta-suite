@@ -14,13 +14,14 @@ from PyQt6.QtWidgets import (
 from hub_core.analysis import vehicle_dynamics as vd
 from ui.theme import C, LAP_COLORS
 from ui.widgets import ValueTile, dspin, label, make_plot
+from hub_core.i18n import tr
 
 
 def _form(group_title: str, fields: list[tuple[str, object]]) -> QGroupBox:
-    g = QGroupBox(group_title)
+    g = QGroupBox(tr(group_title))
     f = QFormLayout(g)
     for name, w in fields:
-        f.addRow(name, w)
+        f.addRow(tr(name), w)
     return g
 
 
@@ -53,11 +54,11 @@ class PacejkaTab(QWidget):
         lay.addWidget(lw)
 
         grid = QGridLayout()
-        self.p_fy = make_plot("Lateral force per vertical load", "Fy N", "slip angle °")
-        self.p_fx = make_plot("Longitudinal force", "Fx N", "slip ratio %")
-        self.p_ell = make_plot("Friction ellipse (nominal Fz)", "Fx N", "Fy N")
+        self.p_fy = make_plot(tr("Lateral force per vertical load"), "Fy N", tr("slip angle °"))
+        self.p_fx = make_plot(tr("Longitudinal force"), "Fx N", "slip ratio %")
+        self.p_ell = make_plot(tr("Friction ellipse (nominal Fz)"), "Fx N", "Fy N")
         self.p_ell.setAspectLocked(True)
-        self.p_mu = make_plot("μ versus load", "μ", "Fz N")
+        self.p_mu = make_plot(tr("μ versus load"), "μ", "Fz N")
         grid.addWidget(self.p_fy, 0, 0)
         grid.addWidget(self.p_fx, 0, 1)
         grid.addWidget(self.p_ell, 1, 0)
@@ -99,10 +100,10 @@ class PacejkaTab(QWidget):
         k_peak, fx_peak = vd.peak_slip(lat.Fz0, lon)
         cs = float(vd.magic_formula(math.radians(0.1), lat.Fz0, lat) / 0.1)
         self.out.setText(
-            f"<b>At nominal Fz ({lat.Fz0:.0f} N)</b><br>"
-            f"Peak slip angle: {math.degrees(a_peak):.2f}°  ·  Fy max: {f_peak:.0f} N<br>"
-            f"Cornering stiffness: {cs:.0f} N/°<br>"
-            f"Peak slip ratio: {k_peak * 100:.1f}%  ·  Fx max: {fx_peak:.0f} N")
+            "<b>" + tr("At nominal Fz ({fz} N)", fz=f"{lat.Fz0:.0f}") + "</b><br>"
+            + tr("Peak slip angle: {a}°  ·  Fy max: {f} N", a=f"{math.degrees(a_peak):.2f}", f=f"{f_peak:.0f}") + "<br>"
+            + tr("Cornering stiffness: {cs} N/°", cs=f"{cs:.0f}") + "<br>"
+            + tr("Peak slip ratio: {k}%  ·  Fx max: {f} N", k=f"{k_peak * 100:.1f}", f=f"{fx_peak:.0f}"))
 
 
 class LoadTransferTab(QWidget):
@@ -132,22 +133,22 @@ class LoadTransferTab(QWidget):
         lay.addWidget(form)
 
         right = QVBoxLayout()
-        cond = QGroupBox("Condition")
+        cond = QGroupBox(tr("Condition"))
         cg = QGridLayout(cond)
         self.s_ay, self.l_ay = self._slider(-300, 300, 150), label()
         self.s_ax, self.l_ax = self._slider(-300, 150, 0), label()
         self.s_v, self.l_v = self._slider(0, 330, 180), label()
         for r, (n, s, l) in enumerate((("Lateral acc.", self.s_ay, self.l_ay), ("Longitudinal acc.", self.s_ax, self.l_ax),
                                         ("Speed", self.s_v, self.l_v))):
-            cg.addWidget(label(n), r, 0)
+            cg.addWidget(label(tr(n)), r, 0)
             cg.addWidget(s, r, 1)
             cg.addWidget(l, r, 2)
-        self.live = QCheckBox("Use live telemetry data")
+        self.live = QCheckBox(tr("Use live telemetry data"))
         cg.addWidget(self.live, 3, 0, 1, 3)
         right.addWidget(cond)
 
         car = QGridLayout()
-        self.tiles = [ValueTile(n, "--", 18) for n in ("Front left", "Front right",
+        self.tiles = [ValueTile(tr(n), "--", 18) for n in ("Front left", "Front right",
                                                        "Rear left", "Rear right")]
         for i, t in enumerate(self.tiles):
             car.addWidget(t, i // 2, i % 2)
@@ -190,10 +191,11 @@ class LoadTransferTab(QWidget):
             t.set(f"{f:.0f} N  ·  {f / vd.G:.0f} kg  ·  {f / total * 100:.1f}%",
                   C["red"] if f < 0.05 * total else None)
         self.summary.setText(
-            f"Downforce {wl.downforce:.0f} N ({wl.downforce / vd.G:.0f} kg) · Drag {wl.drag:.0f} N · "
-            f"Front distribution {(loads[0] + loads[1]) / total * 100:.1f}% · "
-            f"Front LLTD {wl.lltd_f * 100:.1f}% (higher = more understeer at mid-corner)."
-            + ("  ⚠ inside wheel almost unloaded: risk of lifting." if min(loads) < 0.05 * total else ""))
+            tr("Downforce {df} N ({kg} kg) · Drag {drag} N · Front distribution {fd}% · "
+               "Front LLTD {lltd}% (higher = more understeer at mid-corner).",
+               df=f"{wl.downforce:.0f}", kg=f"{wl.downforce / vd.G:.0f}", drag=f"{wl.drag:.0f}",
+               fd=f"{(loads[0] + loads[1]) / total * 100:.1f}", lltd=f"{wl.lltd_f * 100:.1f}")
+            + ("  " + tr("⚠ inside wheel almost unloaded: risk of lifting.") if min(loads) < 0.05 * total else ""))
 
 
 class KinematicsTab(QWidget):
@@ -228,7 +230,7 @@ class KinematicsTab(QWidget):
         lw.setLayout(left)
         lw.setFixedWidth(420)
         lay.addWidget(lw)
-        self.plot = make_plot("Geometry, instant centre and roll centre", "z mm", "y mm")
+        self.plot = make_plot(tr("Geometry, instant centre and roll centre"), "z mm", "y mm")
         self.plot.setAspectLocked(True)
         lay.addWidget(self.plot, 1)
         for sy, sz in self.pts.values():
@@ -264,15 +266,15 @@ class KinematicsTab(QWidget):
             p.plot([0], [r.roll_center_height], pen=None, symbol="o", symbolSize=13, symbolBrush=C["accent"])
         txt = []
         if r.instant_center:
-            txt.append(f"Instant centre: y = {r.instant_center[0]:.0f} mm, z = {r.instant_center[1]:.0f} mm")
-            txt.append(f"Front view swing arm (FVSA): {r.fvsa_length:.0f} mm")
-            txt.append(f"Camber gain: {r.camber_gain * 25.4:.3f} °/inch  ({r.camber_gain:.4f} °/mm)")
+            txt.append(tr("Instant centre: y = {y} mm, z = {z} mm", y=f"{r.instant_center[0]:.0f}", z=f"{r.instant_center[1]:.0f}"))
+            txt.append(tr("Front view swing arm (FVSA): {l} mm", l=f"{r.fvsa_length:.0f}"))
+            txt.append(tr("Camber gain: {i} °/inch  ({m} °/mm)", i=f"{r.camber_gain * 25.4:.3f}", m=f"{r.camber_gain:.4f}"))
         else:
-            txt.append("Parallel arms: instant centre at infinity, no camber gain.")
+            txt.append(tr("Parallel arms: instant centre at infinity, no camber gain."))
         if r.roll_center_height is not None:
-            txt.append(f"<b>Roll centre height: {r.roll_center_height:.1f} mm</b>")
-        self.out.setText("<br>".join(txt) + "<br><br>Red dot = roll centre, yellow cross = instant "
-                         "centre. Use the roll centre height in the Load transfer tab.")
+            txt.append("<b>" + tr("Roll centre height: {h} mm", h=f"{r.roll_center_height:.1f}") + "</b>")
+        self.out.setText("<br>".join(txt) + "<br><br>" + tr("Red dot = roll centre, yellow cross = instant "
+                                                            "centre. Use the roll centre height in the Load transfer tab."))
 
 
 class DynamicsPage(QWidget):
@@ -280,9 +282,9 @@ class DynamicsPage(QWidget):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
-        lay.addWidget(label("Vehicle & tyre dynamics", "h1"))
+        lay.addWidget(label(tr("Vehicle & tyre dynamics"), "h1"))
         tabs = QTabWidget()
-        tabs.addTab(PacejkaTab(), "Tyre (Pacejka)")
-        tabs.addTab(LoadTransferTab(hub), "Load transfer")
-        tabs.addTab(KinematicsTab(), "Suspension kinematics")
+        tabs.addTab(PacejkaTab(), tr("Tyre (Pacejka)"))
+        tabs.addTab(LoadTransferTab(hub), tr("Load transfer"))
+        tabs.addTab(KinematicsTab(), tr("Suspension kinematics"))
         lay.addWidget(tabs, 1)

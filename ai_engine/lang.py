@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from ai_engine.phrases_chatter import chatter_phrases_for
 from ai_engine.phrases_race import phrases_for
+from hub_core.i18n import tr
 
 
 @dataclass(frozen=True)
@@ -209,7 +210,7 @@ def is_supported(voice: str) -> bool:
 def voice_label(voice: str) -> str:
     """'im_nicola' -> 'Nicola — Italiano, male'."""
     key = _PREFIX.get(voice[:1].lower())
-    sex = {"f": "female", "m": "male"}.get(voice[1:2], "")
+    sex = {"f": tr("female"), "m": tr("male")}.get(voice[1:2], "")
     name = voice.split("_", 1)[-1].replace("_", " ").title()
     return f"{name} — {_FLAG.get(key, '?')}{', ' + sex if sex else ''}"
 

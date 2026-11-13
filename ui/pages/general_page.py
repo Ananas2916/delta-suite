@@ -36,6 +36,7 @@ from ui.widgets.onboard_hud import frame_image
 from ui.widgets.sectors import LapTimeTile
 from ui.widgets.timing_table import TimingTable
 from ui.widgets.view_panel import ViewPanel
+from hub_core.i18n import tr
 
 SESSION_NAMES = {
     ACSessionType.PRACTICE: "Practice", ACSessionType.QUALIFY: "Qualifying", ACSessionType.RACE: "Race",
@@ -88,7 +89,7 @@ class GeneralPage(QWidget):
 
         # --- header: session, flag, controls
         head = QHBoxLayout()
-        head.addWidget(label("Overview", "h1"))
+        head.addWidget(label(tr("Overview"), "h1"))
         head.addSpacing(12)
         self.session = label("", "dim")
         head.addWidget(self.session)
@@ -98,21 +99,22 @@ class GeneralPage(QWidget):
         self.video_btn = QPushButton()
         self.video_btn.setCheckable(True)
         self.video_btn.setChecked(hub.setting("onboard/video", True, bool))
-        self.video_btn.setToolTip("Onboard video from AC (same setting as the Onboard page)")
+        self.video_btn.setToolTip(tr("Onboard video from AC (same setting as the Onboard page)"))
         self.video_btn.toggled.connect(self._on_video_toggled)
         self._video_label()
-        self.demo_btn = QPushButton("Start demo")
+        self.demo_btn = QPushButton(tr("Start demo"))
         self.demo_btn.clicked.connect(self.start_demo)
-        self.tele_btn = QPushButton("Telemetry")
+        self.tele_btn = QPushButton(tr("Telemetry"))
         self.tele_btn.setObjectName("primary")
-        self.tele_btn.setToolTip("Start or stop the acquisition from AC, demo or replay")
+        self.tele_btn.setToolTip(tr("Start or stop the acquisition from AC, demo or replay"))
         self.tele_btn.clicked.connect(lambda: self.open_module.emit("telemetry"))
         for w in (self.video_btn, self.demo_btn, self.tele_btn):
             head.addWidget(w)
         root.addLayout(head)
         if hub.db_error:
-            root.addWidget(label(f"<span style='color:{C['yellow']}'>Archive not available ({hub.db_error}): "
-                                 "this session's data stays in memory only.</span>"))
+            root.addWidget(label(f"<span style='color:{C['yellow']}'>"
+                                 + tr("Archive not available ({err}): this session's data stays in memory only.",
+                                      err=hub.db_error) + "</span>"))
 
         # --- get started: what is ready and what is missing, until everything is green or hidden
         self.checklist = ChecklistCard()
@@ -125,13 +127,13 @@ class GeneralPage(QWidget):
 
         # --- numbers
         tiles = QHBoxLayout()
-        self.t_pos = ValueTile("Position", "-", 20)
-        self.t_lap = ValueTile("Lap", "-", 20)
+        self.t_pos = ValueTile(tr("Position"), "-", 20)
+        self.t_lap = ValueTile(tr("Lap"), "-", 20)
         self.t_cur = LapTimeTile()          # time, live delta to the best and splits
-        self.t_last = ValueTile("Last", "--:--.---", 20)
-        self.t_best = ValueTile("Best", "--:--.---", 20)
-        self.t_fuel = ValueTile("Fuel", "-- L", 20)
-        self.t_left = ValueTile("To go", "—", 20)
+        self.t_last = ValueTile(tr("Last"), "--:--.---", 20)
+        self.t_best = ValueTile(tr("Best"), "--:--.---", 20)
+        self.t_fuel = ValueTile(tr("Fuel"), "-- L", 20)
+        self.t_left = ValueTile(tr("To go"), "—", 20)
         for t in (self.t_pos, self.t_lap, self.t_cur, self.t_last, self.t_best, self.t_fuel, self.t_left):
             if t is not self.t_cur:     # same height as the time tile, which has the splits below
                 t.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -150,7 +152,7 @@ class GeneralPage(QWidget):
         self.panel.changed.connect(self._on_panel_changed)
         self.panel.view.setMinimumSize(400, 225)
         col1.addWidget(self.panel, 3)
-        car_card, cl = _card("CAR STATUS")
+        car_card, cl = _card(tr("CAR STATUS"))
         row = QHBoxLayout()
         self.car_view = CarStatusView()
         self.car_view.setMinimumSize(270, 250)
@@ -172,15 +174,15 @@ class GeneralPage(QWidget):
         # --- column 2: standings and GPS
         col2 = QVBoxLayout()
         col2.setSpacing(10)
-        timing_card, tl = _card("STANDINGS")
+        timing_card, tl = _card(tr("STANDINGS"))
         self.timing = TimingTable()
-        self.timing.setToolTip("Click a car to watch it in the onboard")
+        self.timing.setToolTip(tr("Click a car to watch it in the onboard"))
         self.timing.car_clicked.connect(self._on_car_click)
         tl.addWidget(self.timing, 1)
         col2.addWidget(timing_card, 1)
-        gps_card, gl = _card("GPS · TRACK POSITION")
+        gps_card, gl = _card(tr("GPS · TRACK POSITION"))
         self.gps = GPSView()
-        self.gps.setToolTip("Click a car to watch it in the onboard")
+        self.gps.setToolTip(tr("Click a car to watch it in the onboard"))
         self.gps.car_clicked.connect(self._on_car_click)
         gl.addWidget(self.gps, 1)
         col2.addWidget(gps_card, 1)
@@ -189,19 +191,19 @@ class GeneralPage(QWidget):
         # --- column 3: strategy and battery, proposals, radio
         col3 = QVBoxLayout()
         col3.setSpacing(10)
-        strat_card, sl = _card("STRATEGY")
+        strat_card, sl = _card(tr("STRATEGY"))
         self.strategy = label("", "dim")
         self.strategy.setTextFormat(Qt.TextFormat.RichText)
         sl.addWidget(self.strategy)
         col3.addWidget(strat_card)
-        self.hybrid = HybridCard("BATTERY")
+        self.hybrid = HybridCard(tr("BATTERY"))
         col3.addWidget(self.hybrid)
-        prop_card, self._prop_lay = _card("ENGINEER PROPOSALS")
+        prop_card, self._prop_lay = _card(tr("ENGINEER PROPOSALS"))
         self._prop_rows: list[QWidget] = []
-        self.no_props = label("No pending proposals", "dim")
+        self.no_props = label(tr("No pending proposals"), "dim")
         self._prop_lay.addWidget(self.no_props)
         col3.addWidget(prop_card)
-        radio_card, rl = _card("RADIO")
+        radio_card, rl = _card(tr("RADIO"))
         self.radio = QListWidget()
         self.radio.setWordWrap(True)
         self.radio.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -232,7 +234,7 @@ class GeneralPage(QWidget):
         return self.hub.onboard_feed
 
     def _video_label(self):
-        self.video_btn.setText("Video on" if self.video_btn.isChecked() else "Video off")
+        self.video_btn.setText(tr("Video on") if self.video_btn.isChecked() else tr("Video off"))
 
     def _on_video_toggled(self, on: bool):
         self.hub.settings.setValue("onboard/video", on)
@@ -250,7 +252,7 @@ class GeneralPage(QWidget):
         self._on_panel_changed()
 
     def _fill_cars(self, rows):
-        others = [(r.index, f"P{r.pos}  {r.driver or 'car ' + str(r.index)}") for r in rows if not r.is_player]
+        others = [(r.index, f"P{r.pos}  {r.driver or tr('car {n}', n=r.index)}") for r in rows if not r.is_player]
         if others == self._cars_key:
             return
         self._cars_key = others
@@ -298,10 +300,10 @@ class GeneralPage(QWidget):
             lay.setContentsMargins(0, 0, 0, 0)
             text = label(p.describe())
             text.setToolTip(p.reason)
-            ok = QPushButton("Confirm")
+            ok = QPushButton(tr("Confirm"))
             ok.setObjectName("primary")
             ok.clicked.connect(lambda _=False, pid=p.id: self.hub.apply_proposal(pid))
-            no = QPushButton("Discard")
+            no = QPushButton(tr("Discard"))
             no.clicked.connect(lambda _=False, pid=p.id: self.hub.discard_proposal(pid))
             lay.addWidget(text, 1)
             lay.addWidget(ok)
@@ -310,7 +312,7 @@ class GeneralPage(QWidget):
             self._prop_rows.append(row)
 
     def _on_radio(self, who: str, text: str):
-        item = QListWidgetItem(f"{time.strftime('%H:%M')}  {WHO_NAMES.get(who, who)}: {text}")
+        item = QListWidgetItem(f"{time.strftime('%H:%M')}  {tr(WHO_NAMES.get(who, who))}: {text}")
         item.setForeground(QColor(WHO_COLORS.get(who, C["text"])))
         self.radio.addItem(item)
         while self.radio.count() > RADIO_LINES:
@@ -386,10 +388,10 @@ class GeneralPage(QWidget):
 
     def _fill_head(self, s, info):
         if not self.hub.running or not info:
-            self.session.setText("Acquisition stopped: start an AC session from Telemetry, or the demo.")
+            self.session.setText(tr("Acquisition stopped: start an AC session from Telemetry, or the demo."))
             self.flag.setText("")
             return
-        kind = SESSION_NAMES.get(s.session_type, "") if s is not None else ""
+        kind = tr(SESSION_NAMES.get(s.session_type, "")) if s is not None and s.session_type in SESSION_NAMES else ""
         self.session.setText("  ·  ".join(x for x in (info.get("source", ""), f"{info.get('car', '')} @ "
                                                       f"{info.get('track', '')}", kind) if x))
         flag = rv.flag_status(self.hub, s)
@@ -411,7 +413,7 @@ class GeneralPage(QWidget):
             return
         self.t_pos.set(f"P{s.position}" if s.position else "-")
         total = f"/{prog.total}" if prog is not None and prog.total else ""
-        self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" PIT" if s.is_in_pit else ""))
+        self.t_lap.set(f"{s.completed_laps + 1}{total}" + (" " + tr("PIT") if s.is_in_pit else ""))
         self.t_cur.set(s.lap_time_ms, self.hub.live_lap.delta_s, rv.sector_views(self.hub, s))
         self.t_last.set(rs.fmt_ms(s.last_lap_ms))
         self.t_best.set(rs.fmt_ms(s.best_lap_ms), C["purple"])
@@ -434,31 +436,31 @@ class GeneralPage(QWidget):
     def _fill_strategy(self, s, fpl, prog):
         laps = self.hub.laps
         if s is None:
-            self.strategy.setText("No data")
+            self.strategy.setText(tr("No data"))
             return
         lines = []
         if fpl:
-            lines.append(f"Fuel use {fpl:.2f} L/lap  ·  ~{s.fuel / fpl:.1f} laps")
+            lines.append(tr("Fuel use {fpl} L/lap  ·  ~{n} laps", fpl=f"{fpl:.2f}", n=f"{s.fuel / fpl:.1f}"))
             if prog is not None and prog.to_go:
                 # at the finish: fuel left after the laps to go (the current lap counts in full)
                 margin = s.fuel - prog.to_go * fpl
                 col = C["green"] if margin >= fpl else C["yellow"] if margin >= 0 else C["red"]
-                verdict = (f"{margin:.1f} L spare" if margin >= 0 else
-                           f"{-margin:.1f} L short: a stop is needed")
-                lines.append(f"At the finish: <span style='color:{col}'>{verdict}</span>")
+                verdict = (tr("{l} L spare", l=f"{margin:.1f}") if margin >= 0 else
+                           tr("{l} L short: a stop is needed", l=f"{-margin:.1f}"))
+                lines.append(tr("At the finish:") + f" <span style='color:{col}'>{verdict}</span>")
         else:
-            lines.append("Fuel use: needs a full lap")
+            lines.append(tr("Fuel use: needs a full lap"))
         theo = rs.theoretical_best(laps) if laps else None
         if theo:
-            lines.append(f"Ideal lap <span style='color:{C['purple']}'>{rs.fmt_ms(theo)}</span>")
+            lines.append(tr("Ideal lap") + f" <span style='color:{C['purple']}'>{rs.fmt_ms(theo)}</span>")
         stint = rs.current_stint(laps) if laps else []
         if stint:
             valid = [l.lap_time_ms for l in stint if l.valid]
             avg = sum(valid) / len(valid) if valid else None
-            lines.append(f"Stint: {len(stint)} {'lap' if len(stint) == 1 else 'laps'}"
-                         + (f"  ·  average {rs.fmt_ms(avg)}" if avg else ""))
-        age = f"  ·  {len(stint)} {'lap' if len(stint) == 1 else 'laps'}" if stint else ""
-        lines.append(f"Tyres {s.tyre_compound.strip() or '—'}{age}")
-        lines.append("Wear " + " / ".join(f"{x:.1f}" for x in s.tyre_wear))
-        lines.append(f"Air {s.air_temp:.0f}°  ·  track {s.road_temp:.0f}°")
+            lines.append("Stint: " + (tr("1 lap") if len(stint) == 1 else tr("{n} laps", n=len(stint)))
+                         + ("  ·  " + tr("average {t}", t=rs.fmt_ms(avg)) if avg else ""))
+        age = "  ·  " + (tr("1 lap") if len(stint) == 1 else tr("{n} laps", n=len(stint))) if stint else ""
+        lines.append(tr("Tyres {compound}", compound=s.tyre_compound.strip() or "—") + age)
+        lines.append(tr("Wear") + " " + " / ".join(f"{x:.1f}" for x in s.tyre_wear))
+        lines.append(tr("Air {a}°  ·  track {t}°", a=f"{s.air_temp:.0f}", t=f"{s.road_temp:.0f}"))
         self.strategy.setText("<br>".join(lines))

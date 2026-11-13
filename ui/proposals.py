@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_engine.voice import PRIO_HIGH, PRIO_NORMAL
 from hub_core.ac.csp_bridge import BridgeState
 from ui.hub_data import KIND_CMD, Proposal
+from hub_core.i18n import tr
 
 
 class ProposalController:
@@ -21,7 +22,7 @@ class ProposalController:
 
     def add(self, p: Proposal):
         self.items.append(p)
-        self.hub.radio_log.emit("engineer", f"Proposal: {p.describe()} — {p.reason}")
+        self.hub.radio_log.emit("engineer", tr("Proposal: {what} — {reason}", what=p.describe(), reason=p.reason))
         r = self.hub.radio
         self._say(r.phrase("proposal", what=p.spoken(r.lang), reason=p.reason), PRIO_HIGH, 60)
         self.hub.proposals_changed.emit()
@@ -48,7 +49,7 @@ class ProposalController:
             return
         b = self.hub.bridge_state
         if p.kind == "setup" and not (b and b.setup_editable):
-            p.status, p.result = "in pits", "confirmed: applied as soon as you enter the pits"
+            p.status, p.result = "in pits", tr("confirmed: applied as soon as you enter the pits")
             self._say(self.hub.radio.phrase("at_box"), PRIO_NORMAL)
         else:
             self._send(p)
@@ -57,7 +58,7 @@ class ProposalController:
     def _send(self, p: Proposal):
         seq = self.hub.send_command(KIND_CMD[p.kind], p.value, p.name)
         if seq is None:
-            p.status, p.result = "error", "CSP app not connected"
+            p.status, p.result = "error", tr("CSP app not connected")
         else:
             p.status, p.seq = "sent", seq
         self.hub.proposals_changed.emit()
