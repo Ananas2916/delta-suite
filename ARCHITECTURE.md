@@ -21,7 +21,8 @@ ai_engine            engineer (Claude Code / API / custom command), MCP, radio, 
                      in radio.py (lap, fuel, tyres, flags) + race_calls.py (F1-game-style race calls,
                      phrases in phrases_race.py) + race_chatter.py (the "chatty" engineer between the
                      important calls, chattiness 0-2, phrases in phrases_chatter.py)
-hub_core/remote      remote access: rotating-code pairing (auth.py) and LAN web server + page (server.py, web/)
+hub_core/remote      remote access: rotating-code pairing (auth.py), web server on 0.0.0.0 (LAN and Tailscale,
+                     server.py) and the pit wall web app in plain HTML/CSS/JS (web/)
 ui                   PyQt6: shared state, threads, widgets, one page per module
 ```
 
@@ -85,7 +86,10 @@ Delta Suite installs and updates every file in the folder (*Pit & Setup → Upda
 | `DeltaSuite_Onboard_v6` | both (requests / frames) | `ONBOARD_LAYOUT` in DeltaSuiteOnboard.lua | `OnboardShared` in onboard_feed.py |
 
 To change a layout: same fields in the same order in both files (only 4-byte int/float and char[]), a new
-version in the mapping name and in the constant. The tests compare the Lua and Python layouts field by field.
+version in the mapping name and in the constant. `tests/test_layouts.py` compares the Lua and Python layouts byte
+for byte (types, offsets, total size, 4-byte alignment), checks that both sides open the same mapping name with
+the same version, and keeps a fingerprint per mapping name: a layout that changes under the same name fails with
+a reminder to bump the version.
 
 ## ui
 
@@ -99,8 +103,12 @@ version in the mapping name and in the constant. The tests compare the Lua and P
   controllers. `hub_data.py` serves the data to the MCP and validates proposals.
 - `first_run.py`: the get-started checklist on the Overview (pure logic; `widgets/checklist.py` draws it,
   `MainWindow._on_checklist` runs its buttons).
-- `remote_data.py`: `RemoteAccess`, the hub side of `hub_core/remote` (snapshot for the web page, actions
-  routed to the Qt thread); `remote_dialog.py` shows the 10-second code, the addresses and the paired devices.
+- `remote_data.py`: `RemoteAccess`, the hub side of `hub_core/remote`: snapshot for the web page, data on
+  request (setup, strategy, track line), radio audio, actions routed to the Qt thread (live adjustments become
+  proposals to confirm). Whatever touches the CSP app's mappings runs on the Qt thread and only while a page is
+  looking: the onboard reserves `onboard_feed.REMOTE_VIEW` while the page keeps asking for frames and releases it
+  3 s after the requests stop (JPEG, newest frame only, no queue). `remote_dialog.py` shows the 10-second code,
+  the LAN and Tailscale addresses and the paired devices.
 - `workers.py`: `TelemetryWorker` (acquisition thread: AC, demo or replay → samples, laps, bridge state
   every 0.1 s) and `Job` (blocking work off the UI thread).
 - `widgets/`: reusable pieces. `__init__` has the base widgets (Card, ValueTile, plots, tables);
@@ -122,7 +130,8 @@ Onboard / Overview (QTimer) ── hub.onboard_feed: requests and frames, straig
 ```
 
 There is a single video link (`hub.onboard_feed`), but only the visible page uses it: a hidden page sends no
-requests and disconnects when it closes, so AC renders the extra views only when needed.
+requests and disconnects when it closes, so AC renders the extra views only when needed. The remote pit wall
+reserves one view (`reserve`/`release`): pages do not overwrite it and hiding a page does not switch it off.
 
 ### Adding a page
 

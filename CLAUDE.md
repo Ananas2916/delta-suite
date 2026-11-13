@@ -94,7 +94,8 @@ hub_core/analysis/             # calculations, no AC: lap_recorder, lap_analysis
                                # live_lap (splits of the current lap and live delta to the best lap)
 hub_core/database.py           # DuckDB / SQLite (best_laps: all-time best per car and track)
 hub_core/i18n.py, locales/     # interface language: tr() + Italian catalog (tests/test_i18n.py checks it)
-hub_core/remote/               # remote pit wall: rotating-code pairing (auth.py), LAN web server + page
+hub_core/remote/               # remote pit wall: rotating-code pairing (auth.py), web server (LAN + Tailscale),
+                               # web app in plain JS (web/: index.html, app.js, app.css; on-demand onboard)
 ai_engine/race_engineer_agent.py  # API backend (stint summary)
 ai_engine/agent_cli.py         # Claude Code (or a custom command) in non-interactive mode
 ai_engine/mcp_server.py        # local HTTP MCP server with token (7 tools: live_state, session_laps,
@@ -153,6 +154,8 @@ docs/                          # logo and README screenshots
   branch): run the workflow by hand on the branch with the input `release` = `v0.6.0`, which creates the draft
   pointing at that commit (the tag is created on publish). Build locally only for debugging, then delete
   `dist\`.
+- Spec trimmed on 13/11/2026: espeak dictionaries only for the radio languages (`ESPEAK_DICTS`, checked by
+  `tests/test_build_spec.py`), no onnxruntime tools/quantization, no .py sources in datas: 176 → 161 MB.
 - Exe: `.\build_exe.ps1` → `dist\DeltaSuite.exe` (PyInstaller onefile, spec `DeltaSuite.spec`, workpath in
   `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow excluded on purpose: not needed.
 - Build from bash if PowerShell stops on PyInstaller's INFO lines on stderr:

@@ -250,6 +250,8 @@ class OnboardPage(QWidget):
             if now - self._beat_t > 0.5:
                 self._push_request()
             for k in range(self._n_views):
+                if self.feed.is_reserved(k):        # in use by the remote pit wall
+                    continue
                 frame = self.feed.new_frame(k)
                 if frame is not None:
                     img = frame_image(frame)

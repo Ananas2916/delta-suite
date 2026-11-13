@@ -210,7 +210,6 @@ CATALOG = {
     'Flags, yellows ahead with the distance, track clear': 'Bandiere, gialle davanti con la distanza, pista libera',
     'Folder with kokoro-v1.0.onnx and voices-v1.0.bin': 'Cartella con kokoro-v1.0.onnx e voices-v1.0.bin',
     'Follow the session and act as the engineer from another PC, tablet or phone': "Segui la sessione e fai l'ingegnere da un altro PC, tablet o telefono",
-    'Follow the session from another PC, a tablet or a phone on the same network: live data, standings, laps and radio, and act as the engineer (confirm proposals, talk to the driver, ask the AI engineer). Nothing to install there: just a browser.': "Segui la sessione da un altro PC, un tablet o un telefono sulla stessa rete: dati live, classifica, giri e radio, e fai l'ingegnere (conferma le proposte, parla al pilota, chiedi all'ingegnere AI). Lì non serve installare niente: basta un browser.",
     'forecast': 'previsione',
     'Friction ellipse (nominal Fz)': "Ellisse d'attrito (Fz nominale)",
     'From the tyre, brake and corner data, is the car understeering or oversteering? Propose the setup changes with propose_change.': 'Dai dati di gomme, freni e curve, la macchina è sottosterzante o sovrasterzante? Proponi le modifiche di setup con propose_change.',
@@ -624,4 +623,10 @@ CATALOG = {
     'μ versus load': 'μ in funzione del carico',
     '▲ NOSE': '▲ MUSO',
     '⚠ inside wheel almost unloaded: risk of lifting.': '⚠ ruota interna quasi scarica: rischio sollevamento.',
+    'Follow the session from another PC, a tablet or a phone: pit wall, onboard video, setup, strategy, laps and radio, and act as the engineer (confirm proposals, adjust the car, talk to the driver, ask the AI engineer). Nothing to install there: just a browser. The video is rendered in AC only while someone is watching it.': "Segui la sessione da un altro PC, un tablet o un telefono: muretto, video onboard, setup, strategia, giri e radio, e fai l'ingegnere (conferma le proposte, regola la macchina, parla al pilota, chiedi all'ingegnere AI). Lì non serve installare niente: basta un browser. Il video viene renderizzato in AC solo mentre qualcuno lo guarda.",
+    'Same network (LAN, lowest latency):': 'Stessa rete (LAN, latenza minima):',
+    'Through Tailscale (from anywhere):': 'Tramite Tailscale (da ovunque):',
+    'Tailscale not detected on this PC: install it to connect from outside the home network.': 'Tailscale non rilevato su questo PC: installalo per collegarti da fuori casa.',
+    'Your car': 'La tua auto',
+    'From the remote pit wall ({device})': 'Dal muretto remoto ({device})',
 }

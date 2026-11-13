@@ -224,6 +224,10 @@ class RadioVoice(threading.Thread):
         self._stop.set()
         self._q.put(_Item(-1, -1, "", 0.0))
 
+    def cached_wav(self, text: str) -> bytes | None:
+        """The WAV of a message already spoken (for the remote pit wall), if still in the cache."""
+        return self._cache.get(text)
+
     def _audio(self, text: str) -> bytes | None:
         if text in self._cache:
             self._cache.move_to_end(text)

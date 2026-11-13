@@ -20,6 +20,10 @@ The frame before the latest is always read: the latest may still be being writte
 before is closed and the app does not rewrite it for another SLOTS - 1 frames.
 
 The layout must stay identical to ONBOARD_LAYOUT in DeltaSuiteOnboard.lua.
+
+A view can be reserved by a client other than the visible page (the remote pit wall in a browser): the pages'
+requests never overwrite it and hiding a page does not switch it off. Releasing it switches it off again, and the
+mapping is closed when no view is left on, so AC renders nothing that nobody is watching.
 """
 
 from __future__ import annotations
@@ -76,6 +80,7 @@ TRANSPORT_FILE, TRANSPORT_MEMORY, TRANSPORT_SHARED = 0, 1, 2
 # tested on 18/10 (CSP 0.2.11, RTX 4060 Laptop): shared ~1 ms in AC at every quality, memory 5-9 ms,
 # file 6-13 ms at 1280×720; if the texture cannot be opened it falls back to memory by itself
 DEFAULT_TRANSPORT = TRANSPORT_SHARED
+REMOTE_VIEW = VIEWS - 1   # the view the remote pit wall reserves (a secondary one: at most 640×360)
 
 c_int, c_uint, c_float, c_char = ctypes.c_int, ctypes.c_uint, ctypes.c_float, ctypes.c_char
 
@@ -241,6 +246,8 @@ class OnboardFeed:
         self._last_read: list[int | None] = [None] * VIEWS
         self._shared: list = [None] * VIEWS       # SharedTextureReader opened on each view's handle
         self.shared_error: str | None = None      # why the shared texture does not work (memory is used)
+        self._reserved: dict[int, ViewRequest] = {}
+        self._latest: list[tuple[int, Frame] | None] = [None] * VIEWS
 
     @property
     def connected(self) -> bool:
@@ -256,7 +263,72 @@ class OnboardFeed:
         self.folder.mkdir(parents=True, exist_ok=True)
         return True
 
+    # ------------------------------------------------------------------ views reserved by another client
+    def reserve(self, view: int, req: ViewRequest) -> None:
+        """Keep `view` on with `req` whatever the pages request, until release()."""
+        self._reserved[view] = req
+
+    def release(self, view: int) -> None:
+        """Switch the reserved view off; closes the mapping if nothing else is on."""
+        if self._reserved.pop(view, None) is None:
+            return
+        self._latest[view] = None
+        if self._view is None:
+            return
+        try:
+            s = self._view.struct
+            s.viewEnabled[view] = 0
+            still_on = any(s.viewEnabled[k] for k in range(VIEWS))
+        except (OSError, ValueError):
+            still_on = False
+        if not still_on:
+            self.disconnect()
+
+    def is_reserved(self, view: int) -> bool:
+        return view in self._reserved
+
+    def heartbeat(self) -> bool:
+        """Keep the reserved views alive without touching the pages' views (at least once per second)."""
+        if not self._reserved or not self.connect():
+            return False
+        s = self._view.struct
+        if s.version != ONBOARD_VERSION:          # nobody has written the settings yet
+            s.version, s.endMarker = ONBOARD_VERSION, END_MARKER
+            s.folder = str(self.folder).encode("utf-8")[:259]
+            s.exposure, s.tonemap = DEFAULT_EXPOSURE, DEFAULT_TONEMAP
+            s.transport = TRANSPORT_MEMORY if self.shared_error else DEFAULT_TRANSPORT
+        self._apply_reserved(s)
+        s.hostBeat = (s.hostBeat + 1) & 0x7FFFFFFF
+        return True
+
+    def _apply_reserved(self, s) -> None:
+        for k, v in self._reserved.items():
+            s.viewCamera[k], s.viewCar[k] = v.camera, v.car
+            s.viewWidth[k], s.viewHeight[k], s.viewFps[k] = v.width, v.height, v.fps
+            s.viewEnabled[k] = 1
+
+    def latest_frame(self, view: int) -> tuple[int, Frame] | None:
+        """(frame number, frame) of the newest frame of the view, also if a page has already taken it."""
+        self.new_frame(view)
+        return self._latest[view]
+
+    # ------------------------------------------------------------------ link
     def disconnect(self) -> None:
+        """Switch off the pages' views; the mapping stays open while a reserved view is on."""
+        if self._view is not None and self._reserved:
+            try:
+                for k in range(VIEWS):
+                    if k not in self._reserved:
+                        self._view.struct.viewEnabled[k] = 0
+            except (OSError, ValueError):
+                pass
+            return
+        self.close()
+
+    def close(self) -> None:
+        """Close the link whatever is reserved (shutdown)."""
+        self._reserved.clear()
+        self._latest = [None] * VIEWS
         if self._view is not None:
             try:
                 for k in range(VIEWS):
@@ -284,6 +356,8 @@ class OnboardFeed:
             transport = TRANSPORT_MEMORY
         s.exposure, s.tonemap, s.transport = exposure, tonemap, transport
         for k in range(VIEWS):
+            if k in self._reserved:
+                continue
             v = views[k] if k < len(views) else None
             if v is None or not v.enabled:
                 s.viewEnabled[k] = 0
@@ -291,6 +365,7 @@ class OnboardFeed:
             s.viewCamera[k], s.viewCar[k] = v.camera, v.car
             s.viewWidth[k], s.viewHeight[k], s.viewFps[k] = v.width, v.height, v.fps
             s.viewEnabled[k] = 1
+        self._apply_reserved(s)
         s.hostBeat = (s.hostBeat + 1) & 0x7FFFFFFF
         return True
 
@@ -335,7 +410,7 @@ class OnboardFeed:
         s = self._view.struct
         handle = s.sharedHandleLo[view] | (s.sharedHandleHi[view] << 32)
         if handle:
-            return self._read_shared(view, handle)
+            return self._keep(view, n, self._read_shared(view, handle))
         size = s.dataSize[n % SLOTS] if view == 0 else 0
         in_memory = 0 < size <= DATA_MAX
         if in_memory:
@@ -350,11 +425,16 @@ class OnboardFeed:
         if s.frame[view] > n + 1:
             return None
         if not in_memory:
-            return Frame("jpg", data)
+            return self._keep(view, n, Frame("jpg", data))
         try:
-            return decode_dds(data)
+            return self._keep(view, n, decode_dds(data))
         except ValueError:
             return None
+
+    def _keep(self, view: int, n: int, frame: Frame | None) -> Frame | None:
+        if frame is not None and view in self._reserved:
+            self._latest[view] = (n, frame)
+        return frame
 
     def _read_shared(self, view: int, handle: int) -> Frame | None:
         """Current contents of the shared texture; on the first error fall back to memory/file."""

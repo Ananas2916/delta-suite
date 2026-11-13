@@ -81,9 +81,10 @@ with the button that fixes each item.
   agent only sees Delta Suite's data through a local MCP server; it cannot run commands or touch files.
 - **Six radio languages**: the chosen voice decides the spoken language (English US/UK, Italian, Spanish,
   French, Portuguese).
-- **Remote pit wall**: a friend on another PC, tablet or phone on your network can follow the session and
-  act as your engineer — confirm proposals, talk to you, ask the AI. Pairing uses a code that changes every
-  10 seconds; off by default.
+- **Remote pit wall**: a friend on another PC, tablet or phone — on your network or through Tailscale — opens
+  the whole suite in a browser: pit wall with GPS, onboard video, setup and live adjustments, strategy, laps
+  and the engineer chat with the radio audio. The video is rendered in AC only while someone watches it. Light
+  enough for an old laptop. Pairing uses a code that changes every 10 seconds; off by default.
 
 ## Quick start
 

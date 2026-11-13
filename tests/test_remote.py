@@ -124,3 +124,68 @@ def test_server_pairs_then_serves_state_and_actions():
         assert call(url, "/api/state", token=token)[0] == 401
     finally:
         srv.stop()
+
+
+class FullProvider(FakeProvider):
+    def video_frame(self, camera, car, quality, after, wait_s):
+        if camera == 9:
+            return {"status": "Video off"}
+        return {"seq": after + 1, "jpeg": b"\xff\xd8fake"}
+
+    def data(self, name):
+        return {"name": name} if name in ("setup", "strategy", "track") else None
+
+    def audio(self, seq):
+        return b"RIFFwav" if seq == 3 else None
+
+
+def test_web_app_files_and_on_demand_endpoints():
+    pairing = Pairing()
+    srv = RemoteServer(FullProvider(), pairing, port=18810, host="127.0.0.1")
+    assert srv.start()
+    url = f"http://127.0.0.1:{srv.port}"
+    try:
+        for path, ctype in (("/app.js", "text/javascript"), ("/app.css", "text/css")):
+            status, body, headers = call(url, path)
+            assert status == 200 and headers["Content-Type"].startswith(ctype) and body
+        assert call(url, "/../server.py")[0] == 404
+        for path in ("/api/frame", "/api/data/setup", "/api/audio?seq=3"):
+            assert call(url, path)[0] == 401                      # everything but the page needs the token
+        token = json.loads(call(url, "/api/pair", {"code": pairing.current_code()[0], "name": "Debian"})[1])["token"]
+        status, body, headers = call(url, "/api/frame?cam=1&car=-1&q=1&after=4", token=token)
+        assert status == 200 and headers["Content-Type"] == "image/jpeg" and headers["X-Frame-Seq"] == "5"
+        status, body, headers = call(url, "/api/frame?cam=9", token=token)
+        assert json.loads(body) == {"status": "Video off"}
+        assert json.loads(call(url, "/api/data/strategy", token=token)[1]) == {"name": "strategy"}
+        assert call(url, "/api/data/nothing", token=token)[0] == 404
+        assert call(url, "/api/frame?cam=x", token=token)[0] == 400
+        status, body, headers = call(url, "/api/audio?seq=3", token=token)
+        assert status == 200 and headers["Content-Type"] == "audio/wav" and body == b"RIFFwav"
+        assert call(url, "/api/audio?seq=4", token=token)[0] == 404
+    finally:
+        srv.stop()
+
+
+def test_minimal_provider_has_no_video():
+    pairing = Pairing()
+    srv = RemoteServer(FakeProvider(), pairing, port=18830, host="127.0.0.1")
+    assert srv.start()
+    url = f"http://127.0.0.1:{srv.port}"
+    try:
+        token = json.loads(call(url, "/api/pair", {"code": pairing.current_code()[0], "name": "x"})[1])["token"]
+        assert call(url, "/api/frame", token=token)[0] == 404
+        assert call(url, "/api/data/setup", token=token)[0] == 404
+    finally:
+        srv.stop()
+
+
+def test_lan_and_tailscale_addresses():
+    from hub_core.remote import server
+
+    assert server.address_kind("100.91.36.79") == "tailscale"
+    assert server.address_kind("100.127.255.254") == "tailscale"
+    assert server.address_kind("100.128.0.1") == "lan"           # outside 100.64.0.0/10
+    assert server.address_kind("192.168.1.20") == "lan"
+    kinds = [k for k, _ip in server.network_addresses()]
+    assert kinds == sorted(kinds, key=lambda k: k != "lan")      # LAN first
+    assert RemoteServer(FakeProvider(), Pairing()).host == "0.0.0.0"   # LAN and Tailscale alike

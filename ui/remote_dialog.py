@@ -35,9 +35,10 @@ class RemoteDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
 
-        intro = QLabel(tr("Follow the session from another PC, a tablet or a phone on the same network: live data, "
-                       "standings, laps and radio, and act as the engineer (confirm proposals, talk to the driver, "
-                       "ask the AI engineer). Nothing to install there: just a browser."))
+        intro = QLabel(tr("Follow the session from another PC, a tablet or a phone: pit wall, onboard video, setup, "
+                       "strategy, laps and radio, and act as the engineer (confirm proposals, adjust the car, talk to "
+                       "the driver, ask the AI engineer). Nothing to install there: just a browser. The video is "
+                       "rendered in AC only while someone is watching it."))
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {theme.C['dim']};")
         lay.addWidget(intro)
@@ -115,8 +116,7 @@ class RemoteDialog(QDialog):
         for w in (self.code, self.countdown, self.code_hint, self.copy):
             w.setVisible(on)
         if on:
-            urls = self.remote.server.urls()
-            self.url.setText(tr("On the other device open:") + "  " + "   ·   ".join(f"<b>{u}</b>" for u in urls))
+            self.url.setText(self._address_text(self.remote.server.labelled_urls()))
         elif not self.remote.server.error:
             self.url.setText(tr("Off: nobody can connect."))
         self.devices.clear()
@@ -130,6 +130,22 @@ class RemoteDialog(QDialog):
         self.revoke_all.setEnabled(self.revoke.isEnabled())
         self._tick()
 
+    @staticmethod
+    def _address_text(urls: list[tuple[str, str]]) -> str:
+        """The addresses to open, LAN and Tailscale on separate lines."""
+        lan = [u for kind, u in urls if kind == "lan"]
+        ts = [u for kind, u in urls if kind == "tailscale"]
+        lines = [tr("On the other device open:")]
+        if lan:
+            lines.append(tr("Same network (LAN, lowest latency):") + "  " + "   ·   ".join(f"<b>{u}</b>" for u in lan))
+        if ts:
+            lines.append(tr("Through Tailscale (from anywhere):") + "  " + "   ·   ".join(f"<b>{u}</b>" for u in ts))
+        else:
+            lines.append(f"<span style='color:{theme.C['dim']}'>"
+                         + tr("Tailscale not detected on this PC: install it to connect from outside the home network.")
+                         + "</span>")
+        return "<br>".join(lines)
+
     def _tick(self):
         if not self.remote.enabled:
             return
@@ -141,9 +157,9 @@ class RemoteDialog(QDialog):
         self.countdown.setValue(int(1000 * left / step))
 
     def _copy(self):
-        urls = self.remote.server.urls()
+        urls = self.remote.server.labelled_urls()
         if urls:
-            QGuiApplication.clipboard().setText(urls[0])
+            QGuiApplication.clipboard().setText(urls[0][1])
 
     def _revoke(self):
         item = self.devices.currentItem()

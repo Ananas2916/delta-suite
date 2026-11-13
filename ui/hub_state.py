@@ -375,7 +375,7 @@ class HubState(QObject):
     def shutdown(self):
         self._closed = True
         self.stop()
-        self.onboard_feed.disconnect()
+        self.onboard_feed.close()
         self.engineer.shutdown()
         self.radio.shutdown()
         self.mcp.stop()

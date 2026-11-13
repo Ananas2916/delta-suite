@@ -284,3 +284,25 @@ def test_real_lap_reads_new_fields():
     assert len(s.car_damage) == 5 and len(s.tyre_dirt) == 4 and s.pit_limiter is False
     d = cs.status_dict(s, info)
     assert set(d["damage"]) == set(cs.DAMAGE_ZONES)
+
+
+@windows_only
+def test_reserved_view_survives_the_pages_and_closes_when_released(tmp_path):
+    shared = create_mapping(ob.ONBOARD_TAG.replace("_v", "_test_v"), ob.OnboardShared)
+    feed = ob.OnboardFeed(tmp_path)
+    from hub_core.ac import win32
+    feed._view = win32.MappedView.__new__(win32.MappedView)     # attach to the test mapping
+    feed._view.struct, feed._view.ptr, feed._view.close = shared, ctypes.addressof(shared), lambda: None
+    remote = ob.ViewRequest(True, 2, -1, 640, 360, 15)
+    feed.reserve(ob.REMOTE_VIEW, remote)
+    assert feed.heartbeat() and shared.viewEnabled[ob.REMOTE_VIEW] == 1 and shared.viewCamera[ob.REMOTE_VIEW] == 2
+    # a page asks for all four views: the reserved one keeps the remote's camera
+    page = [ob.ViewRequest(True, 5, -1, 960, 540, 20)] * ob.VIEWS
+    assert feed.request(page)
+    assert shared.viewCamera[0] == 5 and shared.viewCamera[ob.REMOTE_VIEW] == 2
+    # the page is hidden: its views go off, the remote one stays and the link stays open
+    feed.disconnect()
+    assert feed.connected and shared.viewEnabled[0] == 0 and shared.viewEnabled[ob.REMOTE_VIEW] == 1
+    # released: nothing left on, the link is closed
+    feed.release(ob.REMOTE_VIEW)
+    assert not feed.connected and shared.viewEnabled[ob.REMOTE_VIEW] == 0
