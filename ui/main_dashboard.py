@@ -31,7 +31,7 @@ from ui.widgets.live_strip import LiveStrip
 from ui.widgets.topbar import TopBar
 
 APP_NAME = "Delta Suite"
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 
 # view opened by each mode
 MODE_PAGES = {"driver": "race", "engineer": "box", "analysis": "analysis"}

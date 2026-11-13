@@ -1,3 +1,19 @@
+## Delta Suite 0.6.2 — a new look
+
+**New layout**: a top bar with the views (Home, Race, Onboard, Telemetry, Pit & Setup, Strategy, Analysis,
+Engineer, Ambient) replaces the sidebar; a live strip shows position, lap and delta, gaps ahead and behind with
+the trend, fuel margin and battery. Mode, language, theme and remote access moved to *Settings* (⚙).
+
+- **Home**: ready to drive, status of everything Delta Suite needs, last session, personal bests, the track.
+- **Race**: the track coloured where you gain or lose against your best lap, corner chips that explain why,
+  standings, radio with suggested questions, car status, and a race timeline with the forecast to the finish.
+- **Ambient**: full screen delta and gap ahead, for a second monitor.
+- **Strategy**: no-stop, one-stop and two-stop plans compared.
+
+To go back to the previous look, download 0.6.1.
+
+---
+
 ## Delta Suite 0.6.1 — the whole pit wall in a browser
 
 **Remote pit wall, now the full suite**: from another PC, a tablet or a phone — on your home network or from
