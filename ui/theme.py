@@ -71,6 +71,12 @@ def saved_theme() -> str:
 THEME = saved_theme()
 C: dict = dict(THEMES[THEME])
 
+def rgba(hex_color: str, alpha: float) -> str:
+    """Stylesheet colour with transparency ("#RRGGBBAA" would be read by Qt as #AARRGGBB)."""
+    c = QColor(hex_color)
+    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {int(alpha * 255)})"
+
+
 LAP_COLORS = ["#3d9bff", "#ff4d4d", "#2ecc71", "#f1c40f", "#b05cff", "#ff9f43"]
 
 

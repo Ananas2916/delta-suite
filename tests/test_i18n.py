@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_KEYS = [
     ("hub_core/ac/onboard_feed.py", "CAMERAS"), ("hub_core/ac/onboard_feed.py", "CAMERA_GROUPS"),
     ("hub_core/ac/onboard_feed.py", "QUALITIES"), ("hub_core/analysis/car_status.py", "CORNERS"),
-    ("hub_core/analysis/car_status.py", "DAMAGE_ZONES"), ("ui/navigation.py", "GENERAL"), ("ui/navigation.py", "SECTIONS"),
+    ("hub_core/analysis/car_status.py", "DAMAGE_ZONES"), ("ui/navigation.py", "VIEWS"),
 ]
 
 
@@ -51,11 +51,9 @@ def test_data_tables_are_translated():
     from hub_core.analysis import car_status as cs
     from ui import navigation as nav
     texts = [n for _k, n in ob.CAMERAS] + [g for g, _ in ob.CAMERA_GROUPS] + [q[0] for q in ob.QUALITIES]
-    texts += list(cs.CORNERS) + list(cs.DAMAGE_ZONES) + [nav.GENERAL[1], nav.GENERAL[2]]
-    for section, modules in nav.SECTIONS:
-        texts.append(section)
-        for _key, name, desc, replaces in modules:
-            texts += [name, desc, replaces]
+    texts += list(cs.CORNERS) + list(cs.DAMAGE_ZONES)
+    for _key, name, desc in nav.VIEWS:
+        texts += [name, desc]
     assert [t for t in texts if t not in it.CATALOG] == []
 
 

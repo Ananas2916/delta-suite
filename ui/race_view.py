@@ -232,3 +232,101 @@ def video_placeholder(hub, main: bool, has_image: bool, video_on: bool, view: in
     if not has_image:
         return tr("Waiting for the first frame…")
     return ""
+
+
+# ------------------------------------------------------------------ live strip (top of the live views)
+
+class GapTrend:
+    """Gap to the car ahead and behind lap by lap, to say whether it is closing ("-0.3/lap")."""
+
+    def __init__(self):
+        self._lap = -1
+        self._prev: dict[str, float] = {}     # driver -> gap at the previous lap
+        self.trend: dict[str, float] = {}     # driver -> change per lap (negative = closing)
+
+    def reset(self):
+        self.__init__()
+
+    def update(self, lap: int, gaps: dict[str, float]) -> None:
+        if lap == self._lap:
+            return
+        if self._lap >= 0 and lap == self._lap + 1:
+            self.trend = {d: g - self._prev[d] for d, g in gaps.items() if d in self._prev}
+        else:
+            self.trend = {}
+        self._lap, self._prev = lap, dict(gaps)
+
+
+def _neighbours(rows):
+    """(row ahead, my row, row behind) in the standings, or Nones."""
+    me = next((i for i, r in enumerate(rows) if r.is_player), None)
+    if me is None:
+        return None, None, None
+    return (rows[me - 1] if me > 0 else None, rows[me], rows[me + 1] if me + 1 < len(rows) else None)
+
+
+def _trend_text(change: float | None, ahead: bool) -> str:
+    if change is None or abs(change) < 0.05:
+        return tr("steady") if change is not None else ""
+    closing = change < 0
+    if ahead:
+        return tr("closing {s} a lap", s=f"{abs(change):.1f}") if closing else tr("losing {s} a lap", s=f"{abs(change):.1f}")
+    return tr("he closes {s} a lap", s=f"{abs(change):.1f}") if closing else tr("you pull {s} a lap", s=f"{abs(change):.1f}")
+
+
+def strip_values(hub, trend: GapTrend) -> dict:
+    """What the live strip shows: position, lap and delta, gaps ahead/behind with the trend, fuel, battery, flag.
+    Values are text plus a colour key ("good", "bad", "warn" or "")."""
+    s = hub.last_sample
+    out = {"pos": "–", "lap_title": tr("Lap"), "lap_time": "–", "delta": "", "delta_kind": "",
+           "ahead_title": tr("Ahead"), "ahead": "–", "ahead_sub": "", "behind_title": tr("Behind"), "behind": "–",
+           "behind_sub": "", "fuel": "–", "fuel_sub": "", "fuel_kind": "", "battery": None, "battery_sub": "",
+           "flag": None}
+    if s is None or s.status != ACStatus.LIVE:
+        return out
+    prog = progress(hub, s)
+    out["pos"] = f"P{s.position}" if s.position else "–"
+    lap_text = prog.lap_text if prog is not None and hub.is_race else str(s.completed_laps + 1)
+    out["lap_title"] = tr("Lap {n}", n=lap_text)
+    out["lap_time"] = fmt_ms(s.lap_time_ms)[:-2] if s.lap_time_ms > 0 else "–"
+    d = hub.live_lap.delta_s
+    if d is not None:
+        out["delta"] = tr("{d} on best", d=f"{d:+.2f}")
+        out["delta_kind"] = "good" if d <= 0 else "bad"
+
+    ahead, me, behind = _neighbours(list(hub.standings_rows))
+    gaps = {}
+    if ahead is not None and me is not None and me.interval_s is not None:
+        gaps[ahead.driver] = me.interval_s
+    if behind is not None and behind.interval_s is not None:
+        gaps[behind.driver] = behind.interval_s
+    trend.update(s.completed_laps, gaps)
+    if ahead is not None:
+        out["ahead_title"] = tr("Ahead · {name}", name=ahead.driver)
+        if me is not None and me.interval_s is not None:
+            out["ahead"] = f"+{me.interval_s:.1f}"
+        out["ahead_sub"] = _trend_text(trend.trend.get(ahead.driver), True)
+    if behind is not None:
+        out["behind_title"] = tr("Behind · {name}", name=behind.driver)
+        if behind.interval_s is not None:
+            out["behind"] = f"−{behind.interval_s:.1f}"
+        out["behind_sub"] = _trend_text(trend.trend.get(behind.driver), False)
+
+    out["fuel"] = f"{s.fuel:.1f} L"
+    fpl = fuel_per_lap(hub.laps) if hub.laps else None
+    if fpl:
+        laps_left = s.fuel / fpl
+        if prog is not None and prog.to_go:
+            margin = laps_left - prog.to_go
+            out["fuel_sub"] = tr("{n} laps of margin", n=f"{margin:+.1f}")
+            out["fuel_kind"] = "good" if margin >= 1 else "warn" if margin >= 0 else "bad"
+        else:
+            out["fuel_sub"] = tr("{n} laps of fuel", n=f"{laps_left:.1f}")
+    hy = cs.hybrid_state(s, hub.session_info)
+    if hy is not None:
+        out["battery"] = f"{hy.charge * 100:.0f}%"
+        out["battery_sub"] = (tr("deploying") if hy.deploying else tr("charging") if hy.charging
+                              else tr("full: ready to attack") if hy.charge > 0.8 else "")
+    flag = flag_status(hub, s)
+    out["flag"] = (flag.kind, flag.text) if flag is not None else ("green", tr("Green"))
+    return out

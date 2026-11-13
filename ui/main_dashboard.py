@@ -1,36 +1,40 @@
-"""Main hub window: sidebar with the modules and stacked pages."""
+"""Main hub window: top bar with the views, the live strip, the views stacked below."""
 
 from __future__ import annotations
 
 import os
 import sys
 
-from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QSettings, QTimer
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-    QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QApplication, QFrame, QMainWindow, QMessageBox, QScrollArea, QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from hub_core.ac import csp_bridge
-from hub_core.i18n import LANGUAGES, language, set_language, tr
+from hub_core.i18n import set_language, tr
+from ui import race_view as rv
 from ui import theme
-from ui.hub_state import MODES, HubState
-from ui.navigation import GENERAL, SECTIONS
+from ui.hub_state import HubState
+from ui.navigation import LIVE_VIEWS, VIEWS
 from ui.pages.analysis_page import AnalysisPage
 from ui.pages.box_page import BoxPage
 from ui.pages.dynamics_page import DynamicsPage
 from ui.pages.engineer_page import EngineerPage
 from ui.pages.general_page import GeneralPage
+from ui.pages.home_page import HomePage
 from ui.pages.onboard import OnboardPage
+from ui.pages.settings_page import SettingsPage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
+from ui.workers import SOURCE_AC, SOURCE_REPLAY
+from ui.widgets.live_strip import LiveStrip
+from ui.widgets.topbar import TopBar
 
 APP_NAME = "Delta Suite"
 VERSION = "0.6.1"
 
-# page opened by each mode
-MODE_PAGES = {"driver": "telemetry", "engineer": "box", "analysis": "analysis"}
+# view opened by each mode
+MODE_PAGES = {"driver": "race", "engineer": "box", "analysis": "analysis"}
 
 
 class MainWindow(QMainWindow):
@@ -40,122 +44,76 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(theme.app_icon())
         self.resize(1500, 920)
         self.hub = HubState()
+        self.ambient = None
 
         central = QWidget()
-        lay = QHBoxLayout(central)
+        lay = QVBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-
-        side = QWidget()
-        side.setFixedWidth(220)
-        sl = QVBoxLayout(side)
-        sl.setContentsMargins(0, 0, 0, 0)
-        brand = QLabel("  DELTA SUITE")
-        brand.setStyleSheet(f"background: {theme.C['panel']}; color: {theme.C['accent']}; font-size: 15pt;"
-                            "font-weight: 800; padding: 16px 8px 4px 8px; letter-spacing: 2px;")
-        sl.addWidget(brand)
-        mode_box = QWidget()
-        mode_box.setStyleSheet(f"background: {theme.C['panel']};")
-        ml = QVBoxLayout(mode_box)
-        ml.setContentsMargins(12, 6, 12, 8)
-        ml.addWidget(QLabel(tr("MODE")))
-        self.mode = QComboBox()
-        for k, v in MODES.items():
-            self.mode.addItem(tr(v), k)
-        self.mode.setToolTip(tr("Driver: radio and voice on · Engineer: adjustments and setup · Analysis: archive"))
-        ml.addWidget(self.mode)
-        ml.addWidget(QLabel(tr("LANGUAGE")))
-        self.language = QComboBox()
-        for code, name in LANGUAGES.items():
-            self.language.addItem(name, code)
-        self.language.setCurrentIndex(max(0, self.language.findData(language())))
-        self.language.setToolTip(tr("Interface language (applied at the next start). The radio speaks the "
-                                    "language of the chosen voice."))
-        self.language.currentIndexChanged.connect(self._on_language)
-        ml.addWidget(self.language)
-        ml.addWidget(QLabel(tr("THEME")))
-        self.theme = QComboBox()
-        for key, t in theme.THEMES.items():
-            self.theme.addItem(tr(t["name"]), key)
-        self.theme.setCurrentIndex(max(0, self.theme.findData(theme.THEME)))
-        self.theme.setToolTip(tr("Look of the interface (applied at the next start)"))
-        self.theme.currentIndexChanged.connect(self._on_theme)
-        ml.addWidget(self.theme)
-        sl.addWidget(mode_box)
-        self.nav = QListWidget()
-        self.nav.setObjectName("sidebar")
-        sl.addWidget(self.nav, 1)
-        self.remote_btn = QPushButton()
-        self.remote_btn.setToolTip(tr("Follow the session and act as the engineer from another PC, tablet or phone"))
-        self.remote_btn.clicked.connect(self._open_remote)
-        sl.addWidget(self.remote_btn)
-        lay.addWidget(side)
-
+        self.topbar = TopBar(VIEWS)
+        self.topbar.view_selected.connect(self.open_page)
+        self.topbar.settings_clicked.connect(lambda: self.open_page("settings"))
+        self.topbar.ptt.connect(self.hub.set_ptt)
+        lay.addWidget(self.topbar)
+        self.strip = LiveStrip()
+        lay.addWidget(self.strip)
         self.stack = QStackedWidget()
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
         self._areas: dict[str, QScrollArea] = {}
-        self.general = GeneralPage(self.hub)
+        self.trend = rv.GapTrend()
+        self._strip_titles = {"pos": tr("Pos"), "fuel": tr("Fuel"), "battery": tr("Battery")}
+        self.home = HomePage(self.hub)
+        self.general = GeneralPage(self.hub, with_checklist=False)
         self.telemetry = TelemetryPage(self.hub)
         self.engineer = EngineerPage(self.hub)
+        self.analysis = QTabWidget()
+        self.analysis.setDocumentMode(True)
+        self.analysis.addTab(AnalysisPage(self.hub), tr("Lap analysis"))
+        self.analysis.addTab(DynamicsPage(self.hub), tr("Vehicle dynamics"))
+        self.settings_page = SettingsPage(self.hub, VERSION)
         self.pages = {
-            "general": self.general,
-            "telemetry": self.telemetry,
+            "home": self.home,
+            "race": self.general,
             "onboard": OnboardPage(self.hub),
-            "engineer": self.engineer,
+            "telemetry": self.telemetry,
             "box": BoxPage(self.hub),
-            "analysis": AnalysisPage(self.hub),
             "strategy": StrategyPage(self.hub),
-            "dynamics": DynamicsPage(self.hub),
+            "analysis": self.analysis,
+            "engineer": self.engineer,
+            "settings": self.settings_page,
         }
-        self._add_nav(GENERAL[0], tr(GENERAL[1]), tr(GENERAL[2]))
-        for section, modules in SECTIONS:
-            head = QListWidgetItem(tr(section).upper())
-            head.setFlags(Qt.ItemFlag.NoItemFlags)
-            head.setSizeHint(QSize(200, 34))
-            f = head.font()
-            f.setPointSize(8)
-            f.setBold(True)
-            head.setFont(f)
-            head.setForeground(QColor(theme.C["dim"]))
-            self.nav.addItem(head)
-            for key, name, desc, replaces in modules:
-                self._add_nav(key, tr(name), tr(desc) + "\n" + tr("Replaces: {what}", what=tr(replaces)))
         for key, page in self.pages.items():
             self.stack.addWidget(self._scrollable(key, page))
-        self.nav.currentItemChanged.connect(self._on_nav)
-        self.open_page("general")
+        self.current = ""
+        self.open_page("home")
 
-        self.mode.setCurrentIndex(max(0, self.mode.findData(self.hub.mode)))
-        self.mode.currentIndexChanged.connect(self._on_mode)
-
+        self.home.start_ac.connect(lambda: self._start(SOURCE_AC))
+        self.home.start_demo.connect(self._start_demo)
+        self.home.open_recording.connect(lambda: self._start(SOURCE_REPLAY))
+        self.home.open_view.connect(self.open_page)
+        self.home.action.connect(self._on_checklist)
         self.general.open_module.connect(self.open_page)
-        self.general.start_demo.connect(self.telemetry.start_demo)     # the demo starts while staying on the Overview
+        self.general.start_demo.connect(self.telemetry.start_demo)
         self.general.checklist_action.connect(self._on_checklist)
+        self.settings_page.mode_changed.connect(self._on_mode)
+        self.settings_page.language_changed.connect(self._on_language)
+        self.settings_page.theme_changed.connect(self._on_theme)
+        self.settings_page.open_remote.connect(self._open_remote)
+        self.settings_page.install_csp.connect(lambda: self._on_checklist("install_csp"))
 
-        self.hub.remote.changed.connect(self._remote_label)
-        self._remote_label()
-
-        self.status_label = QLabel(tr("Ready"))
-        self.statusBar().addWidget(self.status_label, 1)
-        self.hub.status.connect(lambda text, ok: self.status_label.setText(text))
+        self.statusBar().showMessage(tr("Ready"))
+        self.hub.status.connect(lambda text, ok: self.statusBar().showMessage(text))
         self.hub.lap_completed.connect(
             lambda lap: self.statusBar().showMessage(tr("Lap {n} saved to the archive", n=lap.lap_no), 4000))
 
-    def _remote_label(self):
-        r = self.hub.remote
-        n = len(r.pairing.device_list())
-        self.remote_btn.setText("  " + (tr("Remote access: on") if r.enabled else tr("Remote access: off"))
-                                + (f" · {n}" if r.enabled and n else ""))
-        color = theme.C["green"] if r.enabled else theme.C["dim"]
-        self.remote_btn.setStyleSheet(f"text-align: left; padding: 10px 12px; border: 0; border-radius: 0; "
-                                      f"background: {theme.C['panel']}; color: {color}; font-weight: 600;")
+        self.hub.session_changed.connect(lambda _info: self.trend.reset())
+        self.strip_timer = QTimer(self)
+        self.strip_timer.timeout.connect(self._refresh_strip)
+        self.strip_timer.start(200)
 
-    def _open_remote(self):
-        from ui.remote_dialog import RemoteDialog
-        RemoteDialog(self.hub, self).exec()
-
+    # ------------------------------------------------------------- views
     def _scrollable(self, key: str, page: QWidget) -> QScrollArea:
         """Page in a scroll area: on a narrow screen (or scaled to 150%) the window never asks for more
         width than the screen, at most a scroll bar appears."""
@@ -166,25 +124,50 @@ class MainWindow(QMainWindow):
         self._areas[key] = area
         return area
 
-    def _add_nav(self, key: str, name: str, tip: str = ""):
-        it = QListWidgetItem(name)
-        it.setData(Qt.ItemDataRole.UserRole, key)
-        it.setToolTip(tip)
-        it.setSizeHint(QSize(200, 44))
-        self.nav.addItem(it)
-
-    def _on_nav(self, item, _previous):
-        if item is not None:
-            self.stack.setCurrentWidget(self._areas[item.data(Qt.ItemDataRole.UserRole)])
-
     def open_page(self, key: str):
-        for row in range(self.nav.count()):
-            if self.nav.item(row).data(Qt.ItemDataRole.UserRole) == key:
-                self.nav.setCurrentRow(row)
-                return
+        if key == "general":                 # old name of the Race view
+            key = "race"
+        if key == "ambient":
+            self.open_ambient()
+            return
+        if key == "dynamics":
+            key = "analysis"
+            self.analysis.setCurrentIndex(1)
+        if key not in self._areas:
+            return
+        self.current = key
+        self.stack.setCurrentWidget(self._areas[key])
+        self.topbar.set_view(key)
+        self.strip.setVisible(key in LIVE_VIEWS)
+        self._refresh_strip()
 
-    def _on_mode(self):
-        mode = self.mode.currentData()
+    def open_ambient(self):
+        from ui.ambient import AmbientWindow
+        if self.ambient is None or not self.ambient.isVisible():
+            self.ambient = AmbientWindow(self.hub)
+        screens = QApplication.screens()
+        if len(screens) > 1:                     # on the second monitor when there is one
+            other = next((sc for sc in screens if sc is not self.screen()), screens[0])
+            self.ambient.setGeometry(other.geometry())
+        self.ambient.showFullScreen()
+        self.ambient.raise_()
+
+    def _refresh_strip(self):
+        hub = self.hub
+        v = rv.strip_values(hub, self.trend)
+        self.topbar.set_flag(v["flag"] if hub.running else None)
+        info = hub.session_info
+        self.topbar.set_session(" · ".join(x for x in (info.get("session"), info.get("track"), info.get("car")) if x)
+                                if hub.running else "")
+        if self.strip.isVisible():
+            self.strip.update_from(v, self._strip_titles)
+
+    # ------------------------------------------------------------- settings
+    def _open_remote(self):
+        from ui.remote_dialog import RemoteDialog
+        RemoteDialog(self.hub, self).exec()
+
+    def _on_mode(self, mode: str):
         self.hub.set_mode(mode)
         self.open_page(MODE_PAGES[mode])
         tips = {"driver": "Driver mode: radio and engineer voice on",
@@ -192,16 +175,14 @@ class MainWindow(QMainWindow):
                 "analysis": "Analysis mode: lap comparison and archive, radio off"}
         self.statusBar().showMessage(tr(tips[mode]), 5000)
 
-    def _on_language(self):
-        code = self.language.currentData()
+    def _on_language(self, code: str):
         if code == self.hub.setting("ui/language", "en"):
             return
         self.hub.settings.setValue("ui/language", code)
         QMessageBox.information(self, "Delta Suite", tr("The new language is applied the next time you start "
                                                         "Delta Suite."))
 
-    def _on_theme(self):
-        key = self.theme.currentData()
+    def _on_theme(self, key: str):
         if key == self.hub.setting("ui/theme", theme.DEFAULT_THEME):
             return
         self.hub.settings.setValue("ui/theme", key)
@@ -209,7 +190,7 @@ class MainWindow(QMainWindow):
                                                         "Delta Suite."))
 
     def _on_checklist(self, key: str):
-        """Buttons of the get-started list on the Overview."""
+        """Buttons of the status list on Home (and of the old get-started list)."""
         if key == "install_csp":
             try:
                 path = csp_bridge.install_app()
@@ -227,13 +208,29 @@ class MainWindow(QMainWindow):
             self.engineer.tabs.setCurrentIndex(2)
             if key == "download_voice":
                 self.engineer.download_voice()
-        self.general.refresh_checklist()
+        elif key == "remote":
+            self._open_remote()
+        self.home.refresh()
+
+    # ------------------------------------------------------------- acquisition
+    def _start(self, source: str):
+        """Start (or stop) from Home: AC live or a recording; then the Race view."""
+        t = self.telemetry
+        if self.hub.running:
+            t._toggle()
+            return
+        t.source.setCurrentIndex(t.source.findData(source))
+        t._toggle()
+        if self.hub.running:
+            self.open_page("race")
 
     def _start_demo(self):
-        self.open_page("telemetry")
         self.telemetry.start_demo()
+        self.open_page("race")
 
     def closeEvent(self, event):
+        if self.ambient is not None:
+            self.ambient.close()
         self.hub.shutdown()
         super().closeEvent(event)
 
@@ -275,6 +272,7 @@ def _self_test(win: MainWindow, out_dir: str):
     win._start_demo()
 
     shots = [(f"{i}_{key}", lambda key=key: win.open_page(key)) for i, key in enumerate(win.pages)]
+    shots.append(("analysis_dynamics", lambda: (win.open_page("analysis"), win.analysis.setCurrentIndex(1))))
     for i, tab in enumerate(("summary", "settings"), 1):
         shots.append((f"engineer_{tab}", lambda i=i: (win.open_page("engineer"), win.engineer.tabs.setCurrentIndex(i))))
 

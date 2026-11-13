@@ -74,9 +74,10 @@ class GeneralPage(QWidget):
     start_demo = pyqtSignal()
     checklist_action = pyqtSignal(str)
 
-    def __init__(self, hub):
+    def __init__(self, hub, with_checklist: bool = True):
         super().__init__()
         self.hub = hub
+        self._with_checklist = with_checklist       # off when the Home view shows the status list
         self._beat_t = 0.0
         self._ui_t = 0.0
         self._f6: list[str] = [n for n in hub.setting("onboard/f6_names", "", str).split("|") if n]
@@ -343,7 +344,7 @@ class GeneralPage(QWidget):
 
     # ------------------------------------------------------------- get started
     def refresh_checklist(self):
-        if self.hub.setting("checklist/hidden", False, bool):
+        if not self._with_checklist or self.hub.setting("checklist/hidden", False, bool):
             self.checklist.hide()
             return
         now = time.monotonic()
