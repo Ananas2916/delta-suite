@@ -330,3 +330,42 @@ def strip_values(hub, trend: GapTrend) -> dict:
     flag = flag_status(hub, s)
     out["flag"] = (flag.kind, flag.text) if flag is not None else ("green", tr("Green"))
     return out
+
+
+# ------------------------------------------------------------------ Race view: corners and short names
+
+def short_name(driver: str) -> str:
+    """Three letters like on TV: "Max Verstappen" → "VER"."""
+    words = [w for w in (driver or "").replace("_", " ").split() if w]
+    return (words[-1][:3] if words else "").upper()
+
+
+def corner_label(c: dict) -> str:
+    lost = c["time_lost_s"]
+    return f"T{c['corner']} {'+' if lost > 0 else '−'}{abs(lost):.2f}"
+
+
+def corner_text(c: dict) -> str:
+    """Why a corner was faster or slower than on the best lap, in one or two sentences."""
+    parts = []
+    earlier = c.get("braking_earlier_m")
+    if earlier is not None and abs(earlier) >= 3:
+        parts.append(tr("you brake {m} m earlier", m=f"{earlier:.0f}") if earlier > 0
+                     else tr("you brake {m} m later", m=f"{-earlier:.0f}"))
+    vmin = c.get("v_min_kmh") or [None, None]
+    if None not in vmin and abs(vmin[1] - vmin[0]) >= 1:
+        dv = vmin[1] - vmin[0]
+        parts.append(tr("minimum speed {v} km/h lower", v=f"{-dv:.0f}") if dv < 0
+                     else tr("minimum speed {v} km/h higher", v=f"{dv:.0f}"))
+    thr = c.get("full_throttle_at_m") or [None, None]
+    if None not in thr and abs(thr[1] - thr[0]) >= 5:
+        late = thr[1] - thr[0]
+        parts.append(tr("full throttle {m} m later", m=f"{late:.0f}") if late > 0
+                     else tr("full throttle {m} m earlier", m=f"{-late:.0f}"))
+    lost = c["time_lost_s"]
+    verdict = (tr("You lose {s} s.", s=f"{lost:.2f}") if lost > 0.01 else
+               tr("You gain {s} s.", s=f"{-lost:.2f}") if lost < -0.01 else tr("In line with your best lap."))
+    if not parts:
+        return verdict
+    first = "; ".join(parts)
+    return first[0].upper() + first[1:] + ". " + verdict

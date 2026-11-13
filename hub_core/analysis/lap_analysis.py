@@ -119,3 +119,15 @@ def compare_laps(ref: dict, other: dict, track_len: float, step_m: float = 5.0) 
         "where_you_lose_most": [w["corner"] for w in worst[:3] if w["time_lost_s"] > 0.02],
         "note": "paired values: [reference, compared lap]; time_lost_s > 0 = the compared lap is slower",
     }
+
+
+def delta_profile(ref: dict, other: dict, track_len: float, bins: int = 120) -> list[float]:
+    """Time gained (< 0) or lost (> 0) by `other` against `ref` in each of `bins` equal stretches of the lap,
+    from the start line: what the race map colours green and red."""
+    ref, other = clean_lap(ref, track_len), clean_lap(other, track_len)
+    if len(ref["dist"]) < 2 or len(other["dist"]) < 2:
+        return []
+    end = min(ref["dist"][-1], other["dist"][-1], track_len)
+    edges = np.linspace(0.0, end, bins + 1)
+    delta = resample(other, edges)["t"] - resample(ref, edges)["t"]
+    return [round(float(v), 4) for v in np.diff(delta)]

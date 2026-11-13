@@ -43,7 +43,8 @@ class GPSView(QWidget):
         self._pit_src = None
         self.trail: deque[tuple[float, float]] = deque(maxlen=8000)
         self.zones: list[Zone] = []
-        self.cars: list[dict] = []       # {idx, pos, x, z, num, me, leader, ring, pit}
+        self.cars: list[dict] = []       # {idx, pos, x, z, num, me, leader, ring, pit, label}
+        self.overlay = None              # f(painter, to_px, edge, fill): drawn on the track, under the cars
         self._screen: list[tuple[int, QPointF]] = []
 
     # ------------------------------------------------------------- data
@@ -132,6 +133,8 @@ class GPSView(QWidget):
                 p.setPen(_pen(ZONE_FILL[z.kind], fill))
                 p.drawPath(seg)
             self._finish_line(p, to_px, edge)
+            if self.overlay is not None:
+                self.overlay(p, to_px, edge, fill)
         elif len(self.trail) > 1:
             trail = self._path(to_px, list(self.trail))
             p.setPen(_pen(TRACK_EDGE, edge, 160))
@@ -148,6 +151,10 @@ class GPSView(QWidget):
             pt = to_px(*xy)
             self._screen.append((c["idx"], pt))
             self._car(p, pt, c, r)
+            if c.get("label"):                      # short driver name next to the car
+                p.setPen(QColor(C["text"]))
+                p.setFont(paint_font(max(7.0, r * 0.75)))
+                p.drawText(QPointF(pt.x() + r * 1.3, pt.y() - r * 0.9), c["label"])
         p.end()
 
     def _finish_line(self, p: QPainter, to_px, edge: float):

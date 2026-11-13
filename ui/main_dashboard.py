@@ -20,9 +20,9 @@ from ui.pages.analysis_page import AnalysisPage
 from ui.pages.box_page import BoxPage
 from ui.pages.dynamics_page import DynamicsPage
 from ui.pages.engineer_page import EngineerPage
-from ui.pages.general_page import GeneralPage
 from ui.pages.home_page import HomePage
 from ui.pages.onboard import OnboardPage
+from ui.pages.race_page import RacePage
 from ui.pages.settings_page import SettingsPage
 from ui.pages.strategy_page import StrategyPage
 from ui.pages.telemetry_page import TelemetryPage
@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         self.trend = rv.GapTrend()
         self._strip_titles = {"pos": tr("Pos"), "fuel": tr("Fuel"), "battery": tr("Battery")}
         self.home = HomePage(self.hub)
-        self.general = GeneralPage(self.hub, with_checklist=False)
+        self.race = RacePage(self.hub)
         self.telemetry = TelemetryPage(self.hub)
         self.engineer = EngineerPage(self.hub)
         self.analysis = QTabWidget()
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.hub, VERSION)
         self.pages = {
             "home": self.home,
-            "race": self.general,
+            "race": self.race,
             "onboard": OnboardPage(self.hub),
             "telemetry": self.telemetry,
             "box": BoxPage(self.hub),
@@ -94,9 +94,6 @@ class MainWindow(QMainWindow):
         self.home.open_recording.connect(lambda: self._start(SOURCE_REPLAY))
         self.home.open_view.connect(self.open_page)
         self.home.action.connect(self._on_checklist)
-        self.general.open_module.connect(self.open_page)
-        self.general.start_demo.connect(self.telemetry.start_demo)
-        self.general.checklist_action.connect(self._on_checklist)
         self.settings_page.mode_changed.connect(self._on_mode)
         self.settings_page.language_changed.connect(self._on_language)
         self.settings_page.theme_changed.connect(self._on_theme)

@@ -77,3 +77,14 @@ def test_ambient_colours():
     assert ambient_colors(-0.1, 2.0) == (GOOD_BG, IDLE_BG)
     assert ambient_colors(0.3, 0.6) == (BAD_BG, CLOSE_BG)
     assert ambient_colors(None, None) == (IDLE_BG, IDLE_BG)
+
+
+def test_corner_explanation():
+    c = {"corner": 4, "time_lost_s": 0.14, "braking_earlier_m": 9.0, "v_min_kmh": [92.0, 88.0],
+         "full_throttle_at_m": [410, 412]}
+    assert rv.corner_label(c) == "T4 +0.14"
+    assert rv.corner_text(c) == "You brake 9 m earlier; minimum speed 4 km/h lower. You lose 0.14 s."
+    gain = {"corner": 1, "time_lost_s": -0.08, "braking_earlier_m": 0.0, "v_min_kmh": [90.0, 90.4],
+            "full_throttle_at_m": [100, 100]}
+    assert rv.corner_label(gain) == "T1 −0.08" and rv.corner_text(gain) == "You gain 0.08 s."
+    assert rv.short_name("Max Verstappen") == "VER" and rv.short_name("") == ""
