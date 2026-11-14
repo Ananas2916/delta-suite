@@ -3,8 +3,8 @@
 -- Bridge between Assetto Corsa and Delta Suite (external program), through two memory-mapped files:
 --   DeltaSuite_Bridge_Out_v1  written here: current adjustments, setup, pit stop, rivals, radio buttons
 --   DeltaSuite_Bridge_In_v1   written by Delta Suite: one command at a time, numbered by `seq`
--- The onboard video lives in DeltaSuiteOnboard.lua, loaded with a protected require: if it fails, the
--- bridge still works.
+-- The onboard video lives in DeltaSuiteOnboard.lua, race control (FCY/VSC) in DeltaSuiteRace.lua and the
+-- in-game HUD in DeltaSuiteHUD.lua, each loaded with a protected require: if one fails, the bridge still works.
 -- The layouts must stay identical to those in hub_core/ac/csp_bridge.py (only 4-byte int/float and
 -- char arrays, so the alignment is the same in LuaJIT and in ctypes).
 
@@ -200,18 +200,18 @@ local function updateCars(sim, withNames)
   end
 end
 
--- onboard video in a separate module, in the same folder as the app
-local onboard, onboardError = nil, nil
-do
-  if __dirname then package.path = package.path .. ';' .. __dirname .. '/?.lua' end
-  local ok, mod = pcall(require, 'DeltaSuiteOnboard')
-  if ok and type(mod) == 'table' then
-    onboard = mod
-  else
-    onboardError = tostring(mod)
-    ac.log('DeltaSuite onboard not loaded: ' .. onboardError)
-  end
+-- optional modules in the same folder as the app: a failure only disables that module
+if __dirname then package.path = package.path .. ';' .. __dirname .. '/?.lua' end
+local function optional(name)
+  local ok, mod = pcall(require, name)
+  if ok and type(mod) == 'table' then return mod, nil end
+  ac.log('DeltaSuite ' .. name .. ' not loaded: ' .. tostring(mod))
+  return nil, tostring(mod)
 end
+local onboard, onboardError = optional('DeltaSuiteOnboard')
+local race, raceError = optional('DeltaSuiteRace')
+local hud, hudError = optional('DeltaSuiteHUD')
+if hud then hud.init(race) end
 
 function script.update(dt)
   clock = clock + dt
@@ -263,7 +263,33 @@ function script.update(dt)
     out.ackSeq = lastSeq
   end
 
-  if onboard then onboard.update(dt, sim) end
+  -- each module in its own pcall: an error in one must not stop the others for that frame
+  if onboard then
+    local ok, err = pcall(onboard.update, dt, sim)
+    if not ok then ac.log('DeltaSuite onboard: ' .. tostring(err)) end
+  end
+  if race then
+    local ok, err = pcall(race.update, dt, sim)
+    if not ok then ac.log('DeltaSuite race control: ' .. tostring(err)) end
+  end
+  if hud then
+    local ok, err = pcall(hud.update, dt, sim)
+    if not ok then ac.log('DeltaSuite HUD: ' .. tostring(err)) end
+  end
+end
+
+-- ------------------------------------------------------------------ HUD windows (manifest.ini)
+-- Each element draws in a pcall: an error in one element shows its message instead of breaking the others.
+local function hudWindow(name)
+  return function()
+    if not hud then ui.text('HUD not loaded: ' .. tostring(hudError)); return end
+    local ok, err = pcall(hud[name])
+    if not ok then ui.textWrapped('HUD ' .. name .. ': ' .. tostring(err)) end
+  end
+end
+for _, name in ipairs({ 'raceControl', 'dash', 'lap', 'standings', 'relative', 'tyres', 'car', 'engineer', 'map',
+  'radar' }) do
+  script['hud_' .. name] = hudWindow(name)
 end
 
 -- ------------------------------------------------------------------ window
@@ -367,6 +393,32 @@ local function styledWindow()
   end
   ui.popFont()
   ui.offsetCursorY(GAP)
+
+  card('race', 'RACE CONTROL', width, function(w)
+    if not race then ui.textColored('Not loaded: ' .. tostring(raceError), C.warn); return end
+    local st = race.state
+    if not st.available then ui.textColored('Not available: ' .. st.reason, C.dim); return end
+    local names = { [0] = 'Green', 'FCY countdown', 'Neutralised', 'Ending', 'Green flag' }
+    local modes = { [race.FCY] = '  (FCY)', [race.VSC] = '  (VSC)', [race.SC or 3] = '  (SAFETY CAR)' }
+    ui.textColored((names[st.state] or '?') .. (modes[st.mode] or ''), C.text)
+    local bw = (w - 18) / 4
+    if ui.button('FCY', vec2(bw, 0)) then race.request('fcy') end
+    ui.sameLine(0, 6)
+    if ui.button('VSC', vec2(bw, 0)) then race.request('vsc') end
+    ui.sameLine(0, 6)
+    if ui.button('SC', vec2(bw, 0)) then race.request('sc') end
+    ui.sameLine(0, 6)
+    if ui.button('End', vec2(bw, 0)) then race.request('ending') end
+    if st.scCar and st.scCar < 0 then
+      ui.pushFont(ui.Font.Small)
+      ui.textColored('No safety car in this session (a car with "safety" in its name)', C.dim)
+      ui.popFont()
+    end
+    binding('FCY button', race.buttons.fcy, w, nil)
+    binding('VSC button', race.buttons.vsc, w, nil)
+    if race.buttons.sc then binding('Safety car button', race.buttons.sc, w, nil) end
+    binding('End button', race.buttons.ending, w, nil)
+  end)
 
   card('radio', 'ENGINEER RADIO', width, function(w)
     local tx = btnRadio:down()

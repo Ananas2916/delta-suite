@@ -78,12 +78,15 @@ removed (16/10/2026).
 Details and import rules in `ARCHITECTURE.md` (checked by `tests/test_structure.py`).
 ```
 ac_app/DeltaSuiteBridge/        # CSP Lua app: DeltaSuiteBridge.lua (command bridge/setup/rivals/radio
-                                # buttons) + DeltaSuiteOnboard.lua (video, loaded with pcall(require))
+                                # buttons) + DeltaSuiteOnboard.lua (video) + DeltaSuiteRace.lua (FCY/VSC race
+                                # control) + DeltaSuiteHUD.lua (our in-game HUD, 10 windows), each loaded with
+                                # pcall(require); Archivo fonts (OFL) for the HUD
 hub_core/model.py              # TelemetrySample, CarEntry, AC enums (no dependencies)
 hub_core/ac/                   # talks to AC; importable outside Windows too (kernel32 on first use)
   shared_memory.py, receiver.py  # AC pages → TelemetrySample (sample_from_pages shared with replay)
   recording.py                 # .dsr recording of the raw pages and ReplaySource
   csp_bridge.py                # CSP bridge (layout = DeltaSuiteBridge.lua), app installation, AC folder
+  race_link.py                 # race control + HUD data (DeltaSuite_Race_Out_v1 / _In_v1)
   onboard_feed.py              # onboard video (DeltaSuite_Onboard_v6 = DeltaSuiteOnboard.lua, 4 views)
   d3d_shared.py                # reading the shared D3D11 texture (ctypes, COM vtable)
   track_map.py                 # track AI line (fast_lane.ai, pit_lane.ai) for the GPS
@@ -91,7 +94,8 @@ hub_core/ac/                   # talks to AC; importable outside Windows too (ke
 hub_core/analysis/             # calculations, no AC: lap_recorder, lap_analysis, timing, race_strategy
                                # (also laps to go), vehicle_dynamics, car_status (alerts for the Onboard
                                # page and MCP), track_status (track line, slow/stopped cars, flags),
-                               # live_lap (splits of the current lap and live delta to the best lap)
+                               # live_lap (splits of the current lap and live delta to the best lap),
+                               # race_director (automatic FCY/VSC from cars stopped on track)
 hub_core/database.py           # DuckDB / SQLite (best_laps: all-time best per car and track)
 hub_core/i18n.py, locales/     # interface language: tr() + Italian catalog (tests/test_i18n.py checks it)
 hub_core/remote/               # remote pit wall: rotating-code pairing (auth.py), web server (LAN + Tailscale),
@@ -102,12 +106,14 @@ ai_engine/mcp_server.py        # local HTTP MCP server with token (7 tools: live
                                # compare_laps, current_setup, standings, session_archive, propose_change)
 ai_engine/radio.py, voice.py   # radio rules, Kokoro/Tsukumo, priority queue
 ai_engine/race_calls.py        # F1-game-style race calls (RaceContext from standings and yellows)
+ai_engine/race_control_calls.py  # radio for FCY/VSC: countdown, deployed, ending, green, too fast
 ai_engine/phrases_race.py      # phrases for those calls in it/en/es/fr/pt, with variants
 ai_engine/stt.py               # push-to-talk transcription (local Whisper / Tsukumo)
 ai_engine/voice_models.py      # Kokoro model location and one-click download (%LOCALAPPDATA%\DeltaSuite\models)
 ai_engine/race_chatter.py      # the "chatty" engineer between the important calls (phrases_chatter.py)
 ui/hub_state.py, hub_data.py   # hub state and signals, data provider for the MCP
-ui/radio_controller.py, proposals.py, engineer_controller.py   # owned by HubState: radio+PTT, proposals, agent
+ui/radio_controller.py, proposals.py, engineer_controller.py, race_control.py   # owned by HubState: radio+PTT,
+                               # proposals, agent, race control (FCY/VSC, director, neutralised laps, HUD data)
 ui/first_run.py                # get-started checklist on the Overview
 ui/remote_data.py, remote_dialog.py   # hub side of the remote pit wall
 ui/workers.py                  # TelemetryWorker (acquisition thread) and Job
@@ -130,6 +136,36 @@ docs/                          # logo and README screenshots
   in both files and bump the version. CSP 0.2.11 hot-loads it (`LAZY = NONE`). The setup is editable on track
   too in practice sessions (`isSetupAvailableToEdit`). CSP buttons (0.5.9): `DeltaSuite/Engineer radio
   (hold)`, `DeltaSuite/Confirm proposal`, `DeltaSuite/Discard proposal`.
+- **Race control (14/11/2026, offline only)**: FCY and VSC run by the CSP app (`DeltaSuiteRace.lua`); a plain
+  Lua app may use the physics API offline (`physics.allowed()` true). Tested live with 20 AI: FCY = 10 s
+  countdown (the AI race on, capped only in its last 3 s), then 80 km/h, 0 position swaps; VSC = delta to best lap × 1.4 with an 8 s
+  grace, AI cap automatic from the reference pace (≈100 km/h at that track), delta settles around +0..+1 s.
+  `physics.overrideRacingFlag(Caution)` writes `flag=2` into shared memory (AC's own HUD does not draw it).
+  The lap count for the delta follows the spline (lapCount and splinePosition change on different frames at
+  the line: a whole-lap jump otherwise). An app reload (install while AC runs) drops the state: the new instance
+  frees the AI from `ac.store`. Laps run neutralised: `LapData.neutralised` and not valid. Infractions are not
+  counted while the AI drives the player's car.
+- **Safety car (14/11/2026)**: a real car of the session (name containing "safety", or the car folder set in
+  Settings), excluded from standings/HUD. Parked from the session start with `teleportCarTo(Pits)` + stop counter
+  only (a throttle limit, even released, leaves the AI off the gas). Called: field at VSC pace, the SC waits in
+  the pits (phase SC_WAITING) until the leader is 120-300 m from the pit exit, then `setAICarPosition` just past
+  the pit exit (from pit_lane.ai, read by the Lua app itself: the longest stretch of it more than 8 m off the lap
+  line, since the file also runs on the track itself; else learned from cars leaving the pits). AC does not let a
+  parked AI drive out of its box (tested: released it rolls out and AC snaps it back; a pit request in the box
+  does nothing; it also poisons the AI, which then turns back; placed in the pit lane, AC sends it back to its box
+  where the gas override made it spin): the SC joins on the track 30 m past the pit exit with the leader 400-800 m
+  away, only when the player's car (not the camera: an orbit camera on the SC blocked it) is 250+ m from the box
+  and the spot; it runs at 80 km/h until the leader is
+  within 80 m, field held at 90 km/h until the SC rolls; after N laps (default 1) the lapped cars are waved by
+  (cap off, aggression 1) and rejoin at the back (not yet seen live: no lapped cars in the tests); the AI does not throttle up by itself after
+  the move, so `ac.overrideCarControls` gives it gas up to 80 km/h; with its controls overridden the AI ignores
+  `setAITopSpeed`, so the same override brakes it above the cap (governor). Queue: each AI's cap = speed of the
+  car ahead + 0.6 km/h per metre over 22 m. "In this lap": pit request, the queue follows the leader at SC speed
+  once the SC is in the pit lane, green when the leader crosses the line. Tested live with 20 AI: SC at 120-121,
+  leader caught it in ~40 s, gaps 18-25 m, 0 swaps in the in-lap. The overridden flag sometimes did not stick:
+  asserted every second.
+- HUD: our own in-game HUD in CSP windows (DS ...), style inspired by CMRT Essential HUD, which the owner
+  uses; nothing copied from it (no licence; our repo is MIT).
 - Codex/Antigravity backends removed in 0.6.0 (untestable here): any agent works as a custom command.
 - Agent via CLI instead of API: `claude -p --output-format stream-json --tools "" --allowedTools
   mcp__deltasuite --strict-mcp-config`, session resumed with `--resume`. Changes always go through
@@ -160,6 +196,8 @@ docs/                          # logo and README screenshots
   `%LOCALAPPDATA%\DeltaSuite\build`). scipy/pandas/pyarrow excluded on purpose: not needed.
 - Build from bash if PowerShell stops on PyInstaller's INFO lines on stderr:
   `python -m PyInstaller DeltaSuite.spec --noconfirm --clean --workpath "$LOCALAPPDATA/DeltaSuite/build" --distpath dist`.
+- Lua app: `python tools/lua_check.py ac_app/DeltaSuiteBridge/*.lua` finds calls to functions not defined (or
+  defined below the call): a runtime error in AC that no syntax check sees (`tests/test_lua_app.py` runs it).
 - Tests: `python -m pytest` (dependencies in `requirements-dev.txt`). With AC running and the CSP app loaded,
   `test_onboard_roundtrip_with_fake_app` attaches to the real onboard mapping and fails: environmental.
 - UI/exe self-test: variable `DELTA_SELFTEST=<folder>` → demo, a screenshot of every page, voice/CSP app/MCP
@@ -213,3 +251,8 @@ docs/                          # logo and README screenshots
 - [ ] Push-to-talk and headset voice tested on track by the owner
 - [x] Live onboard: video from the CSP app tested with real AC (18/10, shared texture, 8 cameras, 4 qualities)
 - [ ] Onboard: damage with a real crash and the full page tested by the owner
+- [x] 0.6.3 (14/11/2026): race control (FCY, VSC, safety car) in the CSP app and our own in-game HUD
+- [x] Race control FCY/VSC + automatic director + radio calls + in-game HUD (14/11/2026, tested live with AI;
+      to test by the owner driving: delta, over-limit warnings, CSP buttons, HUD layout)
+- [x] Safety car with a real car (14/11/2026, tested live with AI; to test by the owner driving: overtake
+      warnings, restart, HUD)

@@ -15,6 +15,7 @@ import pytest
 
 from hub_core.ac import csp_bridge as cb
 from hub_core.ac import onboard_feed as ob
+from hub_core.ac import race_link as rl
 
 BUMP = ("if you changed the layout on purpose, change it the same way in both files AND bump the version in the "
         "mapping name on both sides (Lua string and Python constant), then update LAYOUT_FINGERPRINTS here")
@@ -25,6 +26,8 @@ LAYOUTS = [
     ("DeltaSuiteBridge.lua", "IN_LAYOUT", cb.BridgeIn, cb.IN_TAG, cb.VERSION, "VERSION"),
     ("DeltaSuiteOnboard.lua", "ONBOARD_LAYOUT", ob.OnboardShared, ob.ONBOARD_TAG, ob.ONBOARD_VERSION,
      "ONBOARD_VERSION"),
+    ("DeltaSuiteRace.lua", "RACE_OUT_LAYOUT", rl.RaceOut, rl.RACE_OUT_TAG, rl.RACE_VERSION, "VERSION"),
+    ("DeltaSuiteRace.lua", "RACE_IN_LAYOUT", rl.RaceIn, rl.RACE_IN_TAG, rl.RACE_VERSION, "VERSION"),
 ]
 
 # sha256 (first 16 hex) of the normalised Lua layout, per mapping name: a new layout needs a new name
@@ -32,6 +35,8 @@ LAYOUT_FINGERPRINTS = {
     "DeltaSuite_Bridge_Out_v1": "d23ab06a916758d5",
     "DeltaSuite_Bridge_In_v1": "b3f23efdd0bb0195",
     "DeltaSuite_Onboard_v6": "98d2cea3bcfd2f33",
+    "DeltaSuite_Race_Out_v1": "8d86747c39dce889",
+    "DeltaSuite_Race_In_v1": "3353bd17e53a5b6f",
 }
 
 LUA_TYPES = {"int": (ctypes.c_int, 4), "unsigned int": (ctypes.c_uint, 4), "float": (ctypes.c_float, 4),

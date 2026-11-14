@@ -25,6 +25,7 @@ class LapData:
     brake_temp_max: list[float]
     max_speed: float
     channels: dict[str, np.ndarray] = field(repr=False, default_factory=dict)
+    neutralised: bool = False          # run (partly) under FCY/VSC: also marked not valid
 
     @property
     def fuel_used(self) -> float:

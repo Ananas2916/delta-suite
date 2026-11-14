@@ -32,6 +32,7 @@ from hub_core.model import ACSessionType, ACStatus
 from ui.engineer_controller import EngineerController
 from ui.hub_data import HubDataProvider, Proposal
 from ui.proposals import ProposalController
+from ui.race_control import RaceControlController
 from ui.radio_controller import RadioController
 from ui.workers import SOURCE_AC, TelemetryWorker
 
@@ -59,6 +60,7 @@ class HubState(QObject):
     engineer_failed = pyqtSignal(str)
     ptt_changed = pyqtSignal(bool)
     recording_started = pyqtSignal(str)
+    race_changed = pyqtSignal(object)            # RaceControlState (FCY/VSC of the CSP app) or None
 
     def __init__(self, settings: QSettings | None = None):
         super().__init__()
@@ -101,6 +103,7 @@ class HubState(QObject):
         self.radio = RadioController(self)
         self.proposal_ctl = ProposalController(self)
         self.engineer = EngineerController(self)
+        self.race_ctl = RaceControlController(self)
         self.provider = HubDataProvider(self)
         self.mcp = MCPServer(self.provider, int(self.settings.value("mcp_port", 8787)))
         self.mcp.start()
@@ -207,6 +210,7 @@ class HubState(QObject):
         self.worker.session_started.connect(self._on_session)
         self.worker.status.connect(self.status)
         self.worker.bridge_state.connect(self._on_bridge)
+        self.worker.race_state.connect(self._on_race)
         self.worker.recording.connect(self._on_recording)
         w = self.worker
         w.finished.connect(lambda: self._on_worker_finished(w))
@@ -233,6 +237,7 @@ class HubState(QObject):
         self.session_id = None          # the archive row is created at the first completed lap
         self.laps = []
         self.radio.rules.reset()
+        self.race_ctl.reset()
         self.timing.reset()
         self.track = self._load_track(info)
         self.live_lap.reset(info.get("sector_count") or 3)
@@ -252,6 +257,9 @@ class HubState(QObject):
     def _on_lap(self, lap: LapData):
         if self._closed:                # a lap queued by the worker after shutdown: the archive is closed
             return
+        if self.race_ctl.take_lap_flag():
+            # run (partly) under FCY/VSC: not representative, out of best laps, fuel average and tyre wear
+            lap.neutralised, lap.valid = True, False
         if self.session_id is None:
             self.session_id = self.db.new_session(self.session_info)
         self.db.save_lap(self.session_id, lap)
@@ -334,6 +342,10 @@ class HubState(QObject):
 
     # ------------------------------------------------------------ CSP app
     def _on_bridge(self, b: BridgeState | None):
+        rc = self.race_ctl.state
+        if b is not None and rc is not None and rc.sc_car >= 0:
+            # the safety car is not a competitor: out of standings, gaps, track zones and the race director
+            b.cars = [c for c in b.cars if c.index != rc.sc_car]
         was_editable = self.bridge_state is not None and self.bridge_state.setup_editable
         self.bridge_state = b
         if b is not None:
@@ -347,6 +359,18 @@ class HubState(QObject):
             self.standings_rows = self.timing.standings(now, b.cars, self.is_race, 0)
             self.standings_changed.emit(self.standings_rows)
         self.bridge_changed.emit(b)
+
+    def _on_race(self, rc):
+        self.race_ctl.on_state(rc)
+        self.race_changed.emit(rc)
+
+    @property
+    def race_state(self):
+        return self.race_ctl.state
+
+    def race_request(self, kind: str) -> bool:
+        """FCY / VSC / end / cancel through the CSP app's race control."""
+        return self.race_ctl.request(kind)
 
     def _handle_buttons(self, b: BridgeState):
         """Wheel buttons bound in the CSP app: confirm / discard the latest proposal, push-to-talk."""

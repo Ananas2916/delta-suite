@@ -30,6 +30,7 @@ BLUE_BEHIND = 0.02
 WARN_AHEAD_M = 800.0             # yellow for the driver if the zone is within this distance ahead
 AC_FLAG_FRESH_S = 8.0            # AC yellow with no slow cars confirming it: valid only for a few seconds
 GREEN_S = 5.0                    # after a yellow: green flag for a few seconds, as on TV
+PIT_OFF_LINE_M = 8.0             # pit lane points farther than this from the lap line are in the pit lane proper
 
 ZONE_COLORS = ("yellow", "red", "blue")
 
@@ -149,6 +150,53 @@ class TrackWatch:
     @property
     def line(self) -> TrackLine | None:
         return self.ai or self._learned
+
+    def _pit_lane_run(self):
+        """(points, nearest lap-line index per point, end of the pit lane proper) or None.
+
+        pit_lane.ai often starts and ends on the track itself (at the Red Bull Ring it runs from 0.76 to 0.26 of
+        the lap): the pit lane proper is the longest stretch of it away from the lap line."""
+        if self.ai is None or len(self.pit) < 2:
+            return None
+        pts = np.asarray(self.pit, float)
+        d2 = (pts[:, 0, None] - self.ai.xs[None, :]) ** 2 + (pts[:, 1, None] - self.ai.zs[None, :]) ** 2
+        nearest = d2.argmin(axis=1)
+        off = np.sqrt(d2[np.arange(len(pts)), nearest]) > PIT_OFF_LINE_M
+        best, run_start, best_end = 0, None, None
+        for k, o in enumerate(list(off) + [False]):
+            if o and run_start is None:
+                run_start = k
+            elif not o and run_start is not None:
+                if k - run_start > best:
+                    best, best_end = k - run_start, k
+                run_start = None
+        k = best_end if best_end is not None and best_end < len(pts) else len(pts) - 1
+        return pts, nearest, k
+
+    def pit_exit_position(self) -> float | None:
+        """Lap position where the pit lane rejoins the track, or None."""
+        run = self._pit_lane_run()
+        if run is None:
+            return None
+        _pts, nearest, k = run
+        return int(nearest[k]) / self.ai.n
+
+    def pit_lane_start_point(self, before_m: float = 150.0) -> tuple[float, float, float, float] | None:
+        """(x, z, dir_x, dir_z) in the pit lane `before_m` metres before its exit, heading to the exit: where the
+        safety car starts so that it is seen driving out of the pit lane."""
+        run = self._pit_lane_run()
+        if run is None:
+            return None
+        pts, _nearest, end = run
+        k, travelled = end, 0.0
+        while k > 1 and travelled < before_m:
+            travelled += float(np.hypot(*(pts[k] - pts[k - 1])))
+            k -= 1
+        d = pts[min(k + 3, len(pts) - 1)] - pts[k]
+        n = float(np.hypot(*d))
+        if n <= 0:
+            return None
+        return float(pts[k][0]), float(pts[k][1]), float(d[0] / n), float(d[1] / n)
 
     # ------------------------------------------------------------- input data
     def feed_position(self, pos: float, x: float, z: float) -> None:

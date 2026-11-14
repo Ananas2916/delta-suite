@@ -7,6 +7,7 @@ import time
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from hub_core.ac.csp_bridge import CSPBridge
+from hub_core.ac.race_link import RaceLink
 from hub_core.ac.receiver import TelemetryReceiver
 from hub_core.ac.recording import ReplaySource, SessionRecorder, recording_path
 from hub_core.analysis.lap_recorder import LapRecorder
@@ -25,6 +26,7 @@ class TelemetryWorker(QThread):
     session_started = pyqtSignal(dict)
     status = pyqtSignal(str, bool)
     bridge_state = pyqtSignal(object)
+    race_state = pyqtSignal(object)      # RaceControlState of the CSP app's race control, or None
     recording = pyqtSignal(str)
 
     def __init__(self, source: str, hz: float, speed: float, replay_path: str | None = None, record: bool = False):
@@ -32,6 +34,7 @@ class TelemetryWorker(QThread):
         self.source, self.hz, self.speed = source, hz, speed
         self.replay_path, self.record = replay_path, record
         self.bridge = CSPBridge() if source == SOURCE_AC else None
+        self.race_link = RaceLink() if source == SOURCE_AC else None
         self._running = False
 
     def stop(self):
@@ -104,6 +107,7 @@ class TelemetryWorker(QThread):
                         if state is not None and recorder is not None and state.cars:
                             recorder.write_cars(state.cars, now)
                         self.bridge_state.emit(state)
+                        self.race_state.emit(self.race_link.read())
                     elif hasattr(src, "bridge_state"):        # replay of a recording with the rivals
                         state = src.bridge_state()
                         if state is not None:
@@ -121,6 +125,8 @@ class TelemetryWorker(QThread):
         src.disconnect()
         if self.bridge is not None:
             self.bridge.disconnect()
+            self.race_link.disconnect()
+            self.race_state.emit(None)
         if self.bridge is not None or hasattr(src, "bridge_state"):
             self.bridge_state.emit(None)
         if not src.finished:

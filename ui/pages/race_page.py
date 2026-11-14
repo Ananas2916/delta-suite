@@ -21,6 +21,7 @@ from ui import race_view as rv
 from ui.theme import C
 from ui.widgets import Card, label
 from ui.widgets.car_status import CarStatusView
+from ui.widgets.race_control import RaceControlPanel
 from ui.widgets.race_timeline import TimelineView
 from ui.widgets.timing_table import TimingTable
 from ui.widgets.track_delta import TrackDeltaMap
@@ -116,6 +117,11 @@ class RacePage(QWidget):
         cl.addWidget(self.car_info)
         cl.addWidget(self.alerts)
         self.tabs.addTab(car, tr("Car"))
+        self.race_ctl = RaceControlPanel(hub.race_ctl.auto_mode)
+        self.race_ctl.request.connect(hub.race_request)
+        self.race_ctl.auto_changed.connect(hub.race_ctl.set_auto_mode)
+        self.tabs.addTab(self.race_ctl, tr("Race control"))
+        hub.race_changed.connect(lambda rc: self.race_ctl.set_state(rc, hub.race_ctl.last_decision))
         self.tabs.currentChanged.connect(self._on_tab)
         self.tabs.setMinimumWidth(380)
         top.addWidget(self.tabs, 2)

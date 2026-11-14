@@ -49,6 +49,7 @@ that create real mappings are marked `windows_only`.
 | `receiver.py` | `TelemetryReceiver`: pages → `TelemetrySample` (`sample_from_pages`, also used by replay) |
 | `recording.py` | `.dsr` recording of the raw pages and `ReplaySource` |
 | `csp_bridge.py` | bridge with the CSP app (`DeltaSuite_Bridge_Out_v1` / `_In_v1`), app installation, AC folder |
+| `race_link.py` | race control and HUD data (`DeltaSuite_Race_Out_v1` / `_In_v1`): FCY/VSC state, commands, settings, what the in-game HUD shows |
 | `onboard_feed.py` | onboard video (`DeltaSuite_Onboard_v6`): requests, frames, positions, F6 cameras |
 | `d3d_shared.py` | opens and copies the D3D11 texture shared by the app (ctypes, COM vtable) |
 | `track_map.py` | the track's AI line (`ai/fast_lane.ai`, `pit_lane.ai`) for the GPS |
@@ -61,6 +62,8 @@ that create real mappings are marked `windows_only`.
 (standings, gap, interval), `race_strategy.py` (fuel, pit, tyre degradation, laps to go),
 `vehicle_dynamics.py` (Pacejka, kinematics), `live_lap.py` (splits of the current lap, live delta to the best
 lap), `car_status.py` (damage, tyres, brakes, suspension, battery → alerts; also for the MCP),
+`race_director.py` (automatic FCY/VSC: a car stopped on track for a few seconds neutralises, the track clear
+ends it; its own stopped-car tracking, since TrackWatch clears its zones when many cars are slow),
 `track_status.py` (track line by lap position, typical speeds, slow or stopped cars → yellow/red stretches,
 blue, the driver's flag). `HubState.track` keeps one per session: the AI line arrives at session start, the
 zones update with every CSP app state.
@@ -72,6 +75,19 @@ zones update with every CSP app state.
 - `DeltaSuiteOnboard.lua`: onboard video, car positions, F6 cameras. The bridge loads it with
   `pcall(require, 'DeltaSuiteOnboard')`; if it fails, the bridge keeps working and the app window says why.
   It only exposes `M.update(dt, sim)` and `M.window()`.
+- `DeltaSuiteRace.lua`: race control, offline only. FCY (countdown, then a speed limit) and VSC (a delta to the
+  driver's best lap × factor, banked time capped at +10 s) with the AI capped through the physics API
+  (`setAITopSpeed`, `setAICaution`, aggression 0; the VSC cap follows the reference pace when set to 0) and the
+  race flag overridden (`physics.overrideRacingFlag`, which AC's shared memory then reports). Requests come from
+  Delta Suite or from the CSP buttons `DeltaSuite/Race control: ...`. If the app is reloaded mid-neutralisation
+  (an update), the new instance frees the AI (state kept in `ac.store`). Safety car (mode 3): a real car of the
+  session, parked in its box, placed on track ahead of the leader when deployed (a parked AI does not drive out
+  of its box), helped and governed through `ac.overrideCarControls`; the field queues behind it car by car
+  (speed cap from the car ahead and the gap); green when the leader crosses the line after the SC is in.
+- `DeltaSuiteHUD.lua`: our in-game HUD, one CSP window per element (`hud_*` in the manifest: race control
+  banner, dash, lap & delta, standings, relative, tyres, car, engineer, map, radar). Live data from the sim, so
+  it works without Delta Suite; engineer, radio and strategy come from Delta Suite through the race mapping.
+  Fonts: Archivo SemiExpanded (SIL OFL, licence in `OFL-Archivo.txt`), Bahnschrift as fallback.
 - `manifest.ini`: `LAZY = NONE`, the app is active as soon as AC loads the session.
 
 Delta Suite installs and updates every file in the folder (*Pit & Setup → Update CSP app*);
@@ -84,6 +100,8 @@ Delta Suite installs and updates every file in the folder (*Pit & Setup → Upda
 | `DeltaSuite_Bridge_Out_v1` | app | `OUT_LAYOUT` in DeltaSuiteBridge.lua | `BridgeOut` in csp_bridge.py |
 | `DeltaSuite_Bridge_In_v1` | Delta Suite | `IN_LAYOUT` in DeltaSuiteBridge.lua | `BridgeIn` in csp_bridge.py |
 | `DeltaSuite_Onboard_v6` | both (requests / frames) | `ONBOARD_LAYOUT` in DeltaSuiteOnboard.lua | `OnboardShared` in onboard_feed.py |
+| `DeltaSuite_Race_Out_v1` | app | `RACE_OUT_LAYOUT` in DeltaSuiteRace.lua | `RaceOut` in race_link.py |
+| `DeltaSuite_Race_In_v1` | Delta Suite | `RACE_IN_LAYOUT` in DeltaSuiteRace.lua | `RaceIn` in race_link.py |
 
 To change a layout: same fields in the same order in both files (only 4-byte int/float and char[]), a new
 version in the mapping name and in the constant. `tests/test_layouts.py` compares the Lua and Python layouts byte
@@ -96,7 +114,7 @@ a reminder to bump the version.
 - `main_dashboard.py`: window, sidebar, pages by key (`self.pages`, each in a `QScrollArea`). The first entry
   is the Overview page; sections, order and module descriptions live in `navigation.py`.
 - `hub_state.py`: `HubState`, the shared state (active source, session and laps, archive, CSP bridge,
-  standings and track, reference lap, MCP) and the signals the pages connect to. Three controllers it owns
+  standings and track, reference lap, MCP) and the signals the pages connect to. Four controllers it owns
   do the rest: `radio_controller.py` (radio rules, voice, microphone, push-to-talk), `proposals.py` (the
   engineer's proposals and their acks) and `engineer_controller.py` (the AI agent). HubState forwards the
   few methods the pages call (`ask_engineer`, `apply_proposal`, `say`...), so pages do not know the

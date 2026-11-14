@@ -269,8 +269,10 @@ def install_app(ac_root: Path | None = None) -> Path:
     src = bundled_app_dir()
     target.mkdir(parents=True, exist_ok=True)
     for f in src.iterdir():
-        if f.is_file():
-            shutil.copy2(f, target / f.name)
+        dst = target / f.name
+        # only what changed: with AC running the fonts are open and cannot be overwritten (nor need to be)
+        if f.is_file() and (not dst.is_file() or dst.read_bytes() != f.read_bytes()):
+            shutil.copy2(f, dst)
     return target
 
 

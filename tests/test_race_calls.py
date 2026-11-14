@@ -10,7 +10,7 @@ from tests.conftest import make_sample
 
 IT = LANGUAGES["it"]
 ARGS = dict(pos=4, n=2, places="posizioni", g="0 e 8", d="3 decimi", wheel="anteriore sinistra",
-            zone="all'anteriore")
+            zone="all'anteriore", kmh=80)
 
 
 def texts(msgs):

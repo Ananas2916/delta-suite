@@ -1,3 +1,29 @@
+## Delta Suite 0.6.3 — race control and our own HUD
+
+**Race control in offline races** (inside the CSP app: update it from *Settings → Install or update the CSP app*):
+- **FCY**: a 10-second countdown, then everyone at the speed limit (80 km/h by default). The AI keep racing
+  through the countdown and slow down in its last seconds.
+- **VSC**: a delta to your best lap × 1.4 to stay positive on; the AI follow the VSC pace on any track.
+- **Safety car**: put a car with "safety" in its name on the grid (or pick one in *Settings*). It waits in its pit
+  box, joins just past the pit exit ahead of the leader (out of your sight), runs slowly until the leader is
+  behind it, then the field queues car by car. After a lap the lapped cars may unlap themselves. "Safety car in this
+  lap": it goes back to the pits, green when the leader crosses the line.
+- Yellow flag for every app reading AC's data, the cars' headlights flash, laps run neutralised stay out of best
+  laps, fuel averages and tyre wear, and the safety car is out of the standings.
+- Call them from the *Race* view (Race control tab), from the Delta Suite Bridge window in game, or from the
+  wheel (bind the *DeltaSuite/Race control* buttons in the CSP controls). An optional race director calls FCY or
+  VSC by itself when a car stops on track.
+- The engineer calls it on the radio: "FCY in 10 seconds", "VSC, stay positive on the delta", "Safety car in this
+  lap", "Delta negative, slow down", "Give that place back".
+
+**Delta Suite HUD**: our own in-game HUD in CSP windows (*DS ...* in the CSP apps bar): race control banner with
+flashing marshal lights, dash, lap and delta, standings, relative, tyres, car, engineer, map and radar. Move,
+resize and switch each one on or off; it works without Delta Suite running (strategy and radio need it).
+
+Offline only: online servers do not let an app control the AI.
+
+---
+
 ## Delta Suite 0.6.2 — a new look
 
 **New layout**: a top bar with the views (Home, Race, Onboard, Telemetry, Pit & Setup, Strategy, Analysis,
